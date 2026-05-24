@@ -16,3 +16,4 @@ android/.gradle/
 android/app/build/
 android/build/
 *.hprof
+.opencode/
