@@ -1,37 +1,50 @@
 # 更新日志
 
-## [V4.0] — 2026-05-24
+本文档遵循 [语义化版本](https://semver.org/lang/zh-CN/) 规范。
 
-### 新增 — 五大 Agent 能力体系完善
+---
+
+## [0.2.0] — 2026-05-24
+
+### 新增
 
 #### 共享基础设施 (`src/agents/_shared/`)
-- **工具注册中心** (`tool-registry.ts`): 集中管理全部 30 个原生工具，支持按 Agent 过滤权限、工具签名查询、可用性校验
-- **安全档案** (`security-profile.ts`): 为五大 Agent 各定义安全禁令、操作规则、权限级别 (L0/L1/L2)、检查清单
-- **记忆系统** (`memory.ts`): 封装 `memories` 表 CRUD，支持长期记忆 (`long_term`) 与情景记忆 (`episodic`)，提供 `saveMemory` / `recallMemory` / `forgetMemory` / `rememberThis` / `rememberMoment`
-- **任务委派** (`delegate.ts`): 基于 `AgentMessage` 协议的跨 Agent 通信，定义委派白名单 (`getDelegationTargets`)、权限校验 (`canDelegate`) 、消息创建 (`createAgentMessage`)
-- **工具初始化** (`init-tools.ts`): 一次性注册全部 30 个工具，绑定 handler、权限等级与 Agent 白名单
+- 工具注册中心 (`tool-registry.ts`): 集中管理全部 30 个原生工具，支持按 Agent 过滤、权限校验、签名查询
+- 安全档案 (`security-profile.ts`): 五大 Agent 各定义安全禁令、操作规则、权限级别 (L0/L1/L2)、检查清单
+- 记忆系统 (`memory.ts`): 封装 `memories` 表 CRUD，支持 `long_term` 与 `episodic` 两种记忆类型
+- 任务委派 (`delegate.ts`): 基于 `AgentMessage` 协议的跨 Agent 通信，含委派白名单与权限校验
+- 工具初始化 (`init-tools.ts`): 一次性注册全部 30 个工具，绑定 handler、权限与 Agent 白名单
 
-#### Agent 能力清单 (各 Agent 目录新增 CAPABILITIES.md)
+#### Agent 能力清单 (CAPABILITIES.md × 5)
+每个 Agent 新增能力清单文档：可用工具列表、安全约束、记忆能力、委派规则
 
-| Agent | 可用工具 | 安全关键约束 | 委派目标 |
-|-------|---------|-------------|---------|
-| **Master** | (路由感知) 0 个直接工具 | 禁直连数据库，禁跳 Guardian 清洗 | Ledger / Analyst / Coach / Guardian |
-| **Ledger** | bills(2) + stats(1) | 禁安全扫描，写前预检 | Guardian / Analyst |
-| **Analyst** | stats(8) | 只读，禁写账单 | Ledger / Coach |
-| **Coach** | budget(3) + gamification(3) + stats(1) | 禁查原始数据，禁投资建议 | Analyst / Guardian |
-| **Guardian** | security(9) + automation(6) | 禁上云，L2 需确认 | (不可委派) |
+| Agent | 直接工具数 | 核心安全约束 | 可委派至 |
+|-------|----------|-------------|---------|
+| Master | 0（纯路由） | 禁直连数据库 | Ledger / Analyst / Coach / Guardian |
+| Ledger | 3 | 禁安全扫描，写前预检 | Guardian / Analyst |
+| Analyst | 8 | 只读，禁修改账单 | Ledger / Coach |
+| Coach | 7 | 禁查原始数据 | Analyst / Guardian |
+| Guardian | 15 | 绝不上云，L2 需确认 | — |
 
-#### Agent 系统提示词 (各 Agent 目录新增 PROMPT.md)
-- 每个 Agent 含：身份定义、工具签名文档、安全铁律、记忆操作指南、委派流程、回复格式规范
+#### Agent 系统提示词 (PROMPT.md × 5)
+每个 Agent 新增 LLM 提示词：身份定义、工具签名、安全铁律、记忆操作、委派流程、回复格式
 
 #### 代码集成
-- **Master** (`master.agent.ts`): 增加工具注册表懒初始化、记忆召回 (最近 3 条)、episodic 自动记忆写入
-- **Ledger** (`ledger.agent.ts`): `handleAddExpense` / `handleAddIncome` 增加 `canCallTool()` 权限校验、`Guardian.preActionCheck()` 安全预检、商户分类长期记忆
-- **Analyst** (`analyst.agent.ts`): `handleGetSummary` 增加工具校验 + 分析记忆
-- **Coach** (`coach.agent.ts`): `handleSetBudget` / `handleGreeting` 增加工具校验 + 预算偏好记忆
-- **Guardian** (`guardian.agent.ts`): `handleSafetyCheck` / `handlePrivacyReport` / `preActionCheck` 增加工具校验 + 安全事件记忆 + 预检审计记录
+- **Master**: 工具注册表懒初始化、记忆召回、episodic 自动写入
+- **Ledger**: `canCallTool()` 权限校验、`preActionCheck()` 安全预检、商户分类记忆
+- **Analyst**: 工具校验、分析历史记忆
+- **Coach**: 工具校验、预算偏好记忆
+- **Guardian**: 工具校验、安全事件记忆、预检审计记录
 
-### 变更统计
-- **新增文件**: 30 个（共享模块 7、能力清单 5、系统提示词 5、工具模块 4、test 8、agent TS 3）
-- **修改文件**: 7 个（5 个 agent TS + nlu.ts + database.ts + types.ts + stats.tool.ts + ChatScreen.tsx）
-- **总计**: +5882 / -33 行
+---
+
+## [0.1.0] — 2026-05-23
+
+### 新增
+- MVP 初始实现：对话式记账系统
+- 五大 Agent 框架：Master / Ledger / Analyst / Coach / Guardian
+- NLU 自然语言意图识别（26 条规则）
+- 工具模块：bills / stats
+- 数据库：bills / categories / audit_log / user_profile / memories 等 8 张表
+- 聊天界面：ChatScreen / InputBar / MessageBubble / QuickBar
+- CI/CD：GitHub Actions 自动构建 Android APK
