@@ -15,8 +15,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: 'npm'
-      - run: npm ci
+      - run: npm install
       - run: npm run typecheck
 
   test:
@@ -27,8 +26,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: 'npm'
-      - run: npm ci
+      - run: npm install
       - run: npm test
 
   build-android:
@@ -41,8 +39,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: 'npm'
-      - run: npm ci
+      - run: npm install
       - run: npm install -g eas-cli
       - name: Build Android Preview
         run: eas build --platform android --profile preview --non-interactive
@@ -59,8 +56,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: 'npm'
-      - run: npm ci
+      - run: npm install
       - run: npm install -g eas-cli
       - name: Build iOS Preview
         run: eas build --platform ios --profile preview --non-interactive
