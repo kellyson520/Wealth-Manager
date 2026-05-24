@@ -173,6 +173,7 @@ export interface IntentResult {
   intent: string;
   params: Record<string, unknown>;
   confidence: number;
+  agent: string;
 }
 
 export interface ToolResult {

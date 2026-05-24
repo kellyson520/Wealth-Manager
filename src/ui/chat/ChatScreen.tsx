@@ -6,7 +6,6 @@ import InputBar from './InputBar';
 import QuickBar from './QuickBar';
 import { ChatMessage } from '../../shared/types';
 import { processMessage } from '../../agents/master/master.agent';
-import { handleIntent } from '../../agents/ledger/ledger.agent';
 
 const WELCOME_MESSAGE: ChatMessage = {
   id: 'welcome',
@@ -37,7 +36,7 @@ export default function ChatScreen() {
       setIsProcessing(true);
 
       try {
-        const result = await processMessage(text, handleIntent);
+        const result = await processMessage(text);
         addMessage(result.reply);
       } catch {
         addMessage({

@@ -1,6 +1,18 @@
-import { IntentResult, ToolResult } from '../../shared/types';
+import { IntentResult, ToolResult, AgentId } from '../../shared/types';
 import { add_bill, search_bills } from '../../tools/bills/bills.tool';
 import { get_aggregation } from '../../tools/stats/stats.tool';
+import { preActionCheck } from '../guardian/guardian.agent';
+import {
+  getSecurityProfile,
+  canCallTool,
+  rememberThis,
+  rememberMoment,
+  recallMemory,
+  getDelegationTargets,
+  createAgentMessage,
+} from '../_shared';
+
+const AGENT_ID: AgentId = 'ledger';
 
 export async function handleIntent(intent: IntentResult): Promise<string> {
   switch (intent.intent) {
@@ -27,15 +39,29 @@ async function handleAddExpense(params: Record<string, unknown>): Promise<string
     return '请告诉我具体金额，比如"午饭花了35块"。';
   }
 
+  const toolCheck = canCallTool(AGENT_ID, 'add_bill');
+  if (!toolCheck.allowed) {
+    return `操作被拒绝：${toolCheck.reason}`;
+  }
+
+  const safetyCheck = await preActionCheck({ amount, merchant });
+  if (!safetyCheck.safe) {
+    return safetyCheck.message || '安全预检未通过，操作已阻止。';
+  }
+
+  const category = guessCategory(merchant);
   const result: ToolResult = await add_bill({
     amount,
     type: 'expense',
     merchant: merchant || '消费',
-    category: guessCategory(merchant),
+    category,
   });
 
   if (result.success) {
-    return `已记录 💸 ${merchant} ¥${amount.toFixed(2)}`;
+    await rememberThis(AGENT_ID, `分类映射:${merchant}→${category}`);
+    await rememberMoment(AGENT_ID, `支出:${merchant} ¥${amount.toFixed(2)}`);
+    const warningMsg = safetyCheck.message ? `\n💡 ${safetyCheck.message}` : '';
+    return `已记录 💸 ${merchant} ¥${amount.toFixed(2)}${warningMsg}`;
   }
   return `记账失败：${result.error}，请重试。`;
 }
@@ -48,6 +74,16 @@ async function handleAddIncome(params: Record<string, unknown>): Promise<string>
     return '请告诉我具体金额，比如"工资到账5000"。';
   }
 
+  const toolCheck = canCallTool(AGENT_ID, 'add_bill');
+  if (!toolCheck.allowed) {
+    return `操作被拒绝：${toolCheck.reason}`;
+  }
+
+  const safetyCheck = await preActionCheck({ amount, merchant });
+  if (!safetyCheck.safe) {
+    return safetyCheck.message || '安全预检未通过，操作已阻止。';
+  }
+
   const result: ToolResult = await add_bill({
     amount,
     type: 'income',
@@ -56,7 +92,9 @@ async function handleAddIncome(params: Record<string, unknown>): Promise<string>
   });
 
   if (result.success) {
-    return `已记录 💰 ${merchant} ¥${amount.toFixed(2)}`;
+    await rememberMoment(AGENT_ID, `收入:${merchant} ¥${amount.toFixed(2)}`);
+    const warningMsg = safetyCheck.message ? `\n💡 ${safetyCheck.message}` : '';
+    return `已记录 💰 ${merchant} ¥${amount.toFixed(2)}${warningMsg}`;
   }
   return `记账失败：${result.error}，请重试。`;
 }
