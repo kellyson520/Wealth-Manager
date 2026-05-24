@@ -1,4 +1,4 @@
-jest.mock('../_shared', () => ({
+jest.mock('../../agents/_shared', () => ({
   canCallTool: jest.fn().mockReturnValue({ allowed: true, reason: '' }),
   rememberThis: jest.fn().mockResolvedValue(undefined),
   rememberMoment: jest.fn().mockResolvedValue(undefined),
@@ -6,9 +6,10 @@ jest.mock('../_shared', () => ({
   getDelegationTargets: jest.fn().mockReturnValue(['ledger']),
   createAgentMessage: jest.fn(),
   getSecurityProfile: jest.fn().mockReturnValue({ maxPermissionLevel: 1 }),
+  initToolRegistry: jest.fn(),
 }));
 
-jest.mock('../guardian/guardian.agent', () => ({
+jest.mock('../../agents/guardian/guardian.agent', () => ({
   preActionCheck: jest.fn().mockResolvedValue({ safe: true }),
   handleIntent: jest.fn(),
 }));

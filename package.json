@@ -37,7 +37,7 @@
   "jest": {
     "preset": "jest-expo",
     "transformIgnorePatterns": [
-      "node_modules/(?!(?:.pnpm/)?(expo|expo-router|expo-sqlite|react-native|@react-native|react-native-gesture-handler|react-native-reanimated|react-native-safe-area-context|react-native-screens)/)"
+      "node_modules/(?!(?:.pnpm/)?(expo|@expo|expo-.*|expo-modules-core|react-native|@react-native|react-native-.*|uuid)/)"
     ]
   },
   "private": true

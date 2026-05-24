@@ -201,11 +201,13 @@ describe('search_bills Tool', () => {
       expect(callArgs[0]).toContain('date <=');
     });
 
-    test('applies type filter', async () => {
+    test('applies type filter via parameterized query', async () => {
       await search_bills({ type: 'income' });
       const mockDb = await getMockDb();
       const sql = mockDb.getAllAsync.mock.calls[0][0];
-      expect(sql).toContain("type = 'income'");
+      const values = mockDb.getAllAsync.mock.calls[0][1];
+      expect(sql).toContain('type = ?');
+      expect(values).toContain('income');
     });
   });
 

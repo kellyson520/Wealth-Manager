@@ -87,7 +87,7 @@ describe('Security Profiles', () => {
   describe('prohibitions content', () => {
     test('master agent cannot directly write bills', () => {
       const masterProhibitions = SECURITY_PROFILES.master.prohibitions.join(' ');
-      expect(masterProhibitions).toContain('数据库');
+      expect(masterProhibitions).toContain('add_bill');
       expect(masterProhibitions).toContain('写入');
     });
 

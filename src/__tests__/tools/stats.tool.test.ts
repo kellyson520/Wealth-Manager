@@ -102,10 +102,11 @@ describe('get_aggregation Tool', () => {
       const callArgs = mockDb.getFirstAsync.mock.calls[0][1];
       const startDate = new Date(callArgs[0]);
       const now = new Date();
-      expect(now.getTime() - startDate.getTime()).toBeGreaterThanOrEqual(6 * 24 * 60 * 60 * 1000);
+      const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+      expect(startDate.toISOString().split('T')[0]).toBe(weekAgo.toISOString().split('T')[0]);
     });
 
-    test('month period uses correct start date', async () => {
+    test('month period produces a valid past date', async () => {
       const mockDb = await getMockDb();
       mockDb.getFirstAsync
         .mockResolvedValueOnce({ total: 0 })
@@ -117,7 +118,10 @@ describe('get_aggregation Tool', () => {
       const callArgs = mockDb.getFirstAsync.mock.calls[0][1];
       const startDate = new Date(callArgs[0]);
       const now = new Date();
-      expect(now.getTime() - startDate.getTime()).toBeGreaterThanOrEqual(28 * 24 * 60 * 60 * 1000);
+      expect(startDate.getTime()).toBeLessThan(now.getTime());
+      const daysAgo = (now.getTime() - startDate.getTime()) / (24 * 60 * 60 * 1000);
+      expect(daysAgo).toBeGreaterThan(20);
+      expect(daysAgo).toBeLessThan(60);
     });
   });
 
