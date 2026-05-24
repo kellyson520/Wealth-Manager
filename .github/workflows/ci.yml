@@ -52,37 +52,11 @@ jobs:
           name: wealth-manager-apk
           path: android/app/build/outputs/apk/debug/app-debug.apk
 
-  build-ios:
-    name: Build iOS IPA
-    needs: [lint-typecheck, test]
-    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
-    runs-on: macos-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-      - run: npm install
-      - name: Install CocoaPods
-        run: brew install cocoapods
-      - name: Generate native iOS project
-        run: npx expo prebuild --platform ios --no-install
-      - name: Install pods
-        run: cd ios && pod install
-      - name: Build IPA (unsigned)
-        run: |
-          cd ios
-          xcodebuild -workspace WealthManager.xcworkspace \
-            -scheme WealthManager \
-            -configuration Release \
-            -sdk iphoneos \
-            -archivePath build/WealthManager.xcarchive \
-            archive CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO
-          mkdir -p Payload
-          cp -r build/WealthManager.xcarchive/Products/Applications/WealthManager.app Payload/
-          zip -r WealthManager.ipa Payload
-      - name: Upload IPA
-        uses: actions/upload-artifact@v4
-        with:
-          name: wealth-manager-ipa
-          path: ios/WealthManager.ipa
+  # iOS build requires macOS runner + Apple Developer account
+  # Uncomment when ready:
+  # build-ios:
+  #   name: Build iOS IPA
+  #   needs: [lint-typecheck, test]
+  #   if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
+  #   runs-on: macos-latest
+  #   steps: ...
