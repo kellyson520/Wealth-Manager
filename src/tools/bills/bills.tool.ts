@@ -1,6 +1,7 @@
 import { v4 as uuidv4 } from 'uuid';
 import { getDatabase } from '../../core/database/database';
 import { BillRecord, ToolResult } from '../../shared/types';
+import { captureError } from '../../core/logger/logger';
 
 export async function add_bill(params: {
   amount: number;
@@ -43,6 +44,7 @@ export async function add_bill(params: {
 
     return { success: true, data: bill };
   } catch (e) {
+    captureError('BillsTool.add_bill', e, 'Failed to insert bill');
     return { success: false, error: '记账失败', errorCode: '1000' };
   }
 }
@@ -93,6 +95,7 @@ export async function search_bills(params: {
     );
     return { success: true, data: bills };
   } catch (e) {
+    captureError('BillsTool.search_bills', e, 'Failed to search bills');
     return { success: false, error: '查询失败', errorCode: '1000' };
   }
 }

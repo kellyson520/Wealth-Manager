@@ -244,3 +244,15 @@ export interface SafetyConfig {
   autoMeltdownErrors: number;
   meltdownTimeWindowMinutes: number;
 }
+
+export type LogLevel = 'debug' | 'info' | 'warn' | 'error' | 'fatal';
+
+export interface LogEntry {
+  id: string;
+  timestamp: string;
+  level: LogLevel;
+  tag: string;
+  message: string;
+  detail?: string;
+  data?: unknown;
+}

@@ -1,11 +1,22 @@
-import React, { useState, useRef, useCallback } from 'react';
-import { View, Text, FlatList, StyleSheet, SafeAreaView, StatusBar } from 'react-native';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
+import {
+  View,
+  Text,
+  FlatList,
+  StyleSheet,
+  SafeAreaView,
+  StatusBar,
+  TouchableOpacity,
+  Platform,
+} from 'react-native';
+import { useRouter } from 'expo-router';
 import { v4 as uuidv4 } from 'uuid';
 import MessageBubble from './MessageBubble';
 import InputBar from './InputBar';
 import QuickBar from './QuickBar';
 import { ChatMessage } from '../../shared/types';
 import { processMessage } from '../../agents/master/master.agent';
+import { logger, captureError } from '../../core/logger/logger';
 
 const WELCOME_MESSAGE: ChatMessage = {
   id: 'welcome',
@@ -18,6 +29,19 @@ export default function ChatScreen() {
   const [messages, setMessages] = useState<ChatMessage[]>([WELCOME_MESSAGE]);
   const [isProcessing, setIsProcessing] = useState(false);
   const flatListRef = useRef<FlatList>(null);
+  const router = useRouter();
+
+  useEffect(() => {
+    const originalHandler = ErrorUtils.getGlobalHandler?.();
+    if (originalHandler) {
+      ErrorUtils.setGlobalHandler((error: Error, isFatal?: boolean) => {
+        captureError('Global', error, isFatal ? 'Fatal unhandled error' : 'Unhandled error');
+        logger.fatal('Global', `App ${isFatal ? 'crash' : 'error'}: ${error.message}`, error.stack);
+        originalHandler(error, isFatal);
+      });
+    }
+    logger.info('App', 'Application started');
+  }, []);
 
   const addMessage = useCallback((msg: ChatMessage) => {
     setMessages((prev) => [...prev, msg]);
@@ -36,9 +60,12 @@ export default function ChatScreen() {
       setIsProcessing(true);
 
       try {
+        logger.info('Chat', `User message: "${text.slice(0, 100)}"`);
         const result = await processMessage(text);
         addMessage(result.reply);
-      } catch {
+        logger.info('Chat', `Reply generated, length: ${result.reply.content.length}`);
+      } catch (e) {
+        captureError('Chat', e, 'processMessage failed');
         addMessage({
           id: `err_${Date.now()}`,
           role: 'assistant',
@@ -67,13 +94,20 @@ export default function ChatScreen() {
           <View style={styles.avatar}>
             <View style={styles.avatarDot} />
           </View>
-          <View>
+          <View style={{ flex: 1 }}>
             <View style={styles.titleRow}>
               <View style={styles.statusDot} />
               <Text style={styles.title}>Wealth Manager</Text>
             </View>
             <Text style={styles.subtitle}>AI 财务助手</Text>
           </View>
+          <TouchableOpacity
+            style={styles.logBtn}
+            onPress={() => router.push('/log')}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.logBtnText}>日志</Text>
+          </TouchableOpacity>
         </View>
       </View>
 
@@ -144,6 +178,19 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#888',
     marginTop: 2,
+  },
+  logBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 6,
+    backgroundColor: '#1e1e3e',
+    borderWidth: 1,
+    borderColor: '#3a3a5e',
+  },
+  logBtnText: {
+    fontSize: 12,
+    color: '#aaa',
+    fontWeight: '500',
   },
   messageList: {
     flex: 1,
