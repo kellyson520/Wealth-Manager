@@ -79,9 +79,36 @@ export default function ChatScreen() {
     [addMessage]
   );
 
+  const handleCardConfirm = useCallback(
+    (actionId: string) => {
+      logger.info('Chat', `Card confirmed: ${actionId}`);
+      handleSend(`确认操作 ${actionId}`);
+    },
+    [handleSend]
+  );
+
+  const handleCardCancel = useCallback(
+    (actionId: string) => {
+      logger.info('Chat', `Card cancelled: ${actionId}`);
+      addMessage({
+        id: `sys_${Date.now()}`,
+        role: 'system',
+        content: '操作已取消',
+        timestamp: new Date().toISOString(),
+      });
+    },
+    [addMessage]
+  );
+
   const renderItem = useCallback(
-    ({ item }: { item: ChatMessage }) => <MessageBubble message={item} />,
-    []
+    ({ item }: { item: ChatMessage }) => (
+      <MessageBubble
+        message={item}
+        onConfirm={handleCardConfirm}
+        onCancel={handleCardCancel}
+      />
+    ),
+    [handleCardConfirm, handleCardCancel]
   );
 
   const keyExtractor = useCallback((item: ChatMessage) => item.id, []);

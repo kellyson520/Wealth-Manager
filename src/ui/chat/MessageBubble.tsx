@@ -1,19 +1,26 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { ChatMessage } from '../../shared/types';
+import { CardRenderer } from '../cards';
 
 interface MessageBubbleProps {
   message: ChatMessage;
+  onConfirm?: (actionId: string) => void;
+  onCancel?: (actionId: string) => void;
 }
 
-export default function MessageBubble({ message }: MessageBubbleProps) {
+export default function MessageBubble({ message, onConfirm, onCancel }: MessageBubbleProps) {
   const isUser = message.role === 'user';
   const isSystem = message.role === 'system';
+  const hasCard = !!message.data;
 
   if (isSystem) {
     return (
       <View style={styles.systemContainer}>
         <Text style={styles.systemText}>{message.content}</Text>
+        {hasCard && (
+          <CardRenderer data={message.data!} onConfirm={onConfirm} onCancel={onCancel} />
+        )}
       </View>
     );
   }
@@ -24,6 +31,9 @@ export default function MessageBubble({ message }: MessageBubbleProps) {
         <Text style={[styles.text, isUser ? styles.userText : styles.assistantText]}>
           {message.content}
         </Text>
+        {hasCard && (
+          <CardRenderer data={message.data!} onConfirm={onConfirm} onCancel={onCancel} />
+        )}
       </View>
     </View>
   );
