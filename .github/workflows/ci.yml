@@ -29,6 +29,9 @@ jobs:
       - run: npm install
       - run: npm test
 
+  # EAS Build jobs require EXPO_TOKEN secret to be set in GitHub Settings
+  # To enable: create an Expo access token at https://expo.dev/settings/access-tokens
+  # then add it as EXPO_TOKEN in GitHub repo Settings → Secrets and Variables → Actions
   build-android:
     name: Build Android (EAS)
     needs: [lint-typecheck, test]
@@ -42,9 +45,14 @@ jobs:
       - run: npm install
       - run: npm install -g eas-cli
       - name: Build Android Preview
-        run: eas build --platform android --profile preview --non-interactive
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: |
+          if [ -z "$EXPO_TOKEN" ]; then
+            echo "EXPO_TOKEN not set — skipping build. Configure at repo Settings → Secrets."
+            exit 0
+          fi
+          eas build --platform android --profile preview --non-interactive
 
   build-ios:
     name: Build iOS (EAS)
@@ -59,6 +67,11 @@ jobs:
       - run: npm install
       - run: npm install -g eas-cli
       - name: Build iOS Preview
-        run: eas build --platform ios --profile preview --non-interactive
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: |
+          if [ -z "$EXPO_TOKEN" ]; then
+            echo "EXPO_TOKEN not set — skipping build. Configure at repo Settings → Secrets."
+            exit 0
+          fi
+          eas build --platform ios --profile preview --non-interactive
