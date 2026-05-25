@@ -44,9 +44,9 @@ jobs:
         uses: android-actions/setup-android@v3
       - name: Generate native Android project
         run: npx expo prebuild --platform android --no-install
-      - name: Force bundle in debug (disable Metro dependency)
+      - name: Configure release to use debug signing
         run: |
-          sed -i 's/^react\s*{/react {\n        bundleInDebug = true/' android/app/build.gradle
+          sed -i '/release {/a\            signingConfig signingConfigs.debug' android/app/build.gradle
       - name: Create JS bundle assets dir
         run: mkdir -p android/app/src/main/assets
       - name: Bundle JS into APK
@@ -58,10 +58,10 @@ jobs:
             --bundle-output android/app/src/main/assets/index.android.bundle \
             --assets-dest android/app/src/main/res \
             --reset-cache
-      - name: Build APK
-        run: cd android && ./gradlew assembleDebug
+      - name: Build Release APK
+        run: cd android && ./gradlew assembleRelease
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: wealth-manager-apk
-          path: android/app/build/outputs/apk/debug/app-debug.apk
+          name: wealth-manager-release-apk
+          path: android/app/build/outputs/apk/release/app-release.apk
