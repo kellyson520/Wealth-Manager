@@ -17,4 +17,3 @@ android/app/build/
 android/build/
 *.hprof
 .opencode/
-package-lock.json
