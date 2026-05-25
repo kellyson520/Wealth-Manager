@@ -2,6 +2,8 @@ import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
 import { Platform } from 'react-native';
+import { initializeNotifications, requestNotificationPermissions } from '../src/core/notifications/notification.service';
+import { schedule_default_reminders } from '../src/tools/automation/task-scheduler';
 
 export default function RootLayout() {
   useEffect(() => {
@@ -9,14 +11,10 @@ export default function RootLayout() {
 
     const init = async () => {
       try {
-        const { initializeNotifications, requestNotificationPermissions } =
-          await import('../src/core/notifications/notification.service');
         await initializeNotifications();
         const granted = await requestNotificationPermissions();
         if (granted) {
           try {
-            const { schedule_default_reminders } =
-              await import('../src/tools/automation/task-scheduler');
             await schedule_default_reminders();
           } catch {
             // 非关键路径，静默失败
