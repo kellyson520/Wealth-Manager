@@ -2,6 +2,7 @@ import { getDatabase } from '../../core/database/database';
 import { captureError } from '../../core/logger/logger';
 import { RecurringTask, ToolResult } from '../../shared/types';
 import { evaluate_all_scenarios } from './scenario-triggers';
+import { v4 as uuidv4 } from 'uuid';
 
 export async function run_all_scheduled_tasks(): Promise<ToolResult> {
   const db = await getDatabase();
@@ -138,7 +139,6 @@ async function createDefaultBookkeepingReminder(): Promise<boolean> {
 
     if (existing && existing.count > 0) return true;
 
-    const { v4: uuidv4 } = require('uuid');
     await db.runAsync(
       `INSERT INTO recurring_tasks (id, name, type, cron, enabled, created_at)
        VALUES (?, ?, ?, ?, 1, ?)`,
@@ -159,7 +159,6 @@ async function createDefaultInactivityCheck(): Promise<boolean> {
 
     if (existing && existing.count > 0) return true;
 
-    const { v4: uuidv4 } = require('uuid');
     await db.runAsync(
       `INSERT INTO recurring_tasks (id, name, type, cron, enabled, created_at)
        VALUES (?, ?, ?, ?, 1, ?)`,

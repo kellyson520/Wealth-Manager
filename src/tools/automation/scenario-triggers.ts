@@ -4,7 +4,6 @@ import { captureError } from '../../core/logger/logger';
 import { check_budget_overrun } from '../budget/budget.tool';
 import { get_streak_info, get_achievement } from '../gamification/gamification.tool';
 import { schedule_local_notification } from './automation.tool';
-import { getNotificationPermissionStatus } from '../../core/notifications/notification.service';
 
 export async function evaluate_all_scenarios(): Promise<ToolResult> {
   const scenarios: NotificationScenario[] = [];

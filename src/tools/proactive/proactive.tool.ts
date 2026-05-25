@@ -6,7 +6,6 @@ import {
   ToolResult,
   Achievement,
   SavingsGoal,
-  StreakInfo,
 } from '../../shared/types';
 import { get_budget_status } from '../stats/stats.tool';
 import { get_achievement } from '../gamification/gamification.tool';
@@ -185,13 +184,37 @@ async function generateProactiveInsights(): Promise<string[]> {
 
   try {
     const db = await getDatabase();
+    const today = new Date().toISOString().split('T')[0];
+    const thisMonthStart = new Date(
+      new Date().getFullYear(),
+      new Date().getMonth(),
+      1
+    ).toISOString().split('T')[0];
 
-    const expenseRow = await db.getFirstAsync<{ total: number }>(
-      "SELECT COALESCE(SUM(amount), 0) as total FROM bills WHERE type = 'expense'"
-    );
-    const incomeRow = await db.getFirstAsync<{ total: number }>(
-      "SELECT COALESCE(SUM(amount), 0) as total FROM bills WHERE type = 'income'"
-    );
+    const [expenseRow, incomeRow, topCategory, billCount, todayCount, monthBillCount] =
+      await Promise.all([
+        db.getFirstAsync<{ total: number }>(
+          "SELECT COALESCE(SUM(amount), 0) as total FROM bills WHERE type = 'expense'"
+        ),
+        db.getFirstAsync<{ total: number }>(
+          "SELECT COALESCE(SUM(amount), 0) as total FROM bills WHERE type = 'income'"
+        ),
+        db.getFirstAsync<{ category: string; total: number }>(
+          "SELECT category, SUM(amount) as total FROM bills WHERE type = 'expense' GROUP BY category ORDER BY total DESC LIMIT 1"
+        ),
+        db.getFirstAsync<{ count: number }>(
+          'SELECT COUNT(*) as count FROM bills'
+        ),
+        db.getFirstAsync<{ count: number }>(
+          'SELECT COUNT(*) as count FROM bills WHERE date = ?',
+          [today]
+        ),
+        db.getFirstAsync<{ count: number }>(
+          'SELECT COUNT(*) as count FROM bills WHERE date >= ?',
+          [thisMonthStart]
+        ),
+      ]);
+
     const totalExpense = expenseRow?.total || 0;
     const totalIncome = incomeRow?.total || 0;
 
@@ -208,10 +231,6 @@ async function generateProactiveInsights(): Promise<string[]> {
       }
     }
 
-    const topCategory = await db.getFirstAsync<{ category: string; total: number }>(
-      `SELECT category, SUM(amount) as total FROM bills WHERE type = 'expense' GROUP BY category ORDER BY total DESC LIMIT 1`
-    );
-
     if (topCategory && topCategory.total > 0) {
       const pctOfExpense = totalExpense > 0
         ? Math.round((topCategory.total / totalExpense) * 100)
@@ -224,32 +243,11 @@ async function generateProactiveInsights(): Promise<string[]> {
       }
     }
 
-    const billCount = await db.getFirstAsync<{ count: number }>(
-      'SELECT COUNT(*) as count FROM bills'
-    );
-
     if (billCount && billCount.count > 0) {
-      const today = new Date().toISOString().split('T')[0];
-      const todayCount = await db.getFirstAsync<{ count: number }>(
-        'SELECT COUNT(*) as count FROM bills WHERE date = ?',
-        [today]
-      );
-
       if (!todayCount || todayCount.count === 0) {
         insights.push('📝 今天还没有记账，记得记录今天的收支哦');
       }
     }
-
-    const thisMonthStart = new Date(
-      new Date().getFullYear(),
-      new Date().getMonth(),
-      1
-    ).toISOString().split('T')[0];
-
-    const monthBillCount = await db.getFirstAsync<{ count: number }>(
-      'SELECT COUNT(*) as count FROM bills WHERE date >= ?',
-      [thisMonthStart]
-    );
 
     if (monthBillCount && monthBillCount.count >= 50) {
       insights.push('📊 本月已记录 50+ 笔账单，是否要做一个月度总结？');
@@ -297,7 +295,7 @@ export async function get_today_summary(): Promise<ToolResult> {
   ).toISOString().split('T')[0];
 
   try {
-    const [todayIncome, todayExpense, todayCount, monthIncome, monthExpense, monthCount, streakResult] =
+    const [todayIncome, todayExpense, todayCount, monthIncome, monthExpense, monthCount, budgetStatus] =
       await Promise.all([
         db.getFirstAsync<{ total: number }>(
           "SELECT COALESCE(SUM(amount), 0) as total FROM bills WHERE type = 'income' AND date = ?",
@@ -339,7 +337,7 @@ export async function get_today_summary(): Promise<ToolResult> {
           expense: monthExpense?.total || 0,
           count: monthCount?.count || 0,
         },
-        budgetStatus: streakResult,
+        budgetStatus,
       },
     };
   } catch (e) {

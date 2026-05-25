@@ -12,7 +12,6 @@ import {
 } from '../../shared/types';
 import BillCard from './BillCard';
 import SummaryCard from './SummaryCard';
-import ChartCard from './ChartCard';
 import ConfirmCard from './ConfirmCard';
 import ErrorCard from './ErrorCard';
 import TipCard from './TipCard';
@@ -37,6 +36,36 @@ interface CardRendererProps {
   onDelete?: () => void;
 }
 
+class ChartErrorBoundary extends React.Component<{ children: React.ReactNode }, { hasError: boolean }> {
+  constructor(props: { children: React.ReactNode }) {
+    super(props);
+    this.state = { hasError: false };
+  }
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+  override render() {
+    if (this.state.hasError) {
+      return (
+        <View style={{ marginTop: 8, backgroundColor: '#1a1a2e', borderRadius: 12, padding: 14, borderWidth: 1, borderColor: '#2a2a4e' }}>
+          <View style={{ alignItems: 'center', padding: 20 }}>
+          </View>
+        </View>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+function LazyChartCard({ data }: { data: ChartCardData }) {
+  const ChartCard = require('./ChartCard').default;
+  return (
+    <ChartErrorBoundary>
+      <ChartCard data={data} />
+    </ChartErrorBoundary>
+  );
+}
+
 export default function CardRenderer({
   data,
   onConfirm,
@@ -54,7 +83,7 @@ export default function CardRenderer({
       return <SummaryCard data={data as SummaryCardData} />;
 
     case 'chart_card':
-      return <ChartCard data={data as ChartCardData} />;
+      return <LazyChartCard data={data as ChartCardData} />;
 
     case 'confirm_card':
     case 'security_confirm_card':
