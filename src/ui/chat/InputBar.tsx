@@ -11,10 +11,13 @@ import {
 
 interface InputBarProps {
   onSend: (text: string) => void;
+  onVoice?: () => void;
+  onAttachment?: () => void;
+  onOCR?: () => void;
   disabled?: boolean;
 }
 
-export default function InputBar({ onSend, disabled }: InputBarProps) {
+export default function InputBar({ onSend, onVoice, onAttachment, onOCR, disabled }: InputBarProps) {
   const [text, setText] = useState('');
 
   const handleSend = () => {
@@ -30,6 +33,24 @@ export default function InputBar({ onSend, disabled }: InputBarProps) {
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       style={styles.container}
     >
+      <View style={styles.actionRow}>
+        {onVoice && (
+          <TouchableOpacity style={styles.actionBtn} onPress={onVoice} disabled={disabled}>
+            <Text style={styles.actionIcon}>{'\uD83C\uDF99'}</Text>
+          </TouchableOpacity>
+        )}
+        {onAttachment && (
+          <TouchableOpacity style={styles.actionBtn} onPress={onAttachment} disabled={disabled}>
+            <Text style={styles.actionIcon}>{'\uD83D\uDCCE'}</Text>
+          </TouchableOpacity>
+        )}
+        {onOCR && (
+          <TouchableOpacity style={styles.actionBtn} onPress={onOCR} disabled={disabled}>
+            <Text style={styles.actionIcon}>{'\uD83D\uDCF7'}</Text>
+          </TouchableOpacity>
+        )}
+        <View style={{ flex: 1 }} />
+      </View>
       <View style={styles.inputRow}>
         <TextInput
           style={styles.input}
@@ -62,11 +83,29 @@ const styles = StyleSheet.create({
     backgroundColor: '#12122a',
     paddingBottom: 8,
   },
+  actionRow: {
+    flexDirection: 'row',
+    paddingHorizontal: 16,
+    paddingTop: 4,
+    paddingBottom: 2,
+  },
+  actionBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#1e1e36',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 8,
+  },
+  actionIcon: {
+    fontSize: 16,
+  },
   inputRow: {
     flexDirection: 'row',
     alignItems: 'flex-end',
     paddingHorizontal: 12,
-    paddingTop: 8,
+    paddingTop: 4,
   },
   input: {
     flex: 1,

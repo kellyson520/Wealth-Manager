@@ -40,6 +40,10 @@ export async function handleIntent(intent: IntentResult): Promise<string> {
       return handleSetupReminder(intent.params);
     case 'list_tags':
       return handleListTags(intent.params);
+    case 'share_bills':
+      return handleShareBills(intent.params);
+    case 'level_status':
+      return handleLevelStatus(intent.params);
     default:
       return '我可以帮您：\n• "设置餐饮预算 3000" — 设定预算\n• "创建储蓄目标" — 存钱计划\n• "查看打卡天数" — 记账连续天数\n• "我的成就" — 成就展示\n• "省钱建议" — 预算建议';
   }
@@ -413,4 +417,45 @@ async function handleListTags(_params: Record<string, unknown>): Promise<string>
     reply += `${t.name} (${t.billCount}条) `;
   }
   return reply;
+}
+
+async function handleShareBills(_params: Record<string, unknown>): Promise<string> {
+  const tool = getTool('create_link');
+  if (!tool) return '分享功能暂不可用。';
+  const result = await tool.handler({});
+  if (result.success && result.data) {
+    const data = result.data as { token: string; summary: { billCount: number; totalExpense: number } };
+    return `已生成分享链接!\nToken: ${data.token}\n包含 ${data.summary.billCount} 条账单，总支出 ¥${data.summary.totalExpense}`;
+  }
+  return `创建分享失败: ${result.error}`;
+}
+
+async function handleLevelStatus(_params: Record<string, unknown>): Promise<string> {
+  const levelTool = getTool('get_level');
+  const challengeTool = getTool('get_challenges');
+
+  let reply = '';
+
+  if (levelTool) {
+    const result = await levelTool.handler();
+    if (result.success && result.data) {
+      const data = result.data as { level: number; title: string; experience: number; nextLevelExperience: number; progress: number };
+      const bar = '█'.repeat(Math.round(data.progress * 10)) + '░'.repeat(10 - Math.round(data.progress * 10));
+      reply += `等级 ${data.level} - ${data.title}\n`;
+      reply += `经验 ${data.experience}/${data.nextLevelExperience} [${bar}]\n\n`;
+    }
+  }
+
+  if (challengeTool) {
+    const result = await challengeTool.handler();
+    if (result.success && result.data) {
+      const challenges = result.data as { title: string; completed: boolean; reward: string }[];
+      reply += '当前挑战:\n';
+      for (const c of challenges) {
+        reply += `${c.completed ? '✅' : '⭕'} ${c.title} (${c.reward})\n`;
+      }
+    }
+  }
+
+  return reply || '等级信息暂不可用。';
 }

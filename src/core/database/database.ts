@@ -187,6 +187,15 @@ async function initTables(db: SQLite.SQLiteDatabase): Promise<void> {
       source_id TEXT NOT NULL,
       created_at TEXT NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS correction_log (
+      id TEXT PRIMARY KEY,
+      bill_id TEXT NOT NULL,
+      merchant TEXT NOT NULL,
+      original_category TEXT NOT NULL,
+      corrected_category TEXT NOT NULL,
+      corrected_at TEXT NOT NULL
+    );
   `);
 
   await db.execAsync(`CREATE INDEX IF NOT EXISTS idx_vector_source ON vector_store(source_type, source_id)`);

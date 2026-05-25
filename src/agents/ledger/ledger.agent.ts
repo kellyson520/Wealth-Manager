@@ -35,6 +35,14 @@ export async function handleIntent(intent: IntentResult): Promise<string> {
       return handleImportBills(intent.params);
     case 'reimbursement':
       return handleReimbursement(intent.params);
+    case 'credit_card':
+      return handleCreditCard(intent.params);
+    case 'transfer_asset':
+      return handleTransferAsset(intent.params);
+    case 'settle':
+      return handleSettleReimbursement(intent.params);
+    case 'ocr_import':
+      return handleOCRImport(intent.params);
     case 'greeting':
       return '\u60a8\u597d\uff01\u6211\u662f\u60a8\u7684\u8d22\u52a1\u52a9\u624b \uD83D\uDCB0\n\n\u60a8\u53ef\u4ee5\u8fd9\u6837\u4f7f\u7528\uff1a\n\u2022 "\u5348\u996d\u82b1\u4e8635\u5757" \u2014 \u8bb0\u8d26\n\u2022 "\u4eca\u5929\u82b1\u4e86\u591a\u5c11\uff1f" \u2014 \u67e5\u770b\u6c47\u603b\n\u2022 "\u67e5\u4e00\u4e0b\u9910\u996e\u6d88\u8d39" \u2014 \u641c\u7d22\u8d26\u5355\n\u2022 "\u5de5\u8d44\u5230\u8d265000" \u2014 \u8bb0\u5f55\u6536\u5165';
     default:
@@ -303,6 +311,55 @@ async function handleReimbursement(params: Record<string, unknown>): Promise<str
   });
   if (result.success) return `已创建报销 "${params.title}" ${params.amount ? `¥${params.amount}` : ''}`;
   return `创建报销失败: ${result.error}`;
+}
+
+async function handleCreditCard(params: Record<string, unknown>): Promise<string> {
+  const tool = getTool('add_credit_card');
+  if (!tool) return '信用卡功能暂不可用。';
+  if (!params.name || !params.bank) return '请告诉我信用卡名称和发卡行，如"添加信用卡 招行 50000"。';
+  const result = await tool.handler({
+    name: params.name,
+    bank: params.bank,
+    creditLimit: params.creditLimit || params.amount || 0,
+    billDay: params.billDay,
+    paymentDay: params.paymentDay,
+  });
+  if (result.success) return `已添加信用卡 "${params.bank} ${params.name}"`;
+  return `添加信用卡失败: ${result.error}`;
+}
+
+async function handleTransferAsset(params: Record<string, unknown>): Promise<string> {
+  const tool = getTool('transfer_asset');
+  if (!tool) return '转账功能暂不可用。';
+  const result = await tool.handler({
+    fromAssetId: params.fromAssetId || params.from,
+    toAssetId: params.toAssetId || params.to,
+    amount: params.amount,
+  });
+  if (result.success) {
+    const data = result.data as { from: { name: string }, to: { name: string }, amount: number };
+    return `已从 "${data.from.name}" 转入 "${data.to.name}" ${data.amount}元`;
+  }
+  return `转账失败: ${result.error}`;
+}
+
+async function handleSettleReimbursement(params: Record<string, unknown>): Promise<string> {
+  const tool = getTool('settle_reimbursement');
+  if (!tool) return '报销结算功能暂不可用。';
+  const result = await tool.handler({ taskId: params.taskId || params.id });
+  if (result.success) return `报销已结算`;
+  return `结算失败: ${result.error}`;
+}
+
+async function handleOCRImport(params: Record<string, unknown>): Promise<string> {
+  const tool = getTool('ocr_import');
+  if (!tool) return 'OCR导入功能暂不可用。';
+  const result = await tool.handler({ rawText: params.rawText || params.text, source: 'ocr' });
+  if (result.success) {
+    const data = result.data as { importedCount: number };
+    return `已从OCR文本导入 ${data.importedCount} 条账单`;
+  }
+  return `OCR导入失败: ${result.error}`;
 }
 
 function getCategoryEmoji(cat: string): string {

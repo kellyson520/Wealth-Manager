@@ -204,7 +204,12 @@ export default function ChatScreen() {
       />
 
       <QuickBar onQuickAction={handleSend} />
-      <InputBar onSend={handleSend} disabled={isProcessing} />
+      <InputBar
+        onSend={handleSend}
+        disabled={isProcessing}
+        onVoice={() => handleSend('语音记账')}
+        onOCR={() => handleSend('OCR导入小票')}
+      />
     </SafeAreaView>
   );
 }

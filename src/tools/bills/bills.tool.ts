@@ -2,6 +2,8 @@ import { v4 as uuidv4 } from 'uuid';
 import { getDatabase } from '../../core/database/database';
 import { BillRecord, ToolResult } from '../../shared/types';
 import { captureError } from '../../core/logger/logger';
+import { generateHashForBill } from '../../core/hashchain/hashchain';
+import { recordCorrection } from '../../core/rules/rule-learner';
 
 export async function add_bill(params: {
   amount: number;
@@ -41,6 +43,8 @@ export async function add_bill(params: {
       'SELECT * FROM bills WHERE id = ?',
       [id]
     );
+
+    generateHashForBill(id).catch(() => {});
 
     return { success: true, data: bill };
   } catch (e) {
@@ -98,10 +102,22 @@ export async function modify_bill(params: {
 
     if (updates.length === 0) return { success: false, error: '没有需要修改的字段' };
 
+    const oldCategory = existing.category;
+    const oldMerchant = existing.merchant;
+
     values.push(params.billId);
     await db.runAsync(
       `UPDATE bills SET ${updates.join(', ')} WHERE id = ?`, values
     );
+
+    if (params.category !== undefined && params.category !== oldCategory) {
+      recordCorrection({
+        billId: params.billId,
+        merchant: oldMerchant,
+        originalCategory: oldCategory,
+        correctedCategory: params.category,
+      }).catch(() => {});
+    }
 
     const updated = await db.getFirstAsync<BillRecord>(
       'SELECT * FROM bills WHERE id = ?', [params.billId]

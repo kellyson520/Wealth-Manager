@@ -18,6 +18,11 @@ export {
   evaluateConditionGroup,
   conditionToString,
 } from './condition-parser';
+export {
+  recordCorrection,
+  getLearningStats,
+  applyLearnedRules,
+} from './rule-learner';
 export type {
   ClassificationRule,
   RuleMatchResult,

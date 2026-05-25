@@ -25,7 +25,7 @@ async function ensureVectorTable(db: Awaited<ReturnType<typeof getDatabase>>): P
   await db.execAsync(`CREATE INDEX IF NOT EXISTS idx_vector_source ON vector_store(source_type, source_id)`);
 }
 
-function cosineSimilarity(a: number[], b: number[]): number {
+export function cosineSimilarity(a: number[], b: number[]): number {
   if (a.length !== b.length) return 0;
 
   let dotProduct = 0;
@@ -42,7 +42,7 @@ function cosineSimilarity(a: number[], b: number[]): number {
   return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
 }
 
-function simpleEmbed(text: string, dim: number = 128): number[] {
+export function simpleEmbed(text: string, dim: number = 128): number[] {
   const chars = text.split('');
   const embedding: number[] = new Array(dim).fill(0);
 

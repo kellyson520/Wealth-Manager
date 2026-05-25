@@ -1,3 +1,10 @@
+import type { AgentId } from '../../../shared/types';
+import {
+  savePromptVersion,
+  loadActiveVersion,
+  isMigrationNeeded,
+} from './prompt-versioning';
+
 export const MASTER_SYSTEM_PROMPT = `你是 Wealth Manager 的主控 Agent，一个AI原生对话式记账系统的核心调度器。
 
 ## 角色
@@ -83,7 +90,7 @@ export const GUARDIAN_SYSTEM_PROMPT = `你是 Wealth Manager 的守护 Agent，�
 - 检测到高风险操作时自动阻止并通知用户
 - 审计日志保留 365 天`;
 
-const PROMPTS: Record<string, string> = {
+const HARDCODED_PROMPTS: Record<string, string> = {
   master: MASTER_SYSTEM_PROMPT,
   ledger: LEDGER_SYSTEM_PROMPT,
   analyst: ANALYST_SYSTEM_PROMPT,
@@ -91,7 +98,7 @@ const PROMPTS: Record<string, string> = {
   guardian: GUARDIAN_SYSTEM_PROMPT,
 };
 
-const VERSIONS: Record<string, number> = {
+const HARDCODED_VERSIONS: Record<string, number> = {
   master: 1,
   ledger: 1,
   analyst: 1,
@@ -99,10 +106,68 @@ const VERSIONS: Record<string, number> = {
   guardian: 1,
 };
 
-export function getAgentSystemPrompt(agentName: string): string {
-  return PROMPTS[agentName] || MASTER_SYSTEM_PROMPT;
+let migrationDone = false;
+
+export async function migratePromptsToDB(): Promise<void> {
+  if (migrationDone) return;
+
+  try {
+    const agents: AgentId[] = ['master', 'ledger', 'analyst', 'coach', 'guardian'];
+
+    for (const agentId of agents) {
+      const needsMigration = await isMigrationNeeded(agentId);
+      if (needsMigration) {
+        const prompt = HARDCODED_PROMPTS[agentId];
+        if (prompt) {
+          await savePromptVersion({
+            agentId,
+            version: 1,
+            prompt,
+            changelog: 'Initial prompt (migrated from hardcoded)',
+          });
+        }
+      }
+    }
+    migrationDone = true;
+  } catch {
+    // Migration failure is non-fatal; fallback to hardcoded
+  }
 }
 
-export function getAgentPromptVersion(agentName: string): number {
-  return VERSIONS[agentName] || 0;
+export async function getAgentSystemPrompt(
+  agentName: string
+): Promise<string> {
+  await migratePromptsToDB();
+
+  try {
+    const activeVersion = await loadActiveVersion(agentName as AgentId);
+    if (activeVersion && activeVersion.prompt) {
+      return activeVersion.prompt;
+    }
+  } catch {
+    // Fallback to hardcoded
+  }
+
+  return HARDCODED_PROMPTS[agentName] || MASTER_SYSTEM_PROMPT;
+}
+
+export function getAgentSystemPromptSync(agentName: string): string {
+  return HARDCODED_PROMPTS[agentName] || MASTER_SYSTEM_PROMPT;
+}
+
+export async function getAgentPromptVersion(
+  agentName: string
+): Promise<number> {
+  await migratePromptsToDB();
+
+  try {
+    const activeVersion = await loadActiveVersion(agentName as AgentId);
+    if (activeVersion) {
+      return activeVersion.version;
+    }
+  } catch {
+    // Fallback to hardcoded
+  }
+
+  return HARDCODED_VERSIONS[agentName] || 0;
 }

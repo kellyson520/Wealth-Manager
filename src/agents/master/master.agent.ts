@@ -16,8 +16,11 @@ import { callCloudLLM, callCloudLLMStream } from '../../core/cloud/api';
 import { toolsToOpenAIFunctions, buildSystemPrompt } from '../../core/cloud/function-calling';
 import { getAgentSystemPrompt } from '../../core/cloud/prompts/agent-prompts';
 import { recallRecentContext } from '../_shared/memory';
+import { generatePersonaPrompt, updateMood, loadPersona } from '../../core/persona/persona-engine';
+import { messageBus } from '../../core/message-bus';
 
 let toolsInitialized = false;
+let messageBusInitialized = false;
 let cloudApiKey: string | undefined;
 
 export function setCloudApiKey(key: string | undefined): void {
@@ -26,6 +29,123 @@ export function setCloudApiKey(key: string | undefined): void {
 
 export function getCloudApiKey(): string | undefined {
   return cloudApiKey;
+}
+
+export function initMessageBus(): void {
+  if (messageBusInitialized) return;
+  messageBusInitialized = true;
+
+  messageBus.subscribe('ledger' as AgentId, async (msg) => {
+    if (msg.type === 'request') {
+      try {
+        const result = await handleLedger({
+          intent: 'unknown',
+          params: msg.payload,
+          confidence: 1.0,
+          agent: 'ledger',
+        });
+        await messageBus.publish({
+          from: 'ledger' as AgentId,
+          to: msg.from,
+          type: 'response',
+          payload: { result, success: true },
+          correlationId: msg.id,
+        });
+      } catch (e) {
+        await messageBus.publish({
+          from: 'ledger' as AgentId,
+          to: msg.from,
+          type: 'error',
+          payload: { error: e instanceof Error ? e.message : 'Unknown' },
+          correlationId: msg.id,
+        });
+      }
+    }
+  });
+
+  messageBus.subscribe('analyst' as AgentId, async (msg) => {
+    if (msg.type === 'request') {
+      try {
+        const result = await handleAnalyst({
+          intent: 'unknown',
+          params: msg.payload,
+          confidence: 1.0,
+          agent: 'analyst',
+        });
+        await messageBus.publish({
+          from: 'analyst' as AgentId,
+          to: msg.from,
+          type: 'response',
+          payload: { result, success: true },
+          correlationId: msg.id,
+        });
+      } catch (e) {
+        await messageBus.publish({
+          from: 'analyst' as AgentId,
+          to: msg.from,
+          type: 'error',
+          payload: { error: e instanceof Error ? e.message : 'Unknown' },
+          correlationId: msg.id,
+        });
+      }
+    }
+  });
+
+  messageBus.subscribe('coach' as AgentId, async (msg) => {
+    if (msg.type === 'request') {
+      try {
+        const result = await handleCoach({
+          intent: 'unknown',
+          params: msg.payload,
+          confidence: 1.0,
+          agent: 'coach',
+        });
+        await messageBus.publish({
+          from: 'coach' as AgentId,
+          to: msg.from,
+          type: 'response',
+          payload: { result, success: true },
+          correlationId: msg.id,
+        });
+      } catch (e) {
+        await messageBus.publish({
+          from: 'coach' as AgentId,
+          to: msg.from,
+          type: 'error',
+          payload: { error: e instanceof Error ? e.message : 'Unknown' },
+          correlationId: msg.id,
+        });
+      }
+    }
+  });
+
+  messageBus.subscribe('guardian' as AgentId, async (msg) => {
+    if (msg.type === 'request') {
+      try {
+        const result = await handleGuardian({
+          intent: 'unknown',
+          params: msg.payload,
+          confidence: 1.0,
+          agent: 'guardian',
+        });
+        await messageBus.publish({
+          from: 'guardian' as AgentId,
+          to: msg.from,
+          type: 'response',
+          payload: { result, success: true },
+          correlationId: msg.id,
+        });
+      } catch (e) {
+        await messageBus.publish({
+          from: 'guardian' as AgentId,
+          to: msg.from,
+          type: 'error',
+          payload: { error: e instanceof Error ? e.message : 'Unknown' },
+          correlationId: msg.id,
+        });
+      }
+    }
+  });
 }
 
 export interface ProcessedMessage {
@@ -39,10 +159,14 @@ export async function processMessage(
 ): Promise<ProcessedMessage> {
   if (!toolsInitialized) {
     initToolRegistry();
+    initMessageBus();
     toolsInitialized = true;
   }
 
   const agentId: AgentId = 'master';
+
+  loadPersona().catch(() => {});
+  updateMood().catch(() => {});
 
   const sanitized = sanitizeText(userMessage);
   const intent = classifyIntent(sanitized);
@@ -107,7 +231,7 @@ async function processWithLLM(
   const messages: { role: string; content: string }[] = [
     {
       role: 'system',
-      content: `${getAgentSystemPrompt('master')}\n\n${buildSystemPrompt('Master', [...getAllTools().values()])}`,
+      content: `${await getAgentSystemPrompt('master')}\n\n${generatePersonaPrompt()}\n${buildSystemPrompt('Master', [...getAllTools().values()])}`,
     },
   ];
 
@@ -234,7 +358,7 @@ export async function* processMessageStream(
   const messages: { role: string; content: string }[] = [
     {
       role: 'system',
-      content: `${getAgentSystemPrompt('master')}\n\n${buildSystemPrompt('Master', allTools)}`,
+      content: `${await getAgentSystemPrompt('master')}\n\n${buildSystemPrompt('Master', allTools)}`,
     },
   ];
 

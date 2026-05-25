@@ -94,6 +94,9 @@ import {
   get_import_history,
 } from '../../tools/import/import.tool';
 import {
+  ocr_import,
+} from '../../tools/import/ocr.tool';
+import {
   export_csv,
   export_json,
   create_backup,
@@ -1393,6 +1396,24 @@ export function initToolRegistry(): void {
     },
     handler: async (params?: any) => get_import_history(params),
     allowedAgents: ['analyst'],
+  });
+
+  registerTool({
+    definition: {
+      name: 'ocr_import',
+      description: 'OCR文本识别导入：从截图/图片识别出的文本中提取账单信息',
+      permissionLevel: 1 as PermissionLevel,
+      parameters: [
+        p('rawText', 'string', true, 'OCR识别的原始文本'),
+        p('source', 'string', false, '来源标识'),
+      ],
+      returns: { type: 'ToolResult', description: '导入的账单列表' },
+      timeout: 15000,
+      retryable: true,
+      idempotent: false,
+    },
+    handler: async (params: any) => ocr_import(params),
+    allowedAgents: ['ledger', 'guardian'],
   });
 
   registerTool({

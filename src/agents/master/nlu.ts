@@ -529,6 +529,65 @@ const intentPatterns: { intent: string; patterns: RegExp[]; agent: string; extra
     ],
     extractParams: () => ({}),
   },
+  {
+    intent: 'credit_card',
+    agent: 'ledger',
+    patterns: [
+      /(?:添加|绑定|录入).*(?:信用卡)/,
+      /(?:信用卡).*(?:添加|绑定|管理)/,
+      /(?:信用卡).*(?:额度|账单日|还款日)/,
+    ],
+    extractParams: () => ({}),
+  },
+  {
+    intent: 'transfer_asset',
+    agent: 'ledger',
+    patterns: [
+      /(?:转账|转移|划转).*(?:资产|账户|资金)/,
+      /从.*(?:转|划).*到/,
+      /(?:资产|账户).*(?:间|互).*(?:转|移)/,
+    ],
+    extractParams: () => ({}),
+  },
+  {
+    intent: 'settle',
+    agent: 'ledger',
+    patterns: [
+      /(?:结算|支付|到账).*(?:报销)/,
+      /(?:报销).*(?:结算|付款|打款)/,
+    ],
+    extractParams: () => ({}),
+  },
+  {
+    intent: 'share_bills',
+    agent: 'coach',
+    patterns: [
+      /(?:分享|共享|发送).*(?:账单|记账|账本)/,
+      /(?:生成|创建).*(?:分享|共享)链接/,
+      /(?:账单).*(?:给别人|发给|分享)/,
+    ],
+    extractParams: () => ({}),
+  },
+  {
+    intent: 'ocr_import',
+    agent: 'ledger',
+    patterns: [
+      /(?:OCR|拍照|扫描|识别).*(?:导入|账单|小票)/,
+      /(?:图片|截图|小票).*(?:导入|识别)/,
+    ],
+    extractParams: () => ({}),
+  },
+  {
+    intent: 'level_status',
+    agent: 'coach',
+    patterns: [
+      /(?:查看|我的).*(?:等级|等级|级别)/,
+      /(?:等级|级别).*(?:查看|是多少)/,
+      /(?:挑战|任务|challenge)/,
+      /有哪些.*挑战/,
+    ],
+    extractParams: () => ({}),
+  },
 ];
 
 export function classifyIntent(text: string): IntentResult {

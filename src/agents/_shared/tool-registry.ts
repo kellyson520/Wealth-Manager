@@ -100,75 +100,76 @@ export function generateAgentToolPrompt(
 }
 
 function extractNamespace(toolName: string): string {
-  if (toolName.startsWith('add_') || toolName.startsWith('search_')) {
-    if (toolName.includes('debt') || toolName.includes('asset') || toolName.includes('tag') || toolName.includes('reimbursement')) return 'other';
-    return 'bills';
-  }
-  if (
-    toolName.startsWith('get_') &&
-    !toolName.includes('savings') &&
-    !toolName.includes('streak') &&
-    !toolName.includes('achievement') &&
-    !toolName.includes('recurring') &&
-    !toolName.includes('notification') &&
-    !toolName.includes('reminder') &&
-    !toolName.includes('debt') &&
-    !toolName.includes('asset') &&
-    !toolName.includes('sync') &&
-    !toolName.includes('import') &&
-    !toolName.includes('privacy') &&
-    !toolName.includes('shortcuts')
-  )
-    return 'stats';
-  if (
-    toolName.startsWith('set_') ||
-    toolName.startsWith('create_') ||
-    toolName.startsWith('get_savings')
-  )
+  if (toolName.startsWith('add_bill') || toolName.startsWith('search_bill') ||
+      toolName.startsWith('get_bill') || toolName === 'modify_bill' ||
+      toolName === 'delete_bill' || toolName === 'split_bill' ||
+      toolName === 'refund_bill') return 'bills';
+
+  if ((toolName.startsWith('get_') && !toolName.includes('savings') &&
+       !toolName.includes('streak') && !toolName.includes('achievement') &&
+       !toolName.includes('recurring') && !toolName.includes('notification') &&
+       !toolName.includes('reminder') && !toolName.includes('debt') &&
+       !toolName.includes('asset') && !toolName.includes('sync') &&
+       !toolName.includes('import') && !toolName.includes('privacy') &&
+       !toolName.includes('shortcut') && !toolName.includes('level') &&
+       !toolName.includes('challenge') && !toolName.includes('bill')) ||
+      toolName === 'generate_chart_config') return 'stats';
+
+  if (toolName.startsWith('set_budget') || toolName.startsWith('create_savings') ||
+      toolName.startsWith('get_savings') || toolName.startsWith('update_savings') ||
+      toolName === 'create_recurring_task' || toolName === 'check_budget_overrun')
     return 'budget';
-  if (toolName.includes('streak') || toolName.includes('achievement'))
+
+  if (toolName.includes('streak') || toolName.includes('achievement') ||
+      toolName.includes('level') || toolName.includes('challenge'))
     return 'gamification';
-  if (
-    toolName.startsWith('run_') ||
-    toolName.startsWith('analyze_') ||
-    toolName.startsWith('sanitize_') ||
-    toolName.startsWith('verify_') ||
-    toolName.startsWith('repair_') ||
-    toolName.startsWith('export_') ||
-    toolName.startsWith('get_privacy') ||
-    toolName.startsWith('revoke_')
-  )
+
+  if (toolName.startsWith('run_safety') || toolName.startsWith('analyze_sub') ||
+      toolName.startsWith('sanitize_') || toolName.startsWith('verify_') ||
+      toolName.startsWith('repair_') || toolName.startsWith('get_privacy') ||
+      toolName.startsWith('revoke_') || toolName === 'export_audit_package')
     return 'security';
-  if (
-    toolName.startsWith('create_recurring') ||
-    toolName.startsWith('get_recurring') ||
-    toolName.startsWith('delete_recurring') ||
-    toolName.startsWith('register_shortcut') ||
-    toolName.startsWith('schedule_local') ||
-    toolName.startsWith('get_notification') ||
-    toolName.startsWith('schedule_') ||
-    toolName.startsWith('cancel_') ||
-    toolName.startsWith('get_shortcut') ||
-    toolName.startsWith('evaluate_') ||
-    toolName.includes('scenario') ||
-    toolName.includes('proactive') ||
-    toolName.includes('today_summary')
-  )
+
+  if (toolName.startsWith('create_recurring') || toolName.startsWith('get_recurring') ||
+      toolName.startsWith('delete_recurring') || toolName.startsWith('register_shortcut') ||
+      toolName.startsWith('get_shortcut') || toolName.startsWith('schedule_') ||
+      toolName.startsWith('cancel_') || toolName.startsWith('get_notification') ||
+      toolName.startsWith('evaluate_') || toolName.includes('scenario') ||
+      toolName.includes('proactive') || toolName.includes('today_summary'))
     return 'automation';
+
   if (toolName.startsWith('rules_')) return 'rules';
-  if (toolName.includes('_asset') || toolName.startsWith('list_assets'))
-    return 'assets';
-  if (toolName.includes('_tag') || toolName.includes('_tags') || toolName.startsWith('list_tags') || toolName.startsWith('add_tag'))
+
+  if (toolName.includes('_asset') || toolName === 'transfer_asset' ||
+      toolName.startsWith('list_assets') || toolName.startsWith('add_asset') ||
+      toolName.startsWith('get_asset') || toolName.startsWith('update_asset') ||
+      toolName.startsWith('delete_asset')) return 'assets';
+
+  if (toolName.includes('_tag') || toolName.includes('_tags') ||
+      toolName.startsWith('list_tags') || toolName.startsWith('add_tag') ||
+      toolName.startsWith('tag_bill') || toolName.startsWith('untag_bill'))
     return 'tags';
-  if (toolName.includes('_debt') || toolName.includes('_debts') || toolName.includes('repayment'))
+
+  if (toolName.includes('_debt') || toolName.includes('_debts') ||
+      toolName.includes('repayment') || toolName.includes('credit_card'))
     return 'debt';
-  if (toolName.startsWith('import_') || toolName.includes('import_'))
-    return 'import';
+
+  if (toolName.startsWith('import_') || toolName.startsWith('get_import') ||
+      toolName === 'ocr_import') return 'import';
+
   if (toolName.startsWith('export_') || toolName.includes('backup'))
     return 'data';
-  if (toolName.includes('reimbursement'))
+
+  if (toolName.includes('reimbursement') || toolName === 'settle_reimbursement')
     return 'reimbursement';
-  if (toolName.includes('webdav') || toolName.includes('sync_'))
+
+  if (toolName.includes('webdav') || toolName.includes('sync_') ||
+      toolName === 'list_sync_files' || toolName === 'get_sync_status')
     return 'sync';
+
+  if (toolName.includes('_link') || toolName.includes('_shared') ||
+      toolName === 'create_link' || toolName === 'leave_shared' ||
+      toolName === 'delete_link') return 'sharing';
+
   return 'other';
 }
