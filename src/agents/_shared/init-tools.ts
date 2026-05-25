@@ -1666,4 +1666,80 @@ export function initToolRegistry(): void {
     handler: async (params: any) => delete_link(params),
     allowedAgents: ['guardian'],
   });
+
+  registerTool({
+    definition: {
+      name: 'add_credit_card',
+      description: '添加信用卡记录（含额度、账单日、还款日）',
+      permissionLevel: 1 as PermissionLevel,
+      parameters: [
+        p('name', 'string', true, '信用卡名称'),
+        p('bank', 'string', true, '发卡银行'),
+        p('creditLimit', 'number', true, '信用额度'),
+        p('billDay', 'number', false, '账单日（默认1号）'),
+        p('paymentDay', 'number', false, '还款日（默认25号）'),
+        p('note', 'string', false, '备注'),
+      ],
+      returns: { type: 'ToolResult', description: '信用卡记录' },
+      timeout: 3000,
+      retryable: true,
+      idempotent: false,
+    },
+    handler: async (params: any) => add_credit_card(params),
+    allowedAgents: ['ledger', 'coach'],
+  });
+
+  registerTool({
+    definition: {
+      name: 'transfer_asset',
+      description: '资产转账（从一个资产账户转到另一个）',
+      permissionLevel: 1 as PermissionLevel,
+      parameters: [
+        p('fromAssetId', 'string', true, '转出资产ID'),
+        p('toAssetId', 'string', true, '转入资产ID'),
+        p('amount', 'number', true, '转账金额'),
+        p('note', 'string', false, '备注'),
+      ],
+      returns: { type: 'ToolResult', description: '转账结果（双方新余额）' },
+      timeout: 3000,
+      retryable: true,
+      idempotent: false,
+    },
+    handler: async (params: any) => transfer_asset(params),
+    allowedAgents: ['ledger'],
+  });
+
+  registerTool({
+    definition: {
+      name: 'settle_reimbursement',
+      description: '结算已审批的报销（状态：approved→paid）',
+      permissionLevel: 1 as PermissionLevel,
+      parameters: [
+        p('taskId', 'string', true, '报销任务ID'),
+      ],
+      returns: { type: 'ToolResult', description: '结算结果' },
+      timeout: 3000,
+      retryable: true,
+      idempotent: false,
+    },
+    handler: async (params: any) => settle_reimbursement(params),
+    allowedAgents: ['ledger', 'coach'],
+  });
+
+  registerTool({
+    definition: {
+      name: 'list_sync_files',
+      description: '列出 WebDAV 服务器上的同步文件',
+      permissionLevel: 0 as PermissionLevel,
+      parameters: [
+        p('subfolder', 'string', false, '服务器子目录'),
+      ],
+      returns: { type: 'ToolResult', description: '文件列表' },
+      timeout: 10000,
+      retryable: true,
+      idempotent: true,
+    },
+    handler: async (params?: any) => list_sync_files(params),
+    allowedAgents: ['guardian', 'analyst'],
+  });
 }
