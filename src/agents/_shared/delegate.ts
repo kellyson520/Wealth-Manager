@@ -2,10 +2,8 @@ import { v4 as uuidv4 } from 'uuid';
 import {
   AgentId,
   AgentMessage,
-  IntentResult,
-  ToolResult,
 } from '../../shared/types';
-import { getSecurityProfile, SecurityProfile } from './security-profile';
+import { getSecurityProfile } from './security-profile';
 import { isToolAllowedForAgent } from './tool-registry';
 
 export interface DelegationRequest {

@@ -7,10 +7,8 @@ import {
   SafeAreaView,
   StatusBar,
   TouchableOpacity,
-  Platform,
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import { v4 as uuidv4 } from 'uuid';
 import MessageBubble from './MessageBubble';
 import InputBar from './InputBar';
 import QuickBar from './QuickBar';

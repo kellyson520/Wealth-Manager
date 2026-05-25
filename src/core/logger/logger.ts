@@ -6,7 +6,7 @@ const BUFFER_TRIM_COUNT = 100;
 
 class Logger {
   private buffer: LogEntry[] = [];
-  private listeners: Array<() => void> = [];
+  private listeners: (() => void)[] = [];
 
   private trim(): void {
     if (this.buffer.length > MAX_BUFFER) {

@@ -1,5 +1,6 @@
 import * as SQLite from 'expo-sqlite';
 import { v4 as uuidv4 } from 'uuid';
+import { initRulesTable } from '../rules';
 
 let db: SQLite.SQLiteDatabase | null = null;
 
@@ -89,7 +90,74 @@ async function initTables(db: SQLite.SQLiteDatabase): Promise<void> {
       last_triggered TEXT,
       created_at TEXT NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS assets (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      type TEXT DEFAULT '其他' CHECK(type IN ('现金','银行账户','股票','基金','房产','车辆','债权','其他')),
+      amount REAL NOT NULL DEFAULT 0,
+      currency TEXT DEFAULT 'CNY',
+      note TEXT DEFAULT '',
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS tags (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL UNIQUE,
+      color TEXT DEFAULT '#4A90D9',
+      created_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS bill_tags (
+      bill_id TEXT NOT NULL,
+      tag_id TEXT NOT NULL,
+      PRIMARY KEY (bill_id, tag_id),
+      FOREIGN KEY (bill_id) REFERENCES bills(id) ON DELETE CASCADE,
+      FOREIGN KEY (tag_id) REFERENCES tags(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS debts (
+      id TEXT PRIMARY KEY,
+      title TEXT NOT NULL,
+      type TEXT NOT NULL CHECK(type IN ('借出','借入')),
+      principal REAL NOT NULL DEFAULT 0,
+      remaining REAL NOT NULL DEFAULT 0,
+      counterparty TEXT NOT NULL,
+      interest_rate REAL DEFAULT 0,
+      start_date TEXT NOT NULL,
+      due_date TEXT,
+      status TEXT DEFAULT 'active' CHECK(status IN ('active','cleared','overdue')),
+      note TEXT DEFAULT '',
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS repayments (
+      id TEXT PRIMARY KEY,
+      debt_id TEXT NOT NULL,
+      amount REAL NOT NULL,
+      date TEXT NOT NULL,
+      note TEXT DEFAULT '',
+      created_at TEXT NOT NULL,
+      FOREIGN KEY (debt_id) REFERENCES debts(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS reimbursement_tasks (
+      id TEXT PRIMARY KEY,
+      title TEXT NOT NULL,
+      amount REAL NOT NULL,
+      category TEXT DEFAULT '其他',
+      status TEXT DEFAULT 'pending' CHECK(status IN ('pending','submitted','approved','rejected','paid')),
+      merchant TEXT DEFAULT '',
+      date TEXT NOT NULL,
+      note TEXT DEFAULT '',
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
   `);
+
+  await initRulesTable();
 
   await seedCategories(db);
   await seedAchievements(db);

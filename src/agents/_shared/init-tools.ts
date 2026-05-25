@@ -40,7 +40,43 @@ import {
   register_shortcut,
   schedule_local_notification,
   get_notification_permission_status,
+  schedule_daily_reminder,
+  cancel_all_notifications,
+  get_shortcuts,
 } from '../../tools/automation/automation.tool';
+import { evaluate_all_scenarios } from '../../tools/automation/scenario-triggers';
+import { run_all_scheduled_tasks, schedule_default_reminders } from '../../tools/automation/task-scheduler';
+import {
+  run_proactive_check,
+  get_proactive_insights,
+  get_today_summary,
+} from '../../tools/proactive/proactive.tool';
+import {
+  check_budget_overrun,
+  update_savings_progress,
+} from '../../tools/budget/budget.tool';
+import {
+  rules_add,
+  rules_search,
+  rules_update,
+  rules_delete,
+  rules_match,
+  rules_guess,
+  rules_apply,
+} from '../../tools/rules/rules.tool';
+import {
+  add_asset,
+  list_assets,
+  update_asset_value,
+  get_asset_summary,
+  delete_asset,
+} from '../../tools/assets/assets.tool';
+import {
+  add_tag,
+  list_tags,
+  tag_bill,
+  untag_bill,
+} from '../../tools/tags/tags.tool';
 
 let initialized = false;
 
@@ -597,5 +633,483 @@ export function initToolRegistry(): void {
     },
     handler: get_notification_permission_status,
     allowedAgents: ['guardian'],
+  });
+
+  registerTool({
+    definition: {
+      name: 'check_budget_overrun',
+      description: '检查预算超标情况，返回所有超过 80% 的分类及严重程度',
+      permissionLevel: 0 as PermissionLevel,
+      parameters: [
+        p('category', 'string', false, '指定分类，不传则检查全部'),
+        p('amount', 'number', false, '新增金额（用于预估超支）'),
+      ],
+      returns: { type: 'ToolResult<{alerts: BudgetOverrunAlert[], hasOverrun: boolean}>', description: '超标警报列表' },
+      timeout: 3000,
+      retryable: true,
+      idempotent: true,
+    },
+    handler: check_budget_overrun,
+    allowedAgents: ['coach', 'analyst'],
+  });
+
+  registerTool({
+    definition: {
+      name: 'update_savings_progress',
+      description: '根据当前收入自动更新所有储蓄目标的进度',
+      permissionLevel: 1 as PermissionLevel,
+      parameters: [
+        p('goalId', 'string', false, '指定目标ID，不传则更新全部'),
+      ],
+      returns: { type: 'ToolResult<SavingsGoal[]>', description: '更新后的储蓄目标' },
+      timeout: 3000,
+      retryable: true,
+      idempotent: false,
+    },
+    handler: update_savings_progress,
+    allowedAgents: ['coach'],
+  });
+
+  registerTool({
+    definition: {
+      name: 'schedule_daily_reminder',
+      description: '调度每日定时提醒通知',
+      permissionLevel: 1 as PermissionLevel,
+      parameters: [
+        p('title', 'string', true, '通知标题'),
+        p('body', 'string', true, '通知内容'),
+        p('hour', 'number', true, '小时（0-23）'),
+        p('minute', 'number', true, '分钟（0-59）'),
+      ],
+      returns: { type: 'ToolResult', description: '调度结果' },
+      timeout: 3000,
+      retryable: true,
+      idempotent: false,
+    },
+    handler: (params: { title: string; body: string; hour: number; minute: number }) =>
+      schedule_daily_reminder(params),
+    allowedAgents: ['guardian'],
+  });
+
+  registerTool({
+    definition: {
+      name: 'cancel_all_notifications',
+      description: '取消所有已调度的本地通知',
+      permissionLevel: 1 as PermissionLevel,
+      parameters: [],
+      returns: { type: 'ToolResult', description: '取消结果' },
+      timeout: 3000,
+      retryable: true,
+      idempotent: true,
+    },
+    handler: cancel_all_notifications,
+    allowedAgents: ['guardian'],
+  });
+
+  registerTool({
+    definition: {
+      name: 'get_shortcuts',
+      description: '获取所有已注册的快捷指令',
+      permissionLevel: 0 as PermissionLevel,
+      parameters: [],
+      returns: { type: 'ToolResult<ShortcutRecord[]>', description: '快捷指令列表' },
+      timeout: 3000,
+      retryable: true,
+      idempotent: true,
+    },
+    handler: get_shortcuts,
+    allowedAgents: ['guardian'],
+  });
+
+  registerTool({
+    definition: {
+      name: 'evaluate_all_scenarios',
+      description: '评估所有通知场景（记账提醒、预算超标、3天未记、成就解锁）并触发相应通知',
+      permissionLevel: 1 as PermissionLevel,
+      parameters: [],
+      returns: { type: 'ToolResult', description: '场景评估及通知触发结果' },
+      timeout: 5000,
+      retryable: true,
+      idempotent: false,
+    },
+    handler: evaluate_all_scenarios,
+    allowedAgents: ['guardian', 'coach'],
+  });
+
+  registerTool({
+    definition: {
+      name: 'run_all_scheduled_tasks',
+      description: '执行所有到期计划任务',
+      permissionLevel: 1 as PermissionLevel,
+      parameters: [],
+      returns: { type: 'ToolResult', description: '执行结果统计' },
+      timeout: 10000,
+      retryable: true,
+      idempotent: false,
+    },
+    handler: run_all_scheduled_tasks,
+    allowedAgents: ['guardian'],
+  });
+
+  registerTool({
+    definition: {
+      name: 'schedule_default_reminders',
+      description: '配置系统默认提醒（每日记账提醒 + 长时间未记录检查）',
+      permissionLevel: 1 as PermissionLevel,
+      parameters: [],
+      returns: { type: 'ToolResult', description: '配置结果' },
+      timeout: 5000,
+      retryable: true,
+      idempotent: true,
+    },
+    handler: schedule_default_reminders,
+    allowedAgents: ['guardian'],
+  });
+
+  registerTool({
+    definition: {
+      name: 'run_proactive_check',
+      description: 'AI主动服务：运行所有主动检查（预算健康、长期未记、即将达成成就、储蓄进度、智能洞察）',
+      permissionLevel: 0 as PermissionLevel,
+      parameters: [],
+      returns: { type: 'ToolResult<ProactiveFindings>', description: '综合主动服务检查结果' },
+      timeout: 8000,
+      retryable: true,
+      idempotent: true,
+    },
+    handler: run_proactive_check,
+    allowedAgents: ['coach', 'analyst'],
+  });
+
+  registerTool({
+    definition: {
+      name: 'get_proactive_insights',
+      description: '获取AI生成的个性化理财洞察与建议',
+      permissionLevel: 0 as PermissionLevel,
+      parameters: [],
+      returns: { type: 'ToolResult<{insights: string[]}>', description: '个性化洞察列表' },
+      timeout: 5000,
+      retryable: true,
+      idempotent: true,
+    },
+    handler: get_proactive_insights,
+    allowedAgents: ['coach', 'analyst'],
+  });
+
+  registerTool({
+    definition: {
+      name: 'get_today_summary',
+      description: '获取今日及本月收支概览 + 预算状态摘要',
+      permissionLevel: 0 as PermissionLevel,
+      parameters: [],
+      returns: { type: 'ToolResult<{today, month, budgetStatus}>', description: '当日总结' },
+      timeout: 5000,
+      retryable: true,
+      idempotent: true,
+    },
+    handler: get_today_summary,
+    allowedAgents: ['analyst', 'coach'],
+  });
+
+  registerTool({
+    definition: {
+      name: 'rules_add',
+      description: '添加分类规则（条件匹配 → 动作执行）',
+      permissionLevel: 1 as PermissionLevel,
+      parameters: [
+        p('name', 'string', true, '规则名称'),
+        p('description', 'string', false, '规则描述'),
+        p('priority', 'number', false, '优先级（数字越大越优先）'),
+        p('conditions', 'object', true, '条件组 {operator: "and"|"or", conditions: [...]}'),
+        p('actions', 'array', true, '动作列表 [{type: "set_category", target: "...", value: "..."}]'),
+        p('createdBy', 'string', false, '创建者'),
+      ],
+      returns: { type: 'ToolResult<ClassificationRule>', description: '创建的规则记录' },
+      timeout: 3000,
+      retryable: true,
+      idempotent: false,
+    },
+    handler: async (params) => rules_add(params as any),
+    allowedAgents: ['coach', 'guardian'],
+  });
+
+  registerTool({
+    definition: {
+      name: 'rules_search',
+      description: '搜索已配置的分类规则',
+      permissionLevel: 0 as PermissionLevel,
+      parameters: [
+        p('keyword', 'string', false, '搜索关键词'),
+        p('enabled', 'boolean', false, '是否只查启用的'),
+        p('createdBy', 'string', false, '按创建者过滤'),
+        p('limit', 'number', false, '返回条数'),
+        p('offset', 'number', false, '分页偏移'),
+      ],
+      returns: { type: 'ToolResult<ClassificationRule[]>', description: '规则列表' },
+      timeout: 3000,
+      retryable: true,
+      idempotent: true,
+    },
+    handler: async (params) => rules_search(params ?? {}),
+    allowedAgents: ['analyst', 'coach', 'guardian'],
+  });
+
+  registerTool({
+    definition: {
+      name: 'rules_update',
+      description: '更新已有规则的条件或动作',
+      permissionLevel: 1 as PermissionLevel,
+      parameters: [
+        p('ruleId', 'string', true, '规则ID'),
+        p('name', 'string', false, '新名称'),
+        p('description', 'string', false, '新描述'),
+        p('priority', 'number', false, '新优先级'),
+        p('enabled', 'boolean', false, '启用/禁用'),
+        p('conditions', 'object', false, '新条件组'),
+        p('actions', 'array', false, '新动作列表'),
+      ],
+      returns: { type: 'ToolResult', description: '更新结果' },
+      timeout: 3000,
+      retryable: true,
+      idempotent: false,
+    },
+    handler: async (params) => rules_update(params as any),
+    allowedAgents: ['coach', 'guardian'],
+  });
+
+  registerTool({
+    definition: {
+      name: 'rules_delete',
+      description: '删除一条分类规则',
+      permissionLevel: 1 as PermissionLevel,
+      parameters: [
+        p('ruleId', 'string', true, '规则ID'),
+      ],
+      returns: { type: 'ToolResult', description: '删除结果' },
+      timeout: 3000,
+      retryable: false,
+      idempotent: false,
+    },
+    handler: async (params) => rules_delete(params as any),
+    allowedAgents: ['guardian'],
+  });
+
+  registerTool({
+    definition: {
+      name: 'rules_match',
+      description: '根据输入事实匹配符合条件的规则',
+      permissionLevel: 0 as PermissionLevel,
+      parameters: [
+        p('facts', 'object', true, '待匹配的事实数据'),
+        p('maxResults', 'number', false, '最多返回条数'),
+        p('minConfidence', 'number', false, '最低置信度'),
+      ],
+      returns: { type: 'ToolResult', description: '匹配的规则列表' },
+      timeout: 5000,
+      retryable: true,
+      idempotent: true,
+    },
+    handler: async (params) => rules_match(params as any),
+    allowedAgents: ['ledger', 'analyst', 'coach'],
+  });
+
+  registerTool({
+    definition: {
+      name: 'rules_guess',
+      description: '根据商户名和金额猜测最可能的分类',
+      permissionLevel: 0 as PermissionLevel,
+      parameters: [
+        p('merchant', 'string', false, '商户名称'),
+        p('amount', 'number', false, '金额'),
+        p('note', 'string', false, '备注'),
+      ],
+      returns: { type: 'ToolResult', description: '猜测的分类及置信度' },
+      timeout: 3000,
+      retryable: true,
+      idempotent: true,
+    },
+    handler: async (params) => rules_guess(params ?? {}),
+    allowedAgents: ['ledger', 'coach'],
+  });
+
+  registerTool({
+    definition: {
+      name: 'rules_apply',
+      description: '批量应用规则到指定账单',
+      permissionLevel: 1 as PermissionLevel,
+      parameters: [
+        p('ruleIds', 'array', false, '规则ID列表'),
+        p('billIds', 'array', false, '账单ID列表'),
+      ],
+      returns: { type: 'ToolResult', description: '应用结果统计' },
+      timeout: 10000,
+      retryable: true,
+      idempotent: false,
+    },
+    handler: async (params) => rules_apply(params ?? {}),
+    allowedAgents: ['ledger', 'coach', 'guardian'],
+  });
+
+  registerTool({
+    definition: {
+      name: 'add_asset',
+      description: '添加资产记录（现金、银行账户、股票、基金、房产等）',
+      permissionLevel: 1 as PermissionLevel,
+      parameters: [
+        p('name', 'string', true, '资产名称'),
+        p('type', 'string', false, '资产类型（现金/银行账户/股票/基金/房产/车辆/债权/其他）'),
+        p('amount', 'number', true, '资产金额（>=0）'),
+        p('currency', 'string', false, '货币（默认CNY）'),
+        p('note', 'string', false, '备注'),
+      ],
+      returns: { type: 'ToolResult<AssetRecord>', description: '创建的资产记录' },
+      timeout: 3000,
+      retryable: true,
+      idempotent: false,
+    },
+    handler: async (params: any) => add_asset(params),
+    allowedAgents: ['ledger', 'coach'],
+  });
+
+  registerTool({
+    definition: {
+      name: 'list_assets',
+      description: '查询资产列表，按金额降序排列',
+      permissionLevel: 0 as PermissionLevel,
+      parameters: [
+        p('type', 'string', false, '按类型过滤'),
+        p('keyword', 'string', false, '按名称/备注搜索'),
+        p('limit', 'number', false, '返回条数'),
+      ],
+      returns: { type: 'ToolResult<AssetRecord[]>', description: '资产列表' },
+      timeout: 3000,
+      retryable: true,
+      idempotent: true,
+    },
+    handler: async (params?: any) => list_assets(params),
+    allowedAgents: ['analyst', 'coach'],
+  });
+
+  registerTool({
+    definition: {
+      name: 'update_asset_value',
+      description: '更新资产金额',
+      permissionLevel: 1 as PermissionLevel,
+      parameters: [
+        p('assetId', 'string', true, '资产ID'),
+        p('amount', 'number', true, '新金额'),
+        p('note', 'string', false, '备注'),
+      ],
+      returns: { type: 'ToolResult', description: '更新结果' },
+      timeout: 3000,
+      retryable: true,
+      idempotent: false,
+    },
+    handler: async (params: any) => update_asset_value(params),
+    allowedAgents: ['ledger', 'coach'],
+  });
+
+  registerTool({
+    definition: {
+      name: 'get_asset_summary',
+      description: '获取资产总览：按类型汇总 + 总资产',
+      permissionLevel: 0 as PermissionLevel,
+      parameters: [],
+      returns: { type: 'ToolResult<{breakdown, totalAssets}>', description: '资产分类汇总 + 总资产' },
+      timeout: 3000,
+      retryable: true,
+      idempotent: true,
+    },
+    handler: get_asset_summary,
+    allowedAgents: ['analyst', 'coach'],
+  });
+
+  registerTool({
+    definition: {
+      name: 'delete_asset',
+      description: '删除资产记录',
+      permissionLevel: 1 as PermissionLevel,
+      parameters: [
+        p('assetId', 'string', true, '资产ID'),
+      ],
+      returns: { type: 'ToolResult', description: '删除结果' },
+      timeout: 3000,
+      retryable: false,
+      idempotent: false,
+    },
+    handler: async (params: any) => delete_asset(params),
+    allowedAgents: ['guardian'],
+  });
+
+  registerTool({
+    definition: {
+      name: 'add_tag',
+      description: '创建账单标签',
+      permissionLevel: 1 as PermissionLevel,
+      parameters: [
+        p('name', 'string', true, '标签名称'),
+        p('color', 'string', false, '标签颜色（默认#4A90D9）'),
+      ],
+      returns: { type: 'ToolResult<TagRecord>', description: '创建的标签' },
+      timeout: 3000,
+      retryable: true,
+      idempotent: false,
+    },
+    handler: async (params: any) => add_tag(params),
+    allowedAgents: ['ledger', 'coach'],
+  });
+
+  registerTool({
+    definition: {
+      name: 'list_tags',
+      description: '查询标签列表（含使用次数）',
+      permissionLevel: 0 as PermissionLevel,
+      parameters: [
+        p('keyword', 'string', false, '搜索关键词'),
+        p('limit', 'number', false, '返回条数'),
+      ],
+      returns: { type: 'ToolResult<TagRecord[]>', description: '标签列表' },
+      timeout: 3000,
+      retryable: true,
+      idempotent: true,
+    },
+    handler: async (params?: any) => list_tags(params),
+    allowedAgents: ['ledger', 'analyst', 'coach'],
+  });
+
+  registerTool({
+    definition: {
+      name: 'tag_bill',
+      description: '给账单添加标签',
+      permissionLevel: 1 as PermissionLevel,
+      parameters: [
+        p('billId', 'string', true, '账单ID'),
+        p('tagId', 'string', true, '标签ID'),
+      ],
+      returns: { type: 'ToolResult', description: '标记结果' },
+      timeout: 3000,
+      retryable: true,
+      idempotent: true,
+    },
+    handler: async (params: any) => tag_bill(params),
+    allowedAgents: ['ledger'],
+  });
+
+  registerTool({
+    definition: {
+      name: 'untag_bill',
+      description: '移除账单标签',
+      permissionLevel: 1 as PermissionLevel,
+      parameters: [
+        p('billId', 'string', true, '账单ID'),
+        p('tagId', 'string', true, '标签ID'),
+      ],
+      returns: { type: 'ToolResult', description: '移除结果' },
+      timeout: 3000,
+      retryable: true,
+      idempotent: false,
+    },
+    handler: async (params: any) => untag_bill(params),
+    allowedAgents: ['ledger'],
   });
 }

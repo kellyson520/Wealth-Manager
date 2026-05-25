@@ -3,13 +3,9 @@ import { add_bill, search_bills } from '../../tools/bills/bills.tool';
 import { get_aggregation } from '../../tools/stats/stats.tool';
 import { preActionCheck } from '../guardian/guardian.agent';
 import {
-  getSecurityProfile,
   canCallTool,
   rememberThis,
   rememberMoment,
-  recallMemory,
-  getDelegationTargets,
-  createAgentMessage,
 } from '../_shared';
 
 const AGENT_ID: AgentId = 'ledger';
@@ -118,7 +114,7 @@ async function handleSearchBills(params: Record<string, unknown>): Promise<strin
     return '查询账单时出现问题，请重试。';
   }
 
-  const bills = result.data as Array<{ merchant: string; amount: number; type: string; date: string }>;
+  const bills = result.data as { merchant: string; amount: number; type: string; date: string }[];
   if (bills.length === 0) {
     return '没有找到相关账单。';
   }

@@ -1,3 +1,4 @@
+import { captureError } from '../../core/logger/logger';
 import { getDatabase } from '../../core/database/database';
 import {
   AggregationResult,
@@ -50,6 +51,7 @@ export async function get_aggregation(params: {
 
     return { success: true, data: result };
   } catch (e) {
+    captureError('StatsTool.get_aggregation', e, 'Aggregation query failed');
     return { success: false, error: '统计失败', errorCode: '1000' };
   }
 }
@@ -97,6 +99,7 @@ export async function get_budget_status(params: {
 
     return { success: true, data: statuses };
   } catch (e) {
+    captureError('StatsTool.get_budget_status', e, 'Budget status query failed');
     return { success: false, error: '预算查询失败', errorCode: '1000' };
   }
 }
@@ -120,6 +123,7 @@ export async function get_net_balance(): Promise<ToolResult> {
 
     return { success: true, data: result };
   } catch (e) {
+    captureError('StatsTool.get_net_balance', e, 'Net balance query failed');
     return { success: false, error: '净资产查询失败', errorCode: '1000' };
   }
 }
@@ -209,6 +213,7 @@ export async function generate_chart_config(params: {
 
     return { success: true, data: config };
   } catch (e) {
+    captureError('StatsTool.generate_chart_config', e, 'Chart config generation failed');
     return { success: false, error: '生成图表配置失败', errorCode: '1000' };
   }
 }
@@ -253,6 +258,7 @@ export async function get_category_trend(params: {
 
     return { success: true, data: trends };
   } catch (e) {
+    captureError('StatsTool.get_category_trend', e, 'Category trend query failed');
     return { success: false, error: '趋势分析失败', errorCode: '1000' };
   }
 }
@@ -303,6 +309,7 @@ export async function get_anomaly_report(params: {
 
     return { success: true, data: anomalies };
   } catch (e) {
+    captureError('StatsTool.get_anomaly_report', e, 'Anomaly report generation failed');
     return { success: false, error: '异常检测失败', errorCode: '1000' };
   }
 }
@@ -337,6 +344,7 @@ export async function get_merchant_summary(params: {
 
     return { success: true, data: summaries };
   } catch (e) {
+    captureError('StatsTool.get_merchant_summary', e, 'Merchant summary query failed');
     return { success: false, error: '商家汇总失败', errorCode: '1000' };
   }
 }
@@ -379,6 +387,7 @@ export async function get_yearly_comparison(params: {
 
     return { success: true, data: comparison };
   } catch (e) {
+    captureError('StatsTool.get_yearly_comparison', e, 'Yearly comparison query failed');
     return { success: false, error: '年度对比失败', errorCode: '1000' };
   }
 }

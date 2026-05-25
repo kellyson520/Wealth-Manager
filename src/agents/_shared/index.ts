@@ -43,3 +43,6 @@ export {
 } from './delegate';
 
 export { initToolRegistry } from './init-tools';
+
+export { executeTool, executeWithRetry } from '../../tools/_pipeline/tool-executor';
+export type { ToolExecutionResult } from '../../tools/_pipeline/tool-executor';

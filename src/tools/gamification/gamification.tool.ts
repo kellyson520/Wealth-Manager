@@ -1,3 +1,4 @@
+import { captureError } from '../../core/logger/logger';
 import { getDatabase } from '../../core/database/database';
 import { Achievement, StreakInfo, ToolResult } from '../../shared/types';
 
@@ -56,6 +57,7 @@ export async function get_streak_info(): Promise<ToolResult> {
 
     return { success: true, data: streak };
   } catch (e) {
+    captureError('GamificationTool.get_streak_info', e, 'Get streak info failed');
     return { success: false, error: '查询打卡信息失败', errorCode: '1000' };
   }
 }
@@ -106,6 +108,7 @@ export async function get_achievement(params: {
 
     return { success: true, data: achievements };
   } catch (e) {
+    captureError('GamificationTool.get_achievement', e, 'Get achievement failed');
     return { success: false, error: '查询成就失败', errorCode: '1000' };
   }
 }
@@ -140,6 +143,7 @@ export async function update_achievement_progress(params: {
 
     return { success: true, data: { name: ach.name, unlocked, progress: newProgress } };
   } catch (e) {
+    captureError('GamificationTool.update_achievement_progress', e, 'Update achievement progress failed');
     return { success: false, error: '更新成就失败', errorCode: '1000' };
   }
 }

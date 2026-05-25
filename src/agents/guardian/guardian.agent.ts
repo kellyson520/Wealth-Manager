@@ -2,9 +2,7 @@ import { IntentResult, AgentId } from '../../shared/types';
 import { run_safety_check, analyze_subscriptions, sanitize_input, sanitize_for_cloud, verify_hash_chain, repair_hash_chain, export_audit_package, get_privacy_report, revoke_cloud_access } from '../../tools/security/security.tool';
 import { create_recurring_task, get_recurring_tasks, delete_recurring_task, register_shortcut, schedule_local_notification, get_notification_permission_status } from '../../tools/automation/automation.tool';
 import {
-  getSecurityProfile,
   canCallTool,
-  rememberThis,
   rememberMoment,
 } from '../_shared';
 
@@ -61,7 +59,7 @@ export async function preActionCheck(params: {
   const check = result.data as {
     passed: boolean;
     riskLevel: string;
-    issues: Array<{ detail: string; severity: string }>;
+    issues: { detail: string; severity: string }[];
   };
 
   await rememberMoment(
@@ -107,7 +105,7 @@ async function handleSafetyCheck(params: Record<string, unknown>): Promise<strin
   const check = result.data as {
     passed: boolean;
     riskLevel: string;
-    issues: Array<{ detail: string; severity: string }>;
+    issues: { detail: string; severity: string }[];
     suggestedActions: string[];
   };
 
@@ -171,14 +169,14 @@ async function handleSubscriptions(): Promise<string> {
     return `订阅分析失败：${result.error}`;
   }
 
-  const subscriptions = result.data as Array<{
+  const subscriptions = result.data as {
     merchant: string;
     monthlyAmount: number;
     monthsActive: number;
     firstDate: string;
     lastDate: string;
     active: boolean;
-  }>;
+  }[];
 
   if (subscriptions.length === 0) {
     return '未检测到疑似订阅支出（需同一商户至少连续3个月相同金额）。';
@@ -268,14 +266,14 @@ async function handleGetReminders(params: Record<string, unknown>): Promise<stri
     return `查询提醒失败：${result.error}`;
   }
 
-  const tasks = result.data as Array<{
+  const tasks = result.data as {
     id: string;
     name: string;
     type: string;
     cron: string;
     enabled: boolean;
     lastTriggered: string;
-  }>;
+  }[];
 
   if (tasks.length === 0) {
     return '您还没有设置任何提醒。说"创建记账提醒"来开始吧！';

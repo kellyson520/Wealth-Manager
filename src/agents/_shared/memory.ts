@@ -1,6 +1,7 @@
 import { v4 as uuidv4 } from 'uuid';
 import { getDatabase } from '../../core/database/database';
 import { AgentId } from '../../shared/types';
+import { captureError } from '../../core/logger/logger';
 
 export type MemoryType = 'long_term' | 'episodic';
 
@@ -53,7 +54,8 @@ export async function saveMemory(
       content: params.content,
       updatedAt: now,
     };
-  } catch {
+  } catch (e) {
+    captureError('Memory.saveMemory', e, 'Failed to save memory');
     return null;
   }
 }
@@ -106,7 +108,8 @@ export async function recallMemory(
         updatedAt: row.updated_at,
       };
     });
-  } catch {
+  } catch (e) {
+    captureError('Memory.recallMemory', e, 'Failed to recall memory');
     return [];
   }
 }
@@ -116,7 +119,8 @@ export async function forgetMemory(id: string): Promise<boolean> {
   try {
     await db.runAsync('DELETE FROM memories WHERE id = ?', [id]);
     return true;
-  } catch {
+  } catch (e) {
+    captureError('Memory.forgetMemory', e, 'Failed to forget memory');
     return false;
   }
 }

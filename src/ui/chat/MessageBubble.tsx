@@ -7,9 +7,21 @@ interface MessageBubbleProps {
   message: ChatMessage;
   onConfirm?: (actionId: string) => void;
   onCancel?: (actionId: string) => void;
+  onRetry?: () => void;
+  onAction?: (actionId: string) => void;
+  onEdit?: () => void;
+  onDelete?: () => void;
 }
 
-export default function MessageBubble({ message, onConfirm, onCancel }: MessageBubbleProps) {
+export default function MessageBubble({
+  message,
+  onConfirm,
+  onCancel,
+  onRetry,
+  onAction,
+  onEdit,
+  onDelete,
+}: MessageBubbleProps) {
   const isUser = message.role === 'user';
   const isSystem = message.role === 'system';
   const hasCard = !!message.data;
@@ -19,7 +31,15 @@ export default function MessageBubble({ message, onConfirm, onCancel }: MessageB
       <View style={styles.systemContainer}>
         <Text style={styles.systemText}>{message.content}</Text>
         {hasCard && (
-          <CardRenderer data={message.data!} onConfirm={onConfirm} onCancel={onCancel} />
+          <CardRenderer
+            data={message.data!}
+            onConfirm={onConfirm}
+            onCancel={onCancel}
+            onRetry={onRetry}
+            onAction={onAction}
+            onEdit={onEdit}
+            onDelete={onDelete}
+          />
         )}
       </View>
     );
@@ -32,7 +52,15 @@ export default function MessageBubble({ message, onConfirm, onCancel }: MessageB
           {message.content}
         </Text>
         {hasCard && (
-          <CardRenderer data={message.data!} onConfirm={onConfirm} onCancel={onCancel} />
+          <CardRenderer
+            data={message.data!}
+            onConfirm={onConfirm}
+            onCancel={onCancel}
+            onRetry={onRetry}
+            onAction={onAction}
+            onEdit={onEdit}
+            onDelete={onDelete}
+          />
         )}
       </View>
     </View>

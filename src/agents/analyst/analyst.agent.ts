@@ -10,10 +10,8 @@ import {
   get_yearly_comparison,
 } from '../../tools/stats/stats.tool';
 import {
-  getSecurityProfile,
   canCallTool,
   rememberMoment,
-  getDelegationTargets,
 } from '../_shared';
 
 const AGENT_ID: AgentId = 'analyst';
@@ -97,13 +95,13 @@ async function handleCategoryTrend(params: Record<string, unknown>): Promise<str
     return `趋势分析失败：${result.error}`;
   }
 
-  const trends = result.data as Array<{
+  const trends = result.data as {
     category: string;
     currentAmount: number;
     previousAmount: number;
     changePercent: number;
     trend: string;
-  }>;
+  }[];
 
   if (trends.length === 0) {
     return '暂无足够数据用于趋势分析，请至少记录两周后再试。';
@@ -127,12 +125,12 @@ async function handleAnomalyReport(params: Record<string, unknown>): Promise<str
     return `异常检测失败：${result.error}`;
   }
 
-  const anomalies = result.data as Array<{
+  const anomalies = result.data as {
     anomalyType: string;
     severity: string;
     detail: string;
     suggestedAction: string;
-  }>;
+  }[];
 
   if (anomalies.length === 0) {
     return '🔍 未检测到消费异常，您的财务状况看起来很健康！';
@@ -159,13 +157,13 @@ async function handleMerchantSummary(params: Record<string, unknown>): Promise<s
     return `商家汇总失败：${result.error}`;
   }
 
-  const summaries = result.data as Array<{
+  const summaries = result.data as {
     merchant: string;
     totalAmount: number;
     count: number;
     avgAmount: number;
     lastDate: string;
-  }>;
+  }[];
 
   if (summaries.length === 0) {
     return '该时间段内没有商家消费记录。';
@@ -225,7 +223,6 @@ async function handleChart(params: Record<string, unknown>): Promise<string> {
     return `生成图表失败：${result.error}`;
   }
 
-  const config = result.data as Record<string, unknown>;
   const chartLabel =
     chartType === 'pie' ? '分类饼图' :
     chartType === 'bar' ? '收支柱状图' :
@@ -242,13 +239,13 @@ async function handleBudgetStatus(params: Record<string, unknown>): Promise<stri
     return `预算查询失败：${result.error}`;
   }
 
-  const statuses = result.data as Array<{
+  const statuses = result.data as {
     category: string;
     limit: number;
     spent: number;
     remaining: number;
     percentUsed: number;
-  }>;
+  }[];
 
   if (statuses.length === 0) {
     return '您还没有设置任何预算。说"设置餐饮预算 3000"来创建预算吧！';

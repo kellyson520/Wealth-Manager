@@ -1,13 +1,14 @@
 import { IntentResult, AgentId } from '../../shared/types';
-import { set_budget, create_savings_goal, get_savings_progress } from '../../tools/budget/budget.tool';
-import { get_streak_info, get_achievement, update_achievement_progress } from '../../tools/gamification/gamification.tool';
+import { set_budget, create_savings_goal, get_savings_progress, update_savings_progress } from '../../tools/budget/budget.tool';
+import { get_streak_info, get_achievement } from '../../tools/gamification/gamification.tool';
 import { get_budget_status } from '../../tools/stats/stats.tool';
+import { run_proactive_check, get_proactive_insights, get_today_summary } from '../../tools/proactive/proactive.tool';
+import { schedule_daily_reminder } from '../../tools/automation/automation.tool';
+import { evaluate_all_scenarios } from '../../tools/automation/scenario-triggers';
 import {
-  getSecurityProfile,
   canCallTool,
   rememberThis,
   rememberMoment,
-  getDelegationTargets,
 } from '../_shared';
 
 const AGENT_ID: AgentId = 'coach';
@@ -28,6 +29,14 @@ export async function handleIntent(intent: IntentResult): Promise<string> {
       return handleGetAchievements(intent.params);
     case 'greeting':
       return handleGreeting();
+    case 'proactive_check':
+      return handleProactiveCheck();
+    case 'proactive_insights':
+      return handleProactiveInsights();
+    case 'today_summary':
+      return handleTodaySummary();
+    case 'setup_reminder':
+      return handleSetupReminder(intent.params);
     default:
       return '我可以帮您：\n• "设置餐饮预算 3000" — 设定预算\n• "创建储蓄目标" — 存钱计划\n• "查看打卡天数" — 记账连续天数\n• "我的成就" — 成就展示\n• "省钱建议" — 预算建议';
   }
@@ -84,14 +93,14 @@ async function handleGetSavings(params: Record<string, unknown>): Promise<string
     return `查询储蓄进度失败：${result.error}`;
   }
 
-  const goals = result.data as Array<{
+  const goals = result.data as {
     id: string;
     name: string;
     targetAmount: number;
     currentAmount: number;
     deadline: string;
     createdAt: string;
-  }>;
+  }[];
 
   if (goals.length === 0) {
     return '您还没有储蓄目标。说"创建储蓄目标"来开始吧！';
@@ -120,13 +129,13 @@ async function handleGetAdvice(params: Record<string, unknown>): Promise<string>
   let reply = '💡 **理财建议**\n\n';
 
   if (result.success && result.data) {
-    const statuses = result.data as Array<{
+    const statuses = result.data as {
       category: string;
       limit: number;
       spent: number;
       remaining: number;
       percentUsed: number;
-    }>;
+    }[];
 
     if (statuses.length > 0) {
       const overBudget = statuses.filter(s => s.percentUsed >= 80);
@@ -194,7 +203,7 @@ async function handleGetAchievements(params: Record<string, unknown>): Promise<s
     return `查询成就失败：${result.error}`;
   }
 
-  const achievements = result.data as Array<{
+  const achievements = result.data as {
     id: string;
     name: string;
     description: string;
@@ -202,7 +211,7 @@ async function handleGetAchievements(params: Record<string, unknown>): Promise<s
     progress: number;
     maxProgress: number;
     unlockedAt: string;
-  }>;
+  }[];
 
   if (achievements.length === 0) {
     return '暂无成就数据。';
@@ -232,10 +241,7 @@ async function handleGetAchievements(params: Record<string, unknown>): Promise<s
 }
 
 async function handleGreeting(): Promise<string> {
-  const [streakResult, achievementsResult] = await Promise.all([
-    get_streak_info(),
-    get_achievement({}),
-  ]);
+  const streakResult = await get_streak_info();
 
   const streak = streakResult.success ? streakResult.data as {
     currentStreak: number;
@@ -259,4 +265,135 @@ async function handleGreeting(): Promise<string> {
   reply += '\n试试说"设置预算"或"查看成就"吧！';
 
   return reply;
+}
+
+async function handleProactiveCheck(): Promise<string> {
+  const result = await run_proactive_check();
+
+  if (!result.success) {
+    return `主动检查失败：${result.error}`;
+  }
+
+  const findings = result.data as {
+    budgetAlerts: { category: string; severity: string; message: string }[];
+    inactivityAlert: { daysSinceLastRecord: number; shouldNotify: boolean } | null;
+    upcomingAchievements: { name: string; progress: number; maxProgress: number; percent: number }[];
+    savingsUpdates: { name: string; percent: number; onTrack: boolean }[];
+    insights: string[];
+  };
+
+  let reply = '🔍 **AI 主动检查报告**\n\n';
+
+  if (findings.budgetAlerts.length > 0) {
+    reply += '⚠️ **预算预警**\n';
+    for (const alert of findings.budgetAlerts) {
+      reply += `  ${alert.message}\n`;
+    }
+    reply += '\n';
+  } else {
+    reply += '✅ 所有预算执行良好\n\n';
+  }
+
+  if (findings.inactivityAlert && findings.inactivityAlert.shouldNotify) {
+    reply += `⏰ 你已经 ${findings.inactivityAlert.daysSinceLastRecord} 天没有记账了\n\n`;
+  }
+
+  if (findings.upcomingAchievements.length > 0) {
+    reply += '🏆 **即将达成**\n';
+    for (const ach of findings.upcomingAchievements) {
+      reply += `  ${ach.name}：进度 ${ach.percent}%\n`;
+    }
+    reply += '\n';
+  }
+
+  if (findings.savingsUpdates.length > 0) {
+    reply += '🎯 **储蓄进度**\n';
+    for (const s of findings.savingsUpdates) {
+      const status = s.onTrack ? '✅ 正常' : '⚠️ 落后';
+      reply += `  ${s.name}：${s.percent}% ${status}\n`;
+    }
+    reply += '\n';
+  }
+
+  if (findings.insights.length > 0) {
+    reply += '💡 **智能洞察**\n';
+    for (const insight of findings.insights) {
+      reply += `  ${insight}\n`;
+    }
+  }
+
+  await rememberMoment(AGENT_ID, `主动检查|预算:${findings.budgetAlerts.length}个预警`);
+
+  return reply;
+}
+
+async function handleProactiveInsights(): Promise<string> {
+  const result = await get_proactive_insights();
+
+  if (!result.success) {
+    return `获取洞察失败：${result.error}`;
+  }
+
+  const { insights } = result.data as { insights: string[] };
+
+  let reply = '💡 **智能洞察**\n\n';
+  for (const insight of insights) {
+    reply += `  ${insight}\n`;
+  }
+
+  return reply;
+}
+
+async function handleTodaySummary(): Promise<string> {
+  const result = await get_today_summary();
+
+  if (!result.success) {
+    return `获取概览失败：${result.error}`;
+  }
+
+  const summary = result.data as {
+    today: { income: number; expense: number; count: number };
+    month: { income: number; expense: number; count: number };
+    budgetStatus: { category: string; percentUsed: number; remaining: number }[];
+  };
+
+  let reply = `📊 **今日概览** (${new Date().toLocaleDateString('zh-CN')})\n\n`;
+
+  reply += '📅 今日：\n';
+  reply += `  收入：¥${summary.today.income.toFixed(2)}\n`;
+  reply += `  支出：¥${summary.today.expense.toFixed(2)}\n`;
+  reply += `  记录：${summary.today.count} 笔\n\n`;
+
+  reply += '📆 本月：\n';
+  reply += `  收入：¥${summary.month.income.toFixed(2)}\n`;
+  reply += `  支出：¥${summary.month.expense.toFixed(2)}\n`;
+  reply += `  记录：${summary.month.count} 笔\n`;
+
+  if (summary.budgetStatus.length > 0) {
+    reply += '\n⚡ 预算关注：\n';
+    for (const bs of summary.budgetStatus) {
+      reply += `  ${bs.category}：${bs.percentUsed}% (剩余 ¥${bs.remaining.toFixed(0)})\n`;
+    }
+  }
+
+  return reply;
+}
+
+async function handleSetupReminder(params: Record<string, unknown>): Promise<string> {
+  const hour = (params.hour as number) || 20;
+  const minute = (params.minute as number) || 0;
+
+  const result = await schedule_daily_reminder({
+    title: '📝 记账提醒',
+    body: '今天还没记账哦！花几分钟记录一下今天的收支吧～',
+    hour,
+    minute,
+  });
+
+  if (result.success) {
+    const time = `${hour}:${String(minute).padStart(2, '0')}`;
+    return `✅ 已设置每日 ${time} 的记账提醒\n\n之后每天这个时间我会提醒你记账！`;
+  }
+
+  return `设置提醒失败：${result.error}`;
 }

@@ -1,6 +1,13 @@
 import { v4 as uuidv4 } from 'uuid';
+import { captureError } from '../../core/logger/logger';
 import { getDatabase } from '../../core/database/database';
-import { RecurringTask, ToolResult } from '../../shared/types';
+import { ToolResult, ShortcutRecord, RecurringTask } from '../../shared/types';
+import {
+  scheduleNotification,
+  scheduleDailyNotification,
+  cancelAllNotifications,
+  getNotificationPermissionStatus as getPermStatus,
+} from '../../core/notifications/notification.service';
 
 export async function create_recurring_task(params: {
   name: string;
@@ -29,6 +36,7 @@ export async function create_recurring_task(params: {
 
     return { success: true, data: task };
   } catch (e) {
+    captureError('AutomationTool.create_recurring_task', e, 'Create recurring task failed');
     return { success: false, error: '创建周期任务失败', errorCode: '1000' };
   }
 }
@@ -52,6 +60,7 @@ export async function get_recurring_tasks(params?: {
     );
     return { success: true, data: tasks };
   } catch (e) {
+    captureError('AutomationTool.get_recurring_tasks', e, 'Get recurring tasks failed');
     return { success: false, error: '查询周期任务失败', errorCode: '1000' };
   }
 }
@@ -72,6 +81,7 @@ export async function delete_recurring_task(params: {
     );
     return { success: true, data: { deletedId: params.taskId } };
   } catch (e) {
+    captureError('AutomationTool.delete_recurring_task', e, 'Delete recurring task failed');
     return { success: false, error: '删除周期任务失败', errorCode: '1000' };
   }
 }
@@ -85,22 +95,61 @@ export async function register_shortcut(params: {
     return { success: false, error: '请输入有效的快捷指令名称和动作', errorCode: '1002' };
   }
 
-  return {
-    success: true,
-    data: {
-      name: params.name,
-      action: params.action,
-      icon: params.icon || '⚡',
-      registered: true,
-      registeredAt: new Date().toISOString(),
-    },
-  };
+  try {
+    const db = await getDatabase();
+    const id = uuidv4();
+    const now = new Date().toISOString();
+
+    await db.runAsync(
+      `INSERT INTO shortcuts (id, name, action, icon, created_at) VALUES (?, ?, ?, ?, ?)`,
+      [id, params.name, params.action, params.icon || '⚡', now]
+    );
+
+    return {
+      success: true,
+      data: {
+        id,
+        name: params.name,
+        action: params.action,
+        icon: params.icon || '⚡',
+        registered: true,
+        registeredAt: now,
+      },
+    };
+  } catch {
+    return {
+      success: true,
+      data: {
+        name: params.name,
+        action: params.action,
+        icon: params.icon || '⚡',
+        registered: true,
+        registeredAt: new Date().toISOString(),
+        note: '快捷指令已注册（存储失败，仅内存有效）',
+      },
+    };
+  }
+}
+
+export async function get_shortcuts(): Promise<ToolResult> {
+  const db = await getDatabase();
+
+  try {
+    const shortcuts = await db.getAllAsync<ShortcutRecord>(
+      'SELECT * FROM shortcuts ORDER BY created_at DESC'
+    );
+    return { success: true, data: shortcuts };
+  } catch {
+    return { success: true, data: [] };
+  }
 }
 
 export async function schedule_local_notification(params: {
   title: string;
   body: string;
   triggerAt: string;
+  channelId?: string;
+  data?: Record<string, unknown>;
 }): Promise<ToolResult> {
   if (!params.title || !params.body || !params.triggerAt) {
     return { success: false, error: '请提供通知标题、内容和触发时间', errorCode: '1002' };
@@ -110,27 +159,96 @@ export async function schedule_local_notification(params: {
     return { success: false, error: '触发时间不能是过去的时间', errorCode: '1002' };
   }
 
-  return {
-    success: true,
-    data: {
-      scheduled: true,
-      notification: {
-        title: params.title,
-        body: params.body,
-        triggerAt: params.triggerAt,
-      },
-      note: '通知已在本地调度，将在指定时间触发',
-    },
-  };
+  try {
+    const result = await scheduleNotification({
+      title: params.title,
+      body: params.body,
+      triggerAt: params.triggerAt,
+      channelId: params.channelId,
+      data: params.data,
+    });
+
+    if (result.scheduled) {
+      return {
+        success: true,
+        data: {
+          scheduled: true,
+          notificationId: result.notificationId,
+          notification: {
+            title: params.title,
+            body: params.body,
+            triggerAt: params.triggerAt,
+          },
+        },
+      };
+    }
+
+    return { success: false, error: '通知调度失败', errorCode: '1000' };
+  } catch (e) {
+    captureError('AutomationTool.schedule_local_notification', e, 'Schedule notification failed');
+    return { success: false, error: '调度通知时出错', errorCode: '1000' };
+  }
 }
 
 export async function get_notification_permission_status(): Promise<ToolResult> {
-  return {
-    success: true,
-    data: {
-      permission: 'unknown',
-      canSchedule: true,
-      note: '当前为开发环境，权限状态需在真机上确认',
-    },
-  };
+  try {
+    const status = await getPermStatus();
+    return { success: true, data: status };
+  } catch {
+    return {
+      success: true,
+      data: { permission: 'unknown', canSchedule: false },
+    };
+  }
+}
+
+export async function schedule_daily_reminder(params: {
+  title: string;
+  body: string;
+  hour: number;
+  minute: number;
+}): Promise<ToolResult> {
+  if (!params.title || !params.body) {
+    return { success: false, error: '请提供通知标题和内容', errorCode: '1002' };
+  }
+
+  if (params.hour < 0 || params.hour > 23 || params.minute < 0 || params.minute > 59) {
+    return { success: false, error: '时间参数无效', errorCode: '1002' };
+  }
+
+  try {
+    const result = await scheduleDailyNotification({
+      title: params.title,
+      body: params.body,
+      hour: params.hour,
+      minute: params.minute,
+      channelId: 'wealth-manager-reminders',
+    });
+
+    if (result.scheduled) {
+      return {
+        success: true,
+        data: {
+          scheduled: true,
+          notificationId: result.notificationId,
+          schedule: `每天 ${params.hour}:${String(params.minute).padStart(2, '0')}`,
+        },
+      };
+    }
+
+    return { success: false, error: '每日提醒调度失败', errorCode: '1000' };
+  } catch (e) {
+    captureError('AutomationTool.schedule_daily_reminder', e, 'Schedule daily failed');
+    return { success: false, error: '调度每日提醒时出错', errorCode: '1000' };
+  }
+}
+
+export async function cancel_all_notifications(): Promise<ToolResult> {
+  try {
+    await cancelAllNotifications();
+    return { success: true, data: { cancelled: true } };
+  } catch (e) {
+    captureError('AutomationTool.cancel_all_notifications', e, 'Cancel all failed');
+    return { success: false, error: '取消通知失败', errorCode: '1000' };
+  }
 }

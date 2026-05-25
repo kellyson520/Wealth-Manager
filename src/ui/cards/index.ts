@@ -2,4 +2,8 @@ export { default as BillCard } from './BillCard';
 export { default as SummaryCard } from './SummaryCard';
 export { default as ChartCard } from './ChartCard';
 export { default as ConfirmCard } from './ConfirmCard';
+export { default as ErrorCard } from './ErrorCard';
+export { default as TipCard } from './TipCard';
+export { default as BillDetailCard } from './BillDetailCard';
+export { default as RecordConfirmCard } from './RecordConfirmCard';
 export { default as CardRenderer } from './CardRenderer';

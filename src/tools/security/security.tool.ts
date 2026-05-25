@@ -1,3 +1,4 @@
+import { captureError } from '../../core/logger/logger';
 import { getDatabase } from '../../core/database/database';
 import { SafetyCheckResult, SafetyIssue, ToolResult } from '../../shared/types';
 
@@ -90,6 +91,7 @@ export async function run_safety_check(params: {
 
     return { success: true, data: result };
   } catch (e) {
+    captureError('SecurityTool.run_safety_check', e, 'Safety check failed');
     return { success: false, error: '安全扫描失败', errorCode: '4001' };
   }
 }
@@ -129,6 +131,7 @@ export async function analyze_subscriptions(): Promise<ToolResult> {
 
     return { success: true, data: subscriptions };
   } catch (e) {
+    captureError('SecurityTool.analyze_subscriptions', e, 'Subscription analysis failed');
     return { success: false, error: '订阅分析失败', errorCode: '4001' };
   }
 }
@@ -178,6 +181,7 @@ export async function verify_hash_chain(): Promise<ToolResult> {
       },
     };
   } catch (e) {
+    captureError('SecurityTool.verify_hash_chain', e, 'Hash chain verification failed');
     return { success: false, error: '哈希链校验失败', errorCode: '4001' };
   }
 }
@@ -216,6 +220,7 @@ export async function export_audit_package(params: {
 
     return { success: true, data: { entries, exportedAt: new Date().toISOString() } };
   } catch (e) {
+    captureError('SecurityTool.export_audit_package', e, 'Audit package export failed');
     return { success: false, error: '导出审计包失败', errorCode: '4001' };
   }
 }
@@ -246,6 +251,7 @@ export async function get_privacy_report(): Promise<ToolResult> {
       },
     };
   } catch (e) {
+    captureError('SecurityTool.get_privacy_report', e, 'Privacy report failed');
     return { success: false, error: '隐私报告查询失败', errorCode: '4001' };
   }
 }

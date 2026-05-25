@@ -1,6 +1,5 @@
 import {
   AgentId,
-  PermissionLevel,
   ToolDefinition,
 } from '../../shared/types';
 
@@ -141,5 +140,6 @@ function extractNamespace(toolName: string): string {
     toolName.startsWith('get_notification')
   )
     return 'automation';
+  if (toolName.startsWith('rules_')) return 'rules';
   return 'other';
 }

@@ -357,6 +357,60 @@ const intentPatterns: { intent: string; patterns: RegExp[]; agent: string; extra
     extractParams: () => ({}),
   },
   {
+    intent: 'proactive_check',
+    agent: 'coach',
+    patterns: [
+      /(?:主动|智能|全面).*(?:检查|扫描|分析|诊断)/,
+      /(?:健康|财务).*(?:检查|诊断|评估)/,
+      /看看.*(?:整体|全部).*情况/,
+      /帮我.*检查.*(?:财务|预算|账单)/,
+      /(?:财务|消费).*体检/,
+    ],
+    extractParams: () => ({}),
+  },
+  {
+    intent: 'proactive_insights',
+    agent: 'coach',
+    patterns: [
+      /(?:智能|AI).*(?:建议|洞察|分析)/,
+      /有什么.*(?:建议|推荐)/,
+      /给我.*(?:建议|洞察)/,
+      /怎么.*(?:优化|改善|改)/,
+    ],
+    extractParams: () => ({}),
+  },
+  {
+    intent: 'today_summary',
+    agent: 'coach',
+    patterns: [
+      /(?:今天|今日).*(?:概览|总结|情况|汇总)/,
+      /(?:日报|今日)/,
+      /今天.*(?:怎么|如何)/,
+      /(?:今日|当天).*(?:收支|消费)/,
+    ],
+    extractParams: () => ({}),
+  },
+  {
+    intent: 'setup_reminder',
+    agent: 'coach',
+    patterns: [
+      /(?:设置|打开|开启).*(?:每日|每天).*提醒/,
+      /(?:开启|开始).*提醒.*记账/,
+      /(?:设置|设定).*记账.*提醒/,
+      /每天.*提醒.*记账/,
+    ],
+    extractParams: (_match, text) => {
+      let hour = 20;
+      let minute = 0;
+      const timeMatch = text.match(/(\d{1,2})[点:：](\d{0,2})/);
+      if (timeMatch) {
+        hour = parseInt(timeMatch[1]);
+        minute = timeMatch[2] ? parseInt(timeMatch[2]) : 0;
+      }
+      return { hour, minute };
+    },
+  },
+  {
     intent: 'verify_chain',
     agent: 'guardian',
     patterns: [

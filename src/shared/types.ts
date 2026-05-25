@@ -23,7 +23,7 @@ export interface ChatMessage {
   role: MessageRole;
   content: string;
   timestamp: string;
-  data?: BillCardData | SummaryCardData | ChartCardData | ConfirmCardData;
+  data?: BillCardData | SummaryCardData | ChartCardData | ConfirmCardData | ErrorCardData | TipCardData | BillDetailCardData | RecordConfirmCardData;
 }
 
 export interface BillCardData {
@@ -49,11 +49,50 @@ export interface ChartCardData {
 }
 
 export interface ConfirmCardData {
-  type: 'confirm_card';
+  type: 'confirm_card' | 'security_confirm_card';
   title: string;
   message: string;
   actionId: string;
   riskLevel: 'low' | 'medium' | 'high';
+  confirmLabel?: string;
+  cancelLabel?: string;
+  detailItems?: { label: string; value: string; isSensitive?: boolean }[];
+  cooldownSeconds?: number;
+}
+
+export interface ErrorCardData {
+  type: 'error_card';
+  errorCode: string;
+  message: string;
+  detail?: string;
+  suggestedAction?: string;
+  retryable: boolean;
+  onRetry?: () => void;
+}
+
+export interface TipCardData {
+  type: 'tip_card';
+  tipType: 'budget' | 'saving' | 'habit' | 'security' | 'general';
+  title: string;
+  message: string;
+  actionLabel?: string;
+  actionId?: string;
+}
+
+export interface BillDetailCardData {
+  type: 'bill_detail_card';
+  bill: BillRecord;
+  showActions?: boolean;
+  onEdit?: () => void;
+  onDelete?: () => void;
+}
+
+export interface RecordConfirmCardData {
+  type: 'record_confirm_card';
+  bill: BillRecord;
+  actionId: string;
+  similarityWarning?: string;
+  duplicateCheck?: { found: boolean; existingId?: string };
 }
 
 export interface AggregationResult {
@@ -181,6 +220,48 @@ export interface ToolResult {
   data?: unknown;
   error?: string;
   errorCode?: string;
+}
+
+export type NotificationScenarioType =
+  | 'bookkeeping_reminder'
+  | 'budget_overrun'
+  | 'backup_failure'
+  | 'inactive_3days'
+  | 'achievement_unlock';
+
+export interface BudgetOverrunAlert {
+  category: string;
+  limit: number;
+  spent: number;
+  percentUsed: number;
+  severity: 'warning' | 'overrun';
+  message: string;
+}
+
+export interface NotificationScenario {
+  type: NotificationScenarioType;
+  title: string;
+  body: string;
+  priority: 'normal' | 'high' | 'critical';
+  shouldTrigger: boolean;
+  data?: Record<string, unknown>;
+}
+
+export interface ProactiveFindings {
+  timestamp: string;
+  budgetAlerts: BudgetOverrunAlert[];
+  inactivityAlert: { daysSinceLastRecord: number; shouldNotify: boolean } | null;
+  upcomingAchievements: { name: string; progress: number; maxProgress: number; percent: number }[];
+  savingsUpdates: { name: string; currentAmount: number; targetAmount: number; percent: number; onTrack: boolean }[];
+  insights: string[];
+}
+
+export interface ShortcutRecord {
+  id: string;
+  name: string;
+  action: string;
+  icon: string;
+  createdAt: string;
 }
 
 export interface AgentMessage {

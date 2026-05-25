@@ -4,6 +4,59 @@
 
 ---
 
+## [0.2.1] — 2026-05-24
+
+### 新增
+
+#### 统一错误日志系统 (`src/core/logger/`)
+
+- **核心 Logger** (`logger.ts`): 全局单例日志服务
+  - 5 级日志：`debug` / `info` / `warn` / `error` / `fatal`
+  - 内存环形缓冲区（上限 500 条，溢出时裁剪最早 100 条）
+  - `captureError(tag, error, context?)` 辅助函数，自动提取 `Error.stack`
+  - `exportString()` 一键导出全部日志为格式化文本
+  - `subscribe(fn)` 实时订阅日志变更
+- **日志查看器** (`src/ui/logger/LogScreen.tsx`):
+  - 实时日志流，支持按级别筛选（全部/ERROR/WARN/INFO/DEBUG）
+  - 每条日志显示时间戳、级别标签、来源模块、消息
+  - **复制全部**按钮：一键导出所有日志到剪贴板
+  - 长按单条日志可复制该条
+  - 点击展开查看完整调用栈
+- **全局错误边界**: `ChatScreen` 启动时注册 `ErrorUtils.setGlobalHandler`，捕获所有未处理异常
+- **全量 catch 注入**: 22 个工具函数 + 3 个记忆函数的每个 catch 块均接入 `captureError`
+
+#### Agent 技能系统完善 (`.opencode/skills/`)
+
+- 9 个 Agent 技能文件统一新增三个节段：
+  - **🛠️ 原生工具速查**: 每个 Agent 的可用工具表格（`read`/`write`/`edit`/`glob`/`grep`/`bash`/`webfetch`/`task`/`skill`/`question`/`todowrite`）
+  - **🔒 安全准则**: 每个 Agent 角色的专属安全约束
+  - **🧠 核心能力**: 记忆写入、技能加载、任务委派的具体用法
+- 新增 3 个公共引用文件 (`.opencode/skills/_shared/`):
+  - `tool-reference.md`: 11 个原生工具清单及使用规则
+  - `security-guidelines.md`: 5 条绝对禁令 + 每个 Agent 安全职责表
+  - `agent-capabilities.md`: 记忆持久化、`skill` 加载、`task` 委派完整指南
+- 修复全部旧工具名引用：`grep_search` → `grep`，`view_file` → `read`，`replace_file_content` → `edit`，`search_web` → `webfetch`
+
+### 修复
+
+#### CI / 构建
+
+- `assembleDebug` → `assembleRelease`：debug APK 不含 JS bundle 导致白屏，改为 release 打包将 bundle 嵌入 assets
+- `tsconfig.json` 排除 `__tests__` 目录，修复 typecheck 因 Jest 全局变量报错
+
+### 变更明细
+
+| 类别 | 新增 | 修改 |
+|------|------|------|
+| Logger 核心 | 2 文件 | — |
+| LogScreen UI | 2 文件 | — |
+| Agent 技能 | 3 文件 | 9 文件 |
+| catch 注入 | — | 7 文件 (22+3 处) |
+| CI / 构建 | — | 2 文件 |
+| 依赖 | `expo-clipboard` | — |
+
+---
+
 ## [0.2.0] — 2026-05-24
 
 ### 新增
