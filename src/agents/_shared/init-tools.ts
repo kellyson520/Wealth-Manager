@@ -102,12 +102,14 @@ import {
   create_reimbursement,
   update_reimbursement_status,
   list_reimbursements,
+  settle_reimbursement,
 } from '../../tools/reimbursement/reimbursement.tool';
 import {
   configure_webdav,
   sync_upload,
   sync_download,
   get_sync_status,
+  list_sync_files,
 } from '../../tools/webdav/sync.tool';
 import {
   create_link,
