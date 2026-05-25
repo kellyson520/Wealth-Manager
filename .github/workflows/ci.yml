@@ -34,20 +34,26 @@ jobs:
       - run: npm install --no-audit
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
-      - name: Cache Gradle
+      - name: Cache Gradle deps
         uses: actions/cache@v4
         with:
           path: |
             ~/.gradle/caches
             ~/.gradle/wrapper
-          key: gradle-${{ runner.os }}-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
-          restore-keys: gradle-${{ runner.os }}-
-      - name: Cache Expo prebuild
+          key: gradle-v1-${{ runner.os }}-${{ hashFiles('package.json') }}
+          restore-keys: gradle-v1-${{ runner.os }}-
+      - name: Cache Expo prebuild (android/)
         uses: actions/cache@v4
         with:
           path: android/
-          key: prebuild-${{ runner.os }}-${{ hashFiles('app.json', 'package.json', 'metro.config.js', 'babel.config.js', 'tsconfig.json') }}
-          restore-keys: prebuild-${{ runner.os }}-
+          key: prebuild-v1-${{ runner.os }}-${{ hashFiles('app.json', 'metro.config.js', 'babel.config.js') }}
+          restore-keys: prebuild-v1-${{ runner.os }}-
+      - name: Cache Metro bundler
+        uses: actions/cache@v4
+        with:
+          path: node_modules/.cache
+          key: metro-v1-${{ runner.os }}-${{ hashFiles('src/**/*') }}
+          restore-keys: metro-v1-${{ runner.os }}-
       - name: Generate native Android project
         run: npx expo prebuild --platform android --no-install
       - name: Configure release to use debug signing
