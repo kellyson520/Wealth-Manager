@@ -39,7 +39,12 @@ export class BillingService {
     const bill = await this.billRepo.findById(id);
     if (!bill) throw new Error('账单不存在');
 
-    if (changes.amount !== undefined) bill.modifyAmount(changes.amount);
+    if (changes.amount !== undefined) {
+      if (!Number.isFinite(changes.amount) || Math.abs(changes.amount) > 99999999) {
+        throw new Error('金额必须在 0 ~ 99999999 之间');
+      }
+      bill.modifyAmount(changes.amount);
+    }
     if (changes.category) bill.modifyCategory(changes.category);
     if (changes.merchant) bill.modifyMerchant(changes.merchant);
     if (changes.note !== undefined) bill.modifyNote(changes.note);

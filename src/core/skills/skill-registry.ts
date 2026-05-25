@@ -31,6 +31,13 @@ export function registerSkill(
     return false;
   }
 
+  for (const dep of def.dependencies) {
+    const depSkill = registry.skills.get(dep);
+    if (!depSkill || !depSkill.enabled) {
+      return false;
+    }
+  }
+
   const skill: SkillDefinition = {
     ...def,
     enabled: true,
@@ -40,13 +47,6 @@ export function registerSkill(
   registry.skills.set(def.name, skill);
   if (!registry.loadOrder.includes(def.name)) {
     registry.loadOrder.push(def.name);
-  }
-
-  for (const dep of def.dependencies) {
-    if (!registry.skills.has(dep)) {
-      registry.skills.set(def.name, { ...skill, enabled: false });
-      return false;
-    }
   }
 
   return true;

@@ -3,8 +3,11 @@ export class Money {
   readonly currency: string;
 
   constructor(amount: number, currency: string = 'CNY') {
-    if (!Number.isFinite(amount) || amount < 0 || amount > 99999999) {
+    if (!Number.isFinite(amount)) {
       throw new Error(`Invalid money amount: ${amount}`);
+    }
+    if (Math.abs(amount) > 99999999) {
+      throw new Error(`Money amount out of range: ${amount}`);
     }
     this.amount = Math.round(amount * 100) / 100;
     this.currency = currency;
@@ -34,6 +37,7 @@ export class Money {
   }
 
   percentageOf(total: Money): number {
+    this.assertSameCurrency(total);
     if (total.amount === 0) return 0;
     return Math.round((this.amount / total.amount) * 10000) / 100;
   }

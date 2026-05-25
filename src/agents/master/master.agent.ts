@@ -328,6 +328,7 @@ export async function* processMessageStream(
 }, void, unknown> {
   if (!toolsInitialized) {
     initToolRegistry();
+    initMessageBus();
     toolsInitialized = true;
   }
 

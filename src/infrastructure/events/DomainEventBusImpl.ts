@@ -38,8 +38,8 @@ class DomainEventBusImpl implements DomainEventBus {
     eventClass: new (...args: any[]) => T,
     handler: (event: T) => Promise<void>
   ): () => void {
-    const instance = Reflect.construct(eventClass, []);
-    const eventType = instance.eventType;
+    const sample = new (eventClass as any)();
+    const eventType: string = sample.eventType;
 
     if (!this.handlerMap.has(eventType)) {
       this.handlerMap.set(eventType, new Set());

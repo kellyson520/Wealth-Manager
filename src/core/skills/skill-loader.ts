@@ -55,7 +55,7 @@ export function checkVersionCompatibility(
         if (req.minor === 0) return act.patch >= req.patch;
         return act.minor === req.minor && act.patch >= req.patch;
       }
-      return act.minor >= req.minor || (act.minor === req.minor && act.patch >= req.patch);
+      return act.minor > req.minor || (act.minor === req.minor && act.patch >= req.patch);
     }
 
     if (range.startsWith('~')) {

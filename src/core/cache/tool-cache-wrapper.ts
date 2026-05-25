@@ -45,12 +45,9 @@ export async function wrapToolCall<T>(
   }
 
   if (!canCall(circuitBreaker)) {
-    captureError(
-      'ToolCache.circuitOpen',
-      new Error(`Circuit breaker open for tool: ${tool.definition.name}`),
-      'Skipping tool call due to circuit breaker'
-    );
-    return undefined as unknown as T;
+    const errMsg = `Circuit breaker open for tool: ${tool.definition.name}`;
+    captureError('ToolCache.circuitOpen', new Error(errMsg), errMsg);
+    throw new Error(errMsg);
   }
 
   try {

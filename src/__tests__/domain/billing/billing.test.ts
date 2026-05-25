@@ -32,12 +32,19 @@ describe('Money (Value Object)', () => {
     expect(m.amount).toBe(100.46);
   });
 
-  it('should reject negative amounts', () => {
-    expect(() => new Money(-1)).toThrow();
+  it('should allow negative amounts (for negate/debt)', () => {
+    const m = new Money(-100);
+    expect(m.amount).toBe(-100);
   });
 
   it('should reject amounts over 99999999', () => {
     expect(() => new Money(100000000)).toThrow();
+    expect(() => new Money(-100000000)).toThrow();
+  });
+
+  it('should reject non-finite amounts', () => {
+    expect(() => new Money(NaN)).toThrow();
+    expect(() => new Money(Infinity)).toThrow();
   });
 
   it('should add two Money values', () => {
