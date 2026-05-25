@@ -7,25 +7,27 @@ import {
   SafeAreaView,
   StatusBar,
   TouchableOpacity,
+  ActivityIndicator,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import MessageBubble from './MessageBubble';
 import InputBar from './InputBar';
 import QuickBar from './QuickBar';
 import { ChatMessage } from '../../shared/types';
-import { processMessage } from '../../agents/master/master.agent';
+import { processMessage, processMessageStream, setCloudApiKey } from '../../agents/master/master.agent';
 import { logger, captureError } from '../../core/logger/logger';
 
 const WELCOME_MESSAGE: ChatMessage = {
   id: 'welcome',
   role: 'assistant',
-  content: '您好！我是 **Wealth Manager** 💰\n\n您的 AI 财务助手。直接用自然语言告诉我您的收支情况就可以啦！\n\n示例：\n• "午饭花了35块"\n• "今天花了多少？"\n• "工资到账5000"',
+  content: 'Hello! I am **Wealth Manager**\n\nYour AI financial assistant. Tell me about your income and expenses in natural language!\n\nExamples:\n- "Spent 35 on lunch"\n- "How much did I spend today?"\n- "Salary 5000 received"',
   timestamp: new Date().toISOString(),
 };
 
 export default function ChatScreen() {
   const [messages, setMessages] = useState<ChatMessage[]>([WELCOME_MESSAGE]);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [isStreaming, setIsStreaming] = useState(false);
   const flatListRef = useRef<FlatList>(null);
   const router = useRouter();
 
@@ -77,6 +79,60 @@ export default function ChatScreen() {
     [addMessage]
   );
 
+  const updateMessage = useCallback((msgId: string, content: string) => {
+    setMessages((prev) =>
+      prev.map((m) => (m.id === msgId ? { ...m, content } : m))
+    );
+  }, []);
+
+  const handleSendStream = useCallback(
+    async (text: string) => {
+      const userMsg: ChatMessage = {
+        id: `u_${Date.now()}`,
+        role: 'user',
+        content: text,
+        timestamp: new Date().toISOString(),
+      };
+      addMessage(userMsg);
+      setIsProcessing(true);
+      setIsStreaming(true);
+
+      const streamId = `s_${Date.now()}`;
+      const assistantMsg: ChatMessage = {
+        id: streamId,
+        role: 'assistant',
+        content: '...',
+        timestamp: new Date().toISOString(),
+      };
+      addMessage(assistantMsg);
+
+      try {
+        let accumulated = '';
+        for await (const chunk of processMessageStream(text)) {
+          if (chunk.type === 'token' && chunk.content) {
+            accumulated += chunk.content;
+            updateMessage(streamId, accumulated);
+          } else if (chunk.type === 'tool_call') {
+            accumulated += `\n[工具调用: ${chunk.toolName}]`;
+            updateMessage(streamId, accumulated);
+          } else if (chunk.type === 'tool_result' && chunk.content) {
+            accumulated += `\n${chunk.content}`;
+            updateMessage(streamId, accumulated);
+          } else if (chunk.type === 'error') {
+            updateMessage(streamId, '处理出错，已切换到本地模式。');
+          }
+        }
+      } catch (e) {
+        captureError('ChatStream', e, 'Stream processing failed');
+        updateMessage(streamId, '流式处理中断，请重试。');
+      } finally {
+        setIsProcessing(false);
+        setIsStreaming(false);
+      }
+    },
+    [addMessage, updateMessage]
+  );
+
   const handleCardConfirm = useCallback(
     (actionId: string) => {
       logger.info('Chat', `Card confirmed: ${actionId}`);
@@ -121,8 +177,9 @@ export default function ChatScreen() {
           </View>
           <View style={{ flex: 1 }}>
             <View style={styles.titleRow}>
-              <View style={styles.statusDot} />
+              <View style={[styles.statusDot, isStreaming && styles.statusDotStreaming]} />
               <Text style={styles.title}>Wealth Manager</Text>
+              {isStreaming && <ActivityIndicator size="small" color="#4ADE80" style={{ marginLeft: 8 }} />}
             </View>
             <Text style={styles.subtitle}>AI 财务助手</Text>
           </View>
@@ -193,6 +250,9 @@ const styles = StyleSheet.create({
     borderRadius: 4,
     backgroundColor: '#4ADE80',
     marginRight: 8,
+  },
+  statusDotStreaming: {
+    backgroundColor: '#FACC15',
   },
   title: {
     fontSize: 16,

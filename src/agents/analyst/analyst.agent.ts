@@ -12,6 +12,7 @@ import {
 import {
   canCallTool,
   rememberMoment,
+  getTool,
 } from '../_shared';
 
 const AGENT_ID: AgentId = 'analyst';
@@ -34,6 +35,8 @@ export async function handleIntent(intent: IntentResult): Promise<string> {
       return handleBudgetStatus(intent.params);
     case 'get_net_balance':
       return handleNetBalance();
+    case 'export_data':
+      return handleExportData(intent.params);
     default: {
       await rememberMoment(AGENT_ID, `未知意图:${intent.intent}`);
       return '抱歉，我还不太理解您的分析需求。您可以尝试：\n• "查看本月支出统计"\n• "餐饮分类趋势"\n• "分析消费异常"\n• "年度收支对比"';
@@ -297,4 +300,17 @@ function getCategoryEmoji(cat: string): string {
     '其他': '📦', '工资': '💰', '奖金': '🎁', '投资': '📈',
   };
   return map[cat] || '📦';
+}
+
+async function handleExportData(params: Record<string, unknown>): Promise<string> {
+  const tool = getTool('export_csv');
+  if (!tool) return '导出功能暂不可用。';
+  const result = await tool.handler(params);
+  if (result.success && result.data) {
+    const data = result.data as { rowCount: number; filename: string; filePath?: string };
+    let reply = `已导出 ${data.rowCount} 条账单到 "${data.filename}"`;
+    if (data.filePath) reply += `\n保存位置: ${data.filePath}`;
+    return reply;
+  }
+  return `导出失败: ${result.error}`;
 }

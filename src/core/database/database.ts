@@ -24,7 +24,9 @@ async function initTables(db: SQLite.SQLiteDatabase): Promise<void> {
       date TEXT NOT NULL,
       note TEXT DEFAULT '',
       source TEXT DEFAULT 'manual',
-      created_at TEXT NOT NULL
+      created_at TEXT NOT NULL,
+      hash TEXT DEFAULT '',
+      prev_hash TEXT DEFAULT ''
     );
 
     CREATE TABLE IF NOT EXISTS categories (
@@ -154,6 +156,27 @@ async function initTables(db: SQLite.SQLiteDatabase): Promise<void> {
       note TEXT DEFAULT '',
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS sync_state (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS memory_engine (
+      id TEXT PRIMARY KEY,
+      layer TEXT NOT NULL CHECK(layer IN ('working','episodic','long_term','semantic')),
+      type TEXT NOT NULL DEFAULT 'fact',
+      agent_id TEXT NOT NULL,
+      content TEXT NOT NULL,
+      metadata TEXT DEFAULT '{}',
+      importance REAL DEFAULT 0.5,
+      access_count INTEGER DEFAULT 0,
+      last_accessed_at TEXT,
+      created_at TEXT NOT NULL,
+      expires_at TEXT,
+      tags TEXT DEFAULT '[]'
     );
   `);
 

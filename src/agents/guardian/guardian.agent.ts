@@ -4,6 +4,7 @@ import { create_recurring_task, get_recurring_tasks, delete_recurring_task, regi
 import {
   canCallTool,
   rememberMoment,
+  getTool,
 } from '../_shared';
 
 const AGENT_ID: AgentId = 'guardian';
@@ -36,6 +37,8 @@ export async function handleIntent(intent: IntentResult): Promise<string> {
       return handleScheduleNotification(intent.params);
     case 'notification_status':
       return handleNotificationStatus();
+    case 'sync_webdav':
+      return handleSyncWebDAV(intent.params);
     default:
       return '我是您的安全守护者 🛡️\n\n可以帮您：\n• "安全扫描" — 检查异常交易\n• "隐私报告" — 查看数据状态\n• "创建提醒" — 设置记账提醒\n• "分析订阅" — 发现订阅支出';
   }
@@ -353,6 +356,35 @@ async function handleNotificationStatus(): Promise<string> {
   reply += `可调度通知：${data.canSchedule ? '是 ✅' : '否 ❌'}\n`;
 
   return reply;
+}
+
+async function handleSyncWebDAV(params: Record<string, unknown>): Promise<string> {
+  const statusTool = getTool('get_sync_status');
+  if (!statusTool) return '同步功能暂不可用。';
+
+  const statusResult = await statusTool.handler();
+  if (!statusResult.success || !statusResult.data) {
+    return '无法获取同步状态。';
+  }
+
+  const status = statusResult.data as { configured: boolean; enabled: boolean; lastSync: { timestamp: string; status: string } | null };
+
+  if (!status.configured) {
+    return '尚未配置 WebDAV 同步。请在设置中配置服务器地址和认证信息。';
+  }
+
+  if (params.upload) {
+    const uploadTool = getTool('sync_upload');
+    if (!uploadTool) return '上传功能暂不可用。';
+    const result = await uploadTool.handler();
+    if (result.success) return '数据已成功上传到服务器。';
+    return `上传失败: ${result.error}`;
+  }
+
+  if (status.lastSync) {
+    return `最近同步: ${status.lastSync.timestamp} (${status.lastSync.status})。你可以说"同步上传"或"同步下载"来手动同步。`;
+  }
+  return 'WebDAV 已配置但尚未同步。你可以说"同步上传"开始首次同步。';
 }
 
 export function sanitizeText(text: string): string {

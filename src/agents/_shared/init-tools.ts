@@ -1,7 +1,7 @@
 import { registerTool } from './tool-registry';
 import { PermissionLevel } from '../../shared/types';
 
-import { add_bill, search_bills } from '../../tools/bills/bills.tool';
+import { add_bill, search_bills, get_bill, modify_bill, delete_bill, split_bill, refund_bill } from '../../tools/bills/bills.tool';
 import {
   get_aggregation,
   get_budget_status,
@@ -21,6 +21,8 @@ import {
   get_streak_info,
   get_achievement,
   update_achievement_progress,
+  get_level,
+  get_challenges,
 } from '../../tools/gamification/gamification.tool';
 import {
   run_safety_check,
@@ -77,6 +79,39 @@ import {
   tag_bill,
   untag_bill,
 } from '../../tools/tags/tags.tool';
+import {
+  add_debt,
+  list_debts,
+  record_repayment,
+  get_debt_summary,
+} from '../../tools/debt/debt.tool';
+import {
+  import_csv,
+  import_wechat,
+  import_alipay,
+  get_import_history,
+} from '../../tools/import/import.tool';
+import {
+  export_csv,
+  export_json,
+  create_backup,
+} from '../../tools/data/data.tool';
+import {
+  create_reimbursement,
+  update_reimbursement_status,
+  list_reimbursements,
+} from '../../tools/reimbursement/reimbursement.tool';
+import {
+  configure_webdav,
+  sync_upload,
+  sync_download,
+  get_sync_status,
+} from '../../tools/webdav/sync.tool';
+import {
+  create_link,
+  leave_shared,
+  delete_link,
+} from '../../tools/sharing/sharing.tool';
 
 let initialized = false;
 
@@ -136,6 +171,100 @@ export function initToolRegistry(): void {
     },
     handler: search_bills,
     allowedAgents: ['ledger', 'analyst'],
+  });
+
+  registerTool({
+    definition: {
+      name: 'get_bill',
+      description: '根据ID获取单条账单详情',
+      permissionLevel: 0 as PermissionLevel,
+      parameters: [
+        p('billId', 'string', true, '账单ID'),
+      ],
+      returns: { type: 'ToolResult<BillRecord>', description: '单条账单记录' },
+      timeout: 2000,
+      retryable: true,
+      idempotent: true,
+    },
+    handler: async (params: { billId: string }) => get_bill(params),
+    allowedAgents: ['ledger', 'analyst'],
+  });
+
+  registerTool({
+    definition: {
+      name: 'modify_bill',
+      description: '修改已有账单的金额、分类、商户、备注等',
+      permissionLevel: 1 as PermissionLevel,
+      parameters: [
+        p('billId', 'string', true, '账单ID'),
+        p('amount', 'number', false, '新金额'),
+        p('category', 'string', false, '新分类'),
+        p('merchant', 'string', false, '新商户'),
+        p('note', 'string', false, '新备注'),
+        p('date', 'string', false, '新日期'),
+        p('type', 'string', false, '新类型'),
+      ],
+      returns: { type: 'ToolResult<BillRecord>', description: '更新后的账单' },
+      timeout: 3000,
+      retryable: true,
+      idempotent: false,
+    },
+    handler: async (params: any) => modify_bill(params),
+    allowedAgents: ['ledger', 'guardian'],
+  });
+
+  registerTool({
+    definition: {
+      name: 'delete_bill',
+      description: '删除一条账单记录（不可撤销）',
+      permissionLevel: 2 as PermissionLevel,
+      parameters: [
+        p('billId', 'string', true, '账单ID'),
+      ],
+      returns: { type: 'ToolResult', description: '删除结果（含被删账单信息）' },
+      timeout: 3000,
+      retryable: false,
+      idempotent: false,
+    },
+    handler: async (params: { billId: string }) => delete_bill(params),
+    allowedAgents: ['ledger', 'guardian'],
+  });
+
+  registerTool({
+    definition: {
+      name: 'split_bill',
+      description: '将一笔账单拆分为多笔（如AA制分账）',
+      permissionLevel: 1 as PermissionLevel,
+      parameters: [
+        p('billId', 'string', true, '原始账单ID'),
+        p('splits', 'array', true, '拆分项列表 [{amount, category?, merchant?, note?}]'),
+      ],
+      returns: { type: 'ToolResult', description: '创建的拆分账单列表' },
+      timeout: 3000,
+      retryable: true,
+      idempotent: false,
+    },
+    handler: async (params: any) => split_bill(params),
+    allowedAgents: ['ledger'],
+  });
+
+  registerTool({
+    definition: {
+      name: 'refund_bill',
+      description: '对已有账单创建退款记录',
+      permissionLevel: 1 as PermissionLevel,
+      parameters: [
+        p('billId', 'string', true, '原账单ID'),
+        p('amount', 'number', false, '退款金额（默认全额）'),
+        p('note', 'string', false, '备注'),
+      ],
+      returns: { type: 'ToolResult', description: '退款账单记录 + 原账单信息' },
+      timeout: 3000,
+      retryable: true,
+      idempotent: false,
+    },
+    handler: async (params: any) => refund_bill(params),
+    allowedAgents: ['ledger'],
   });
 
   registerTool({
@@ -1111,5 +1240,426 @@ export function initToolRegistry(): void {
     },
     handler: async (params: any) => untag_bill(params),
     allowedAgents: ['ledger'],
+  });
+
+  registerTool({
+    definition: {
+      name: 'add_debt',
+      description: '添加债务记录（借出/借入）',
+      permissionLevel: 1 as PermissionLevel,
+      parameters: [
+        p('title', 'string', true, '债务标题'),
+        p('type', 'string', true, '类型（借出/借入）'),
+        p('principal', 'number', true, '本金'),
+        p('counterparty', 'string', true, '交易对方'),
+        p('interestRate', 'number', false, '年利率'),
+        p('startDate', 'string', false, '起始日期'),
+        p('dueDate', 'string', false, '到期日期'),
+        p('note', 'string', false, '备注'),
+      ],
+      returns: { type: 'ToolResult<DebtRecord>', description: '创建的债务记录' },
+      timeout: 3000,
+      retryable: true,
+      idempotent: false,
+    },
+    handler: async (params: any) => add_debt(params),
+    allowedAgents: ['ledger'],
+  });
+
+  registerTool({
+    definition: {
+      name: 'list_debts',
+      description: '查询债务列表，按状态和创建时间排序',
+      permissionLevel: 0 as PermissionLevel,
+      parameters: [
+        p('type', 'string', false, '按类型过滤'),
+        p('status', 'string', false, '按状态过滤（active/cleared/overdue）'),
+        p('counterparty', 'string', false, '按对方搜索'),
+        p('limit', 'number', false, '返回条数'),
+      ],
+      returns: { type: 'ToolResult<DebtRecord[]>', description: '债务列表' },
+      timeout: 3000,
+      retryable: true,
+      idempotent: true,
+    },
+    handler: async (params?: any) => list_debts(params),
+    allowedAgents: ['ledger', 'analyst'],
+  });
+
+  registerTool({
+    definition: {
+      name: 'record_repayment',
+      description: '记录还款（自动计算剩余金额和状态）',
+      permissionLevel: 1 as PermissionLevel,
+      parameters: [
+        p('debtId', 'string', true, '债务ID'),
+        p('amount', 'number', true, '还款金额'),
+        p('date', 'string', false, '还款日期'),
+        p('note', 'string', false, '备注'),
+      ],
+      returns: { type: 'ToolResult', description: '还款记录 + 新剩余金额 + 新状态' },
+      timeout: 3000,
+      retryable: true,
+      idempotent: false,
+    },
+    handler: async (params: any) => record_repayment(params),
+    allowedAgents: ['ledger'],
+  });
+
+  registerTool({
+    definition: {
+      name: 'get_debt_summary',
+      description: '获取债务总览：借出/借入总额、活跃金额、逾期数、净资产位置',
+      permissionLevel: 0 as PermissionLevel,
+      parameters: [],
+      returns: { type: 'ToolResult<DebtSummary>', description: '债务汇总统计' },
+      timeout: 3000,
+      retryable: true,
+      idempotent: true,
+    },
+    handler: get_debt_summary,
+    allowedAgents: ['analyst', 'coach'],
+  });
+
+  registerTool({
+    definition: {
+      name: 'import_csv',
+      description: '导入CSV格式账单数据（自动解析列：商户,金额,类型,分类,日期,备注）',
+      permissionLevel: 1 as PermissionLevel,
+      parameters: [
+        p('csvContent', 'string', true, 'CSV文件内容'),
+        p('delimiter', 'string', false, '分隔符（默认逗号）'),
+        p('hasHeader', 'boolean', false, '是否包含表头（默认false）'),
+      ],
+      returns: { type: 'ToolResult<{importedCount, errors}>', description: '导入结果' },
+      timeout: 30000,
+      retryable: true,
+      idempotent: false,
+    },
+    handler: async (params: any) => import_csv(params),
+    allowedAgents: ['ledger', 'guardian'],
+  });
+
+  registerTool({
+    definition: {
+      name: 'import_wechat',
+      description: '解析并导入微信账单文本（支持多种格式自动识别）',
+      permissionLevel: 1 as PermissionLevel,
+      parameters: [
+        p('rawText', 'string', true, '微信账单原始文本'),
+      ],
+      returns: { type: 'ToolResult', description: '导入结果' },
+      timeout: 30000,
+      retryable: true,
+      idempotent: false,
+    },
+    handler: async (params: any) => import_wechat(params),
+    allowedAgents: ['ledger', 'guardian'],
+  });
+
+  registerTool({
+    definition: {
+      name: 'import_alipay',
+      description: '解析并导入支付宝账单文本',
+      permissionLevel: 1 as PermissionLevel,
+      parameters: [
+        p('rawText', 'string', true, '支付宝账单原始文本'),
+      ],
+      returns: { type: 'ToolResult', description: '导入结果' },
+      timeout: 30000,
+      retryable: true,
+      idempotent: false,
+    },
+    handler: async (params: any) => import_alipay(params),
+    allowedAgents: ['ledger', 'guardian'],
+  });
+
+  registerTool({
+    definition: {
+      name: 'get_import_history',
+      description: '查询导入历史记录（按日期统计）',
+      permissionLevel: 0 as PermissionLevel,
+      parameters: [
+        p('limit', 'number', false, '返回条数'),
+      ],
+      returns: { type: 'ToolResult<ImportHistory[]>', description: '导入历史' },
+      timeout: 3000,
+      retryable: true,
+      idempotent: true,
+    },
+    handler: async (params?: any) => get_import_history(params),
+    allowedAgents: ['analyst'],
+  });
+
+  registerTool({
+    definition: {
+      name: 'export_csv',
+      description: '导出账单为CSV文件',
+      permissionLevel: 1 as PermissionLevel,
+      parameters: [
+        p('startDate', 'string', false, '开始日期'),
+        p('endDate', 'string', false, '结束日期'),
+        p('category', 'string', false, '分类过滤'),
+      ],
+      returns: { type: 'ToolResult<{filename, filePath, rowCount}>', description: '导出结果' },
+      timeout: 10000,
+      retryable: true,
+      idempotent: true,
+    },
+    handler: async (params?: any) => export_csv(params),
+    allowedAgents: ['guardian', 'analyst'],
+  });
+
+  registerTool({
+    definition: {
+      name: 'export_json',
+      description: '导出账单为JSON文件',
+      permissionLevel: 1 as PermissionLevel,
+      parameters: [
+        p('startDate', 'string', false, '开始日期'),
+        p('endDate', 'string', false, '结束日期'),
+      ],
+      returns: { type: 'ToolResult', description: '导出结果' },
+      timeout: 10000,
+      retryable: true,
+      idempotent: true,
+    },
+    handler: async (params?: any) => export_json(params),
+    allowedAgents: ['guardian', 'analyst'],
+  });
+
+  registerTool({
+    definition: {
+      name: 'create_backup',
+      description: '创建完整数据备份（含所有表数据）',
+      permissionLevel: 1 as PermissionLevel,
+      parameters: [],
+      returns: { type: 'ToolResult<{backupId, filename}>', description: '备份结果' },
+      timeout: 15000,
+      retryable: true,
+      idempotent: true,
+    },
+    handler: create_backup,
+    allowedAgents: ['guardian'],
+  });
+
+  registerTool({
+    definition: {
+      name: 'create_reimbursement',
+      description: '创建报销任务记录',
+      permissionLevel: 1 as PermissionLevel,
+      parameters: [
+        p('title', 'string', true, '报销标题'),
+        p('amount', 'number', true, '报销金额'),
+        p('category', 'string', false, '分类'),
+        p('merchant', 'string', false, '商户'),
+        p('date', 'string', false, '发生日期'),
+        p('note', 'string', false, '备注'),
+      ],
+      returns: { type: 'ToolResult<ReimbursementRecord>', description: '创建的报销记录' },
+      timeout: 3000,
+      retryable: true,
+      idempotent: false,
+    },
+    handler: async (params: any) => create_reimbursement(params),
+    allowedAgents: ['ledger'],
+  });
+
+  registerTool({
+    definition: {
+      name: 'update_reimbursement_status',
+      description: '更新报销状态（submitted/approved/rejected/paid）',
+      permissionLevel: 1 as PermissionLevel,
+      parameters: [
+        p('taskId', 'string', true, '报销任务ID'),
+        p('status', 'string', true, '新状态'),
+      ],
+      returns: { type: 'ToolResult', description: '更新结果' },
+      timeout: 3000,
+      retryable: true,
+      idempotent: false,
+    },
+    handler: async (params: any) => update_reimbursement_status(params),
+    allowedAgents: ['ledger', 'coach'],
+  });
+
+  registerTool({
+    definition: {
+      name: 'list_reimbursements',
+      description: '查询报销列表（含待审批/已审批金额汇总）',
+      permissionLevel: 0 as PermissionLevel,
+      parameters: [
+        p('status', 'string', false, '按状态过滤'),
+        p('startDate', 'string', false, '开始日期'),
+        p('endDate', 'string', false, '结束日期'),
+        p('limit', 'number', false, '返回条数'),
+      ],
+      returns: { type: 'ToolResult<{tasks, summary}>', description: '报销列表 + 汇总' },
+      timeout: 3000,
+      retryable: true,
+      idempotent: true,
+    },
+    handler: async (params?: any) => list_reimbursements(params),
+    allowedAgents: ['analyst', 'coach'],
+  });
+
+  registerTool({
+    definition: {
+      name: 'configure_webdav',
+      description: '配置 WebDAV 多端同步（服务器地址 + 认证），自动测试连接',
+      permissionLevel: 2 as PermissionLevel,
+      parameters: [
+        p('url', 'string', true, 'WebDAV 服务器地址'),
+        p('username', 'string', true, '用户名'),
+        p('password', 'string', true, '密码'),
+        p('enabled', 'boolean', false, '是否启用（默认true）'),
+      ],
+      returns: { type: 'ToolResult', description: '配置结果 + 连接测试' },
+      timeout: 10000,
+      retryable: false,
+      idempotent: false,
+    },
+    handler: async (params: any) => configure_webdav(params),
+    allowedAgents: ['guardian'],
+  });
+
+  registerTool({
+    definition: {
+      name: 'sync_upload',
+      description: '上传本地数据备份到 WebDAV 服务器（支持加密）',
+      permissionLevel: 1 as PermissionLevel,
+      parameters: [
+        p('subfolder', 'string', false, '服务器子目录'),
+        p('encrypt', 'boolean', false, '是否加密上传（推荐）'),
+        p('passphrase', 'string', false, '加密密码'),
+      ],
+      returns: { type: 'ToolResult', description: '上传结果（文件名、大小、表数量、加密信息）' },
+      timeout: 30000,
+      retryable: true,
+      idempotent: false,
+    },
+    handler: async (params?: any) => sync_upload(params),
+    allowedAgents: ['guardian'],
+  });
+
+  registerTool({
+    definition: {
+      name: 'sync_download',
+      description: '从 WebDAV 下载同步数据并合并到本地（支持覆盖/合并策略 + 解密）',
+      permissionLevel: 2 as PermissionLevel,
+      parameters: [
+        p('filename', 'string', false, '指定文件名（不传则下载最新）'),
+        p('subfolder', 'string', false, '服务器子目录'),
+        p('mergeStrategy', 'string', false, '合并策略：overwrite/merge_newer/merge_all'),
+        p('decrypt', 'boolean', false, '是否需要解密'),
+        p('passphrase', 'string', false, '解密密码'),
+        p('salt', 'string', false, '加密盐值（上传时返回）'),
+      ],
+      returns: { type: 'ToolResult', description: '下载+合并结果' },
+      timeout: 60000,
+      retryable: true,
+      idempotent: false,
+    },
+    handler: async (params?: any) => sync_download(params),
+    allowedAgents: ['guardian'],
+  });
+
+  registerTool({
+    definition: {
+      name: 'get_sync_status',
+      description: '获取 WebDAV 同步配置状态 + 最近一次同步时间',
+      permissionLevel: 0 as PermissionLevel,
+      parameters: [],
+      returns: { type: 'ToolResult', description: '同步配置及上次同步状态' },
+      timeout: 3000,
+      retryable: true,
+      idempotent: true,
+    },
+    handler: get_sync_status,
+    allowedAgents: ['guardian', 'analyst'],
+  });
+
+  registerTool({
+    definition: {
+      name: 'get_level',
+      description: '获取用户等级、头衔、经验值和进度',
+      permissionLevel: 0 as PermissionLevel,
+      parameters: [],
+      returns: { type: 'ToolResult<{level, title, experience, progress}>', description: '等级信息' },
+      timeout: 3000,
+      retryable: true,
+      idempotent: true,
+    },
+    handler: get_level,
+    allowedAgents: ['coach'],
+  });
+
+  registerTool({
+    definition: {
+      name: 'get_challenges',
+      description: '获取每日/每周挑战任务列表及完成状态',
+      permissionLevel: 0 as PermissionLevel,
+      parameters: [],
+      returns: { type: 'ToolResult<Challenge[]>', description: '挑战列表' },
+      timeout: 3000,
+      retryable: true,
+      idempotent: true,
+    },
+    handler: get_challenges,
+    allowedAgents: ['coach'],
+  });
+
+  registerTool({
+    definition: {
+      name: 'create_link',
+      description: '创建账单分享链接（按日期或选择账单，支持过期时间）',
+      permissionLevel: 1 as PermissionLevel,
+      parameters: [
+        p('billIds', 'array', false, '要分享的账单ID列表'),
+        p('startDate', 'string', false, '分享起始日期'),
+        p('endDate', 'string', false, '分享结束日期'),
+        p('expiresInHours', 'number', false, '链接有效小时数'),
+      ],
+      returns: { type: 'ToolResult', description: '分享链接 + token + 账单概要' },
+      timeout: 5000,
+      retryable: true,
+      idempotent: false,
+    },
+    handler: async (params: any) => create_link(params),
+    allowedAgents: ['guardian', 'coach'],
+  });
+
+  registerTool({
+    definition: {
+      name: 'leave_shared',
+      description: '通过分享令牌访问共享的账单数据',
+      permissionLevel: 0 as PermissionLevel,
+      parameters: [
+        p('token', 'string', true, '分享令牌'),
+      ],
+      returns: { type: 'ToolResult', description: '共享的账单列表' },
+      timeout: 3000,
+      retryable: true,
+      idempotent: true,
+    },
+    handler: async (params: any) => leave_shared(params),
+    allowedAgents: ['analyst', 'coach'],
+  });
+
+  registerTool({
+    definition: {
+      name: 'delete_link',
+      description: '删除已创建的分享链接',
+      permissionLevel: 1 as PermissionLevel,
+      parameters: [
+        p('linkId', 'string', true, '分享链接ID'),
+      ],
+      returns: { type: 'ToolResult', description: '删除结果' },
+      timeout: 3000,
+      retryable: false,
+      idempotent: false,
+    },
+    handler: async (params: any) => delete_link(params),
+    allowedAgents: ['guardian'],
   });
 }

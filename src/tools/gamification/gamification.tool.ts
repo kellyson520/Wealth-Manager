@@ -147,3 +147,135 @@ export async function update_achievement_progress(params: {
     return { success: false, error: '更新成就失败', errorCode: '1000' };
   }
 }
+
+export async function get_level(): Promise<ToolResult> {
+  try {
+    const db = await getDatabase();
+    const result = await db.getFirstAsync<{ count: number }>(
+      'SELECT COUNT(*) as count FROM bills'
+    );
+    const billCount = result?.count || 0;
+
+    const achievementResult = await db.getAllAsync<{ unlocked: number }>(
+      'SELECT unlocked FROM achievements'
+    );
+    const unlockedCount = achievementResult.filter((a) => a.unlocked).length;
+
+    const streakRows = await db.getAllAsync<{ date: string }>(
+      "SELECT date FROM bills WHERE date IS NOT NULL GROUP BY date ORDER BY date DESC LIMIT 100"
+    );
+    const dates = streakRows.map((r) => r.date);
+    let streak = 0;
+    const today = new Date().toISOString().split('T')[0];
+    let check = new Date(today);
+    while (dates.includes(check.toISOString().split('T')[0])) {
+      streak++;
+      check.setDate(check.getDate() - 1);
+    }
+
+    let level = 1;
+    let title = '记账新手';
+    const exp = billCount + unlockedCount * 50 + streak * 10;
+
+    if (exp >= 10) { level = 2; title = '小小管家'; }
+    if (exp >= 50) { level = 3; title = '理财能手'; }
+    if (exp >= 100) { level = 4; title = '财务达人'; }
+    if (exp >= 300) { level = 5; title = '资深玩家'; }
+    if (exp >= 500) { level = 6; title = '财富大师'; }
+    if (exp >= 1000) { level = 7; title = '记账王者'; }
+    if (exp >= 2000) { level = 8; title = '传奇富翁'; }
+
+    const nextLevelExp = level === 1 ? 10 : level === 2 ? 50 : level === 3 ? 100 : level === 4 ? 300 : level === 5 ? 500 : level === 6 ? 1000 : level === 7 ? 2000 : 5000;
+
+    return {
+      success: true,
+      data: {
+        level,
+        title,
+        experience: exp,
+        nextLevelExperience: nextLevelExp,
+        progress: Math.min(1, exp / nextLevelExp),
+        stats: { billCount, unlockedAchievements: unlockedCount, currentStreak: streak },
+      },
+    };
+  } catch (e) {
+    captureError('GamificationTool.get_level', e, 'Failed to get level');
+    return { success: false, error: '获取等级失败', errorCode: '1000' };
+  }
+}
+
+export async function get_challenges(): Promise<ToolResult> {
+  try {
+    const db = await getDatabase();
+    const now = new Date();
+    const today = now.toISOString().split('T')[0];
+    const monthStart = `${now.getFullYear()}-${(now.getMonth() + 1).toString().padStart(2, '0')}-01`;
+
+    const todayBills = await db.getFirstAsync<{ count: number }>(
+      "SELECT COUNT(*) as count FROM bills WHERE date = ?", [today]
+    );
+
+    const monthExpense = await db.getFirstAsync<{ total: number }>(
+      "SELECT COALESCE(SUM(amount), 0) as total FROM bills WHERE type = 'expense' AND date >= ?",
+      [monthStart]
+    );
+
+    const achievements = await db.getAllAsync<{ unlocked: number }>(
+      'SELECT unlocked FROM achievements'
+    );
+    const unlockedCount = achievements.filter((a) => a.unlocked).length;
+
+    const challenges = [
+      {
+        id: 'daily_record',
+        title: '今日打卡',
+        description: '今天记录至少1笔账单',
+        current: todayBills?.count || 0,
+        target: 1,
+        completed: (todayBills?.count || 0) >= 1,
+        reward: '+10 经验',
+      },
+      {
+        id: 'three_day_streak',
+        title: '三天连续',
+        description: '连续3天都记账',
+        current: 0,
+        target: 3,
+        completed: false,
+        reward: '+30 经验',
+      },
+      {
+        id: 'under_budget',
+        title: '月度预算守门员',
+        description: '本月总支出控制在一定范围内',
+        current: monthExpense?.total || 0,
+        target: 5000,
+        completed: (monthExpense?.total || 0) <= 5000,
+        reward: '+50 经验',
+      },
+      {
+        id: 'achievement_hunter',
+        title: '成就猎人',
+        description: `解锁更多成就 (${unlockedCount}/9)`,
+        current: unlockedCount,
+        target: 5,
+        completed: unlockedCount >= 5,
+        reward: '+100 经验',
+      },
+      {
+        id: 'variety_spender',
+        title: '分类多样化',
+        description: '本月在5个以上不同分类有消费',
+        current: 0,
+        target: 5,
+        completed: false,
+        reward: '+40 经验',
+      },
+    ];
+
+    return { success: true, data: challenges };
+  } catch (e) {
+    captureError('GamificationTool.get_challenges', e, 'Failed to get challenges');
+    return { success: false, error: '获取挑战失败', errorCode: '1000' };
+  }
+}

@@ -9,6 +9,7 @@ import {
   canCallTool,
   rememberThis,
   rememberMoment,
+  getTool,
 } from '../_shared';
 
 const AGENT_ID: AgentId = 'coach';
@@ -37,6 +38,8 @@ export async function handleIntent(intent: IntentResult): Promise<string> {
       return handleTodaySummary();
     case 'setup_reminder':
       return handleSetupReminder(intent.params);
+    case 'list_tags':
+      return handleListTags(intent.params);
     default:
       return '我可以帮您：\n• "设置餐饮预算 3000" — 设定预算\n• "创建储蓄目标" — 存钱计划\n• "查看打卡天数" — 记账连续天数\n• "我的成就" — 成就展示\n• "省钱建议" — 预算建议';
   }
@@ -396,4 +399,18 @@ async function handleSetupReminder(params: Record<string, unknown>): Promise<str
   }
 
   return `设置提醒失败：${result.error}`;
+}
+
+async function handleListTags(_params: Record<string, unknown>): Promise<string> {
+  const tool = getTool('list_tags');
+  if (!tool) return '标签功能暂不可用。';
+  const result = await tool.handler({});
+  if (!result.success || !result.data) return '暂无标签。';
+  const tags = result.data as { name: string; color: string; billCount: number }[];
+  if (!Array.isArray(tags) || tags.length === 0) return '暂无标签，你可以说"添加标签 必须买"。';
+  let reply = '标签列表：\n';
+  for (const t of tags) {
+    reply += `${t.name} (${t.billCount}条) `;
+  }
+  return reply;
 }

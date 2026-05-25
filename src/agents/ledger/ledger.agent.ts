@@ -6,6 +6,7 @@ import {
   canCallTool,
   rememberThis,
   rememberMoment,
+  getTool,
 } from '../_shared';
 
 const AGENT_ID: AgentId = 'ledger';
@@ -20,10 +21,24 @@ export async function handleIntent(intent: IntentResult): Promise<string> {
       return handleSearchBills(intent.params);
     case 'get_summary':
       return handleGetSummary(intent.params);
+    case 'list_assets':
+      return handleListAssets(intent.params);
+    case 'list_debts':
+      return handleListDebts(intent.params);
+    case 'add_tag':
+      return handleAddTag(intent.params);
+    case 'add_asset':
+      return handleAddAsset(intent.params);
+    case 'add_debt':
+      return handleAddDebt(intent.params);
+    case 'import_bills':
+      return handleImportBills(intent.params);
+    case 'reimbursement':
+      return handleReimbursement(intent.params);
     case 'greeting':
-      return '您好！我是您的财务助手 💰\n\n您可以这样使用：\n• "午饭花了35块" — 记账\n• "今天花了多少？" — 查看汇总\n• "查一下餐饮消费" — 搜索账单\n• "工资到账5000" — 记录收入';
+      return '\u60a8\u597d\uff01\u6211\u662f\u60a8\u7684\u8d22\u52a1\u52a9\u624b \uD83D\uDCB0\n\n\u60a8\u53ef\u4ee5\u8fd9\u6837\u4f7f\u7528\uff1a\n\u2022 "\u5348\u996d\u82b1\u4e8635\u5757" \u2014 \u8bb0\u8d26\n\u2022 "\u4eca\u5929\u82b1\u4e86\u591a\u5c11\uff1f" \u2014 \u67e5\u770b\u6c47\u603b\n\u2022 "\u67e5\u4e00\u4e0b\u9910\u996e\u6d88\u8d39" \u2014 \u641c\u7d22\u8d26\u5355\n\u2022 "\u5de5\u8d44\u5230\u8d265000" \u2014 \u8bb0\u5f55\u6536\u5165';
     default:
-      return '抱歉，我还不太理解您的意思。您可以说"午饭花了35块"来记账，或者"今天花了多少"来查看汇总。';
+      return '\u62b1\u6b49\uff0c\u6211\u8fd8\u4e0d\u592a\u7406\u89e3\u60a8\u7684\u610f\u601d\u3002\u60a8\u53ef\u4ee5\u8bf4"\u5348\u996d\u82b1\u4e8635\u5757"\u6765\u8bb0\u8d26\uff0c\u6216\u8005"\u4eca\u5929\u82b1\u4e86\u591a\u5c11"\u6765\u67e5\u770b\u6c47\u603b\u3002';
   }
 }
 
@@ -45,7 +60,7 @@ async function handleAddExpense(params: Record<string, unknown>): Promise<string
     return safetyCheck.message || '安全预检未通过，操作已阻止。';
   }
 
-  const category = guessCategory(merchant);
+  const category = await guessCategory(merchant);
   const result: ToolResult = await add_bill({
     amount,
     type: 'expense',
@@ -163,7 +178,22 @@ async function handleGetSummary(params: Record<string, unknown>): Promise<string
   return reply;
 }
 
-function guessCategory(merchant: string): string {
+async function guessCategory(merchant: string): Promise<string> {
+  try {
+    const rulesTool = getTool('rules_guess');
+    if (rulesTool) {
+      const result = await rulesTool.handler({ merchant });
+      if (result?.success && result.data) {
+        const data = result.data as { category: string; confidence: number };
+        if (data.confidence >= 0.3 && data.category !== '其他') {
+          return data.category;
+        }
+      }
+    }
+  } catch {
+    // Fall through to hardcoded fallback
+  }
+
   const foodTerms = ['饭', '餐', '面', '菜', '奶茶', '咖啡', '外卖', '食堂', '餐厅', '火锅', '烧烤', '水果'];
   const transportTerms = ['地铁', '公交', '打车', '滴滴', '出租', '油', '停车', '高铁', '机票'];
   const shopTerms = ['淘宝', '京东', '拼多多', '超市', '商场', '衣服', '鞋'];
@@ -178,6 +208,101 @@ function guessCategory(merchant: string): string {
     if (merchant.includes(term)) return '购物';
   }
   return '其他';
+}
+
+async function handleListAssets(params: Record<string, unknown>): Promise<string> {
+  const tool = getTool('list_assets');
+  if (!tool) return '资产查询功能暂不可用。';
+  const result = await tool.handler(params);
+  if (!result.success || !result.data) {
+    return '查询资产时出错，请重试。';
+  }
+  const assets = result.data as { name: string; type: string; amount: number }[];
+  if (!Array.isArray(assets) || assets.length === 0) {
+    return '目前没有记录任何资产。你可以说"添加资产 银行存款 50000"。';
+  }
+  let reply = '资产列表：\n';
+  for (const a of assets) {
+    reply += `${a.type} ${a.name}: ${a.amount.toFixed(2)}\n`;
+  }
+  return reply;
+}
+
+async function handleListDebts(params: Record<string, unknown>): Promise<string> {
+  const tool = getTool('list_debts');
+  if (!tool) return '债务查询功能暂不可用。';
+  const result = await tool.handler(params);
+  if (!result.success || !result.data) {
+    return '查询债务时出错，请重试。';
+  }
+  const debts = result.data as { title: string; type: string; remaining: number; counterparty: string }[];
+  if (!Array.isArray(debts) || debts.length === 0) {
+    return '目前没有记录任何债务。';
+  }
+  let reply = '债务列表：\n';
+  for (const d of debts) {
+    const label = d.type === '借出' ? '借出给' : '向';
+    reply += `${label} ${d.counterparty}: ${d.title} (剩余 ${d.remaining})\n`;
+  }
+  return reply;
+}
+
+async function handleAddTag(params: Record<string, unknown>): Promise<string> {
+  const tool = getTool('add_tag');
+  if (!tool) return '标签功能暂不可用。';
+  const name = params.name;
+  if (!name || typeof name !== 'string') return '请告诉我标签名称。';
+  const result = await tool.handler({ name });
+  if (result.success) return `已创建标签 "${name}"`;
+  return `创建标签失败: ${result.error}`;
+}
+
+async function handleAddAsset(params: Record<string, unknown>): Promise<string> {
+  const tool = getTool('add_asset');
+  if (!tool) return '资产功能暂不可用。';
+  if (!params.name) return '请告诉我资产名称和金额，例如"添加资产 银行存款 50000"。';
+  const result = await tool.handler({ name: params.name, amount: params.amount || 0, type: params.type });
+  if (result.success) return `已添加资产 "${params.name}" ${params.amount || ''}`;
+  return `添加资产失败: ${result.error}`;
+}
+
+async function handleAddDebt(params: Record<string, unknown>): Promise<string> {
+  const tool = getTool('add_debt');
+  if (!tool) return '债务功能暂不可用。';
+  if (!params.title) return '请告诉我债务详情，例如"添加债务 借给张三 5000"。';
+  const result = await tool.handler({
+    title: params.title,
+    type: params.type || '借出',
+    principal: params.principal || params.amount || 0,
+    counterparty: params.counterparty || params.title,
+  });
+  if (result.success) return `已记录债务 "${params.title}"`;
+  return `记录债务失败: ${result.error}`;
+}
+
+async function handleImportBills(_params: Record<string, unknown>): Promise<string> {
+  const tool = getTool('get_import_history');
+  if (!tool) return '导入功能暂不可用。';
+  const result = await tool.handler({ limit: 10 });
+  if (result.success && result.data) {
+    const history = result.data as { date: string; count: number }[];
+    if (history.length === 0) return '暂无导入记录。您可以通过"导入微信账单"导入数据。';
+    return `最近导入记录:\n${history.map((h) => `${h.date}: ${h.count}笔`).join('\n')}`;
+  }
+  return '查询导入历史失败。';
+}
+
+async function handleReimbursement(params: Record<string, unknown>): Promise<string> {
+  const tool = getTool('create_reimbursement');
+  if (!tool) return '报销功能暂不可用。';
+  if (!params.title) return '请告诉我报销内容，例如"创建报销 差旅费 1200"。';
+  const result = await tool.handler({
+    title: params.title,
+    amount: params.amount || 0,
+    category: params.category,
+  });
+  if (result.success) return `已创建报销 "${params.title}" ${params.amount ? `¥${params.amount}` : ''}`;
+  return `创建报销失败: ${result.error}`;
 }
 
 function getCategoryEmoji(cat: string): string {

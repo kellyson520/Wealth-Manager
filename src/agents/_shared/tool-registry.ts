@@ -100,8 +100,10 @@ export function generateAgentToolPrompt(
 }
 
 function extractNamespace(toolName: string): string {
-  if (toolName.startsWith('add_') || toolName.startsWith('search_'))
+  if (toolName.startsWith('add_') || toolName.startsWith('search_')) {
+    if (toolName.includes('debt') || toolName.includes('asset') || toolName.includes('tag') || toolName.includes('reimbursement')) return 'other';
     return 'bills';
+  }
   if (
     toolName.startsWith('get_') &&
     !toolName.includes('savings') &&
@@ -109,7 +111,13 @@ function extractNamespace(toolName: string): string {
     !toolName.includes('achievement') &&
     !toolName.includes('recurring') &&
     !toolName.includes('notification') &&
-    !toolName.includes('reminder')
+    !toolName.includes('reminder') &&
+    !toolName.includes('debt') &&
+    !toolName.includes('asset') &&
+    !toolName.includes('sync') &&
+    !toolName.includes('import') &&
+    !toolName.includes('privacy') &&
+    !toolName.includes('shortcuts')
   )
     return 'stats';
   if (
@@ -137,9 +145,30 @@ function extractNamespace(toolName: string): string {
     toolName.startsWith('delete_recurring') ||
     toolName.startsWith('register_shortcut') ||
     toolName.startsWith('schedule_local') ||
-    toolName.startsWith('get_notification')
+    toolName.startsWith('get_notification') ||
+    toolName.startsWith('schedule_') ||
+    toolName.startsWith('cancel_') ||
+    toolName.startsWith('get_shortcut') ||
+    toolName.startsWith('evaluate_') ||
+    toolName.includes('scenario') ||
+    toolName.includes('proactive') ||
+    toolName.includes('today_summary')
   )
     return 'automation';
   if (toolName.startsWith('rules_')) return 'rules';
+  if (toolName.includes('_asset') || toolName.startsWith('list_assets'))
+    return 'assets';
+  if (toolName.includes('_tag') || toolName.includes('_tags') || toolName.startsWith('list_tags') || toolName.startsWith('add_tag'))
+    return 'tags';
+  if (toolName.includes('_debt') || toolName.includes('_debts') || toolName.includes('repayment'))
+    return 'debt';
+  if (toolName.startsWith('import_') || toolName.includes('import_'))
+    return 'import';
+  if (toolName.startsWith('export_') || toolName.includes('backup'))
+    return 'data';
+  if (toolName.includes('reimbursement'))
+    return 'reimbursement';
+  if (toolName.includes('webdav') || toolName.includes('sync_'))
+    return 'sync';
   return 'other';
 }

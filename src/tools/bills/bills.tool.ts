@@ -49,6 +49,88 @@ export async function add_bill(params: {
   }
 }
 
+export async function get_bill(params: { billId: string }): Promise<ToolResult> {
+  try {
+    if (!params.billId) return { success: false, error: '账单ID不能为空' };
+    const db = await getDatabase();
+    const bill = await db.getFirstAsync<BillRecord>(
+      'SELECT * FROM bills WHERE id = ?', [params.billId]
+    );
+    if (!bill) return { success: false, error: '账单不存在', errorCode: '1001' };
+    return { success: true, data: bill };
+  } catch (e) {
+    captureError('BillsTool.get_bill', e, 'Failed to get bill');
+    return { success: false, error: '查询账单失败', errorCode: '1000' };
+  }
+}
+
+export async function modify_bill(params: {
+  billId: string;
+  amount?: number;
+  category?: string;
+  merchant?: string;
+  note?: string;
+  date?: string;
+  type?: 'income' | 'expense' | 'refund';
+}): Promise<ToolResult> {
+  try {
+    if (!params.billId) return { success: false, error: '账单ID不能为空' };
+    const db = await getDatabase();
+
+    const existing = await db.getFirstAsync<BillRecord>(
+      'SELECT * FROM bills WHERE id = ?', [params.billId]
+    );
+    if (!existing) return { success: false, error: '账单不存在' };
+
+    const updates: string[] = [];
+    const values: (string | number)[] = [];
+
+    if (params.amount !== undefined) { updates.push('amount = ?'); values.push(params.amount); }
+    if (params.category !== undefined) { updates.push('category = ?'); values.push(params.category); }
+    if (params.merchant !== undefined) {
+      updates.push('merchant = ?');
+      values.push(params.merchant);
+      if (!params.note) { updates.push('raw_description = ?'); values.push(params.merchant); }
+    }
+    if (params.note !== undefined) { updates.push('note = ?'); values.push(params.note); }
+    if (params.date !== undefined) { updates.push('date = ?'); values.push(params.date); }
+    if (params.type !== undefined) { updates.push('type = ?'); values.push(params.type); }
+
+    if (updates.length === 0) return { success: false, error: '没有需要修改的字段' };
+
+    values.push(params.billId);
+    await db.runAsync(
+      `UPDATE bills SET ${updates.join(', ')} WHERE id = ?`, values
+    );
+
+    const updated = await db.getFirstAsync<BillRecord>(
+      'SELECT * FROM bills WHERE id = ?', [params.billId]
+    );
+    return { success: true, data: updated };
+  } catch (e) {
+    captureError('BillsTool.modify_bill', e, 'Failed to modify bill');
+    return { success: false, error: '修改账单失败', errorCode: '1000' };
+  }
+}
+
+export async function delete_bill(params: { billId: string }): Promise<ToolResult> {
+  try {
+    if (!params.billId) return { success: false, error: '账单ID不能为空' };
+    const db = await getDatabase();
+
+    const existing = await db.getFirstAsync<BillRecord>(
+      'SELECT * FROM bills WHERE id = ?', [params.billId]
+    );
+    if (!existing) return { success: false, error: '账单不存在' };
+
+    await db.runAsync('DELETE FROM bills WHERE id = ?', [params.billId]);
+    return { success: true, data: { id: params.billId, deleted: true, amount: existing.amount, merchant: existing.merchant } };
+  } catch (e) {
+    captureError('BillsTool.delete_bill', e, 'Failed to delete bill');
+    return { success: false, error: '删除账单失败', errorCode: '1000' };
+  }
+}
+
 export async function search_bills(params: {
   keyword?: string;
   startDate?: string;
@@ -67,22 +149,10 @@ export async function search_bills(params: {
     const kw = `%${params.keyword}%`;
     values.push(kw, kw, kw);
   }
-  if (params.startDate) {
-    conditions.push('date >= ?');
-    values.push(params.startDate);
-  }
-  if (params.endDate) {
-    conditions.push('date <= ?');
-    values.push(params.endDate);
-  }
-  if (params.category) {
-    conditions.push('category = ?');
-    values.push(params.category);
-  }
-  if (params.type) {
-    conditions.push('type = ?');
-    values.push(params.type);
-  }
+  if (params.startDate) { conditions.push('date >= ?'); values.push(params.startDate); }
+  if (params.endDate) { conditions.push('date <= ?'); values.push(params.endDate); }
+  if (params.category) { conditions.push('category = ?'); values.push(params.category); }
+  if (params.type) { conditions.push('type = ?'); values.push(params.type); }
 
   const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
   const limit = params.limit || 50;
@@ -97,5 +167,110 @@ export async function search_bills(params: {
   } catch (e) {
     captureError('BillsTool.search_bills', e, 'Failed to search bills');
     return { success: false, error: '查询失败', errorCode: '1000' };
+  }
+}
+
+export async function split_bill(params: {
+  billId: string;
+  splits: { amount: number; category?: string; merchant?: string; note?: string }[];
+}): Promise<ToolResult> {
+  try {
+    if (!params.billId) return { success: false, error: '账单ID不能为空' };
+    if (!params.splits || params.splits.length < 2) return { success: false, error: '至少需要2个拆分项' };
+
+    const db = await getDatabase();
+    const original = await db.getFirstAsync<BillRecord>(
+      'SELECT * FROM bills WHERE id = ?', [params.billId]
+    );
+    if (!original) return { success: false, error: '原始账单不存在' };
+
+    const totalSplit = params.splits.reduce((sum, s) => sum + s.amount, 0);
+    if (Math.abs(totalSplit - original.amount) > 0.01) {
+      return { success: false, error: `拆分金额合计(${totalSplit})与原账单(${original.amount})不匹配` };
+    }
+
+    const now = new Date().toISOString();
+    const created: { id: string; amount: number; category: string }[] = [];
+
+    for (const split of params.splits) {
+      const id = uuidv4();
+      await db.runAsync(
+        `INSERT INTO bills (id, amount, type, category, tags, merchant, raw_description, date, note, source, created_at)
+         VALUES (?, ?, ?, ?, '[]', ?, ?, ?, ?, 'manual', ?)`,
+        [
+          id, split.amount, original.type,
+          split.category || original.category,
+          split.merchant || original.merchant,
+          `${split.merchant || original.merchant} (拆分自 ${original.merchant})`,
+          original.date,
+          split.note || `拆分自: ${original.merchant} ¥${original.amount}`,
+          now,
+        ]
+      );
+      created.push({ id, amount: split.amount, category: split.category || original.category });
+    }
+
+    await db.runAsync('UPDATE bills SET note = note || ? WHERE id = ?', [
+      ` [已拆分为${params.splits.length}笔]`, params.billId,
+    ]);
+
+    return { success: true, data: { originalBillId: params.billId, originalAmount: original.amount, splits: created } };
+  } catch (e) {
+    captureError('BillsTool.split_bill', e, 'Failed to split bill');
+    return { success: false, error: '拆分账单失败', errorCode: '1000' };
+  }
+}
+
+export async function refund_bill(params: {
+  billId: string;
+  amount?: number;
+  note?: string;
+}): Promise<ToolResult> {
+  try {
+    if (!params.billId) return { success: false, error: '账单ID不能为空' };
+
+    const db = await getDatabase();
+    const original = await db.getFirstAsync<BillRecord>(
+      'SELECT * FROM bills WHERE id = ?', [params.billId]
+    );
+    if (!original) return { success: false, error: '原账单不存在' };
+
+    const refundAmount = params.amount || original.amount;
+    if (refundAmount <= 0 || refundAmount > original.amount) {
+      return { success: false, error: '退款金额不合法' };
+    }
+
+    const id = uuidv4();
+    const now = new Date().toISOString();
+
+    await db.runAsync(
+      `INSERT INTO bills (id, amount, type, category, tags, merchant, raw_description, date, note, source, created_at)
+       VALUES (?, ?, 'refund', ?, '[]', ?, ?, ?, ?, 'manual', ?)`,
+      [
+        id, refundAmount, original.category,
+        original.merchant,
+        `退款: ${original.merchant} (原账单ID: ${original.id})`,
+        new Date().toISOString().split('T')[0],
+        params.note || `退款 ${refundAmount}`,
+        now,
+      ]
+    );
+
+    const refundBill = await db.getFirstAsync<BillRecord>(
+      'SELECT * FROM bills WHERE id = ?', [id]
+    );
+
+    return {
+      success: true,
+      data: {
+        originalBillId: params.billId,
+        refundBill: refundBill,
+        originalAmount: original.amount,
+        refundedAmount: refundAmount,
+      },
+    };
+  } catch (e) {
+    captureError('BillsTool.refund_bill', e, 'Failed to refund bill');
+    return { success: false, error: '退款失败', errorCode: '1000' };
   }
 }

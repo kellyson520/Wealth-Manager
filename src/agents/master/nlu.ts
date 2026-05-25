@@ -428,6 +428,107 @@ const intentPatterns: { intent: string; patterns: RegExp[]; agent: string; extra
     ],
     extractParams: () => ({}),
   },
+  {
+    intent: 'list_assets',
+    agent: 'ledger',
+    patterns: [
+      /(?:查看|显示|我的).*(?:资产)/,
+      /(?:有什么|哪些).*资产/,
+      /(?:资产|理财).*(?:列表|清单|情况|查询)/,
+    ],
+    extractParams: () => ({}),
+  },
+  {
+    intent: 'add_asset',
+    agent: 'ledger',
+    patterns: [
+      /(?:添加|增加|新增|记录).*(?:资产)/,
+      /(?:资产|存款|房产|股票|基金).*(?:添加|记录)/,
+      /我(?:有|的).*?(?:存款|房产|股票|基金)\s*(\d+(?:\.\d{1,2})?)/,
+    ],
+    extractParams: () => ({}),
+  },
+  {
+    intent: 'list_debts',
+    agent: 'ledger',
+    patterns: [
+      /(?:查看|显示|我的).*(?:债务|欠款|借款|借出)/,
+      /(?:有什么|哪些).*(?:债务|欠款|借出|借入)/,
+      /(?:欠了|借了|借出).*钱/,
+      /(?:债务|欠款).*(?:列表|清单|情况)/,
+    ],
+    extractParams: () => ({}),
+  },
+  {
+    intent: 'add_debt',
+    agent: 'ledger',
+    patterns: [
+      /(?:添加|记录|新增).*(?:债务|欠款|借款)/,
+      /(?:借给|借了|欠).*(?:钱|多少)/,
+      /(?:别人|谁).*欠.*钱/,
+    ],
+    extractParams: () => ({}),
+  },
+  {
+    intent: 'list_tags',
+    agent: 'coach',
+    patterns: [
+      /(?:查看|显示|我的).*(?:标签)/,
+      /(?:有什么|哪些).*标签/,
+    ],
+    extractParams: () => ({}),
+  },
+  {
+    intent: 'add_tag',
+    agent: 'ledger',
+    patterns: [
+      /(?:添加|创建|新建).*(?:标签)/,
+      /(?:标签).*(?:添加|创建|命名)/,
+    ],
+    extractParams: () => ({}),
+  },
+  {
+    intent: 'import_bills',
+    agent: 'ledger',
+    patterns: [
+      /(?:导入|上传|批量导入).*(?:账单|数据)/,
+      /(?:微信|支付宝|CSV).*(?:账单|导入)/,
+      /(?:导入).*(?:微信|支付宝)账单/,
+    ],
+    extractParams: () => ({}),
+  },
+  {
+    intent: 'export_data',
+    agent: 'analyst',
+    patterns: [
+      /(?:导出|备份|保存).*(?:账单|数据)/,
+      /(?:下载|导出).*(?:CSV|JSON|Excel|报表)/,
+      /(?:创建|制作).*(?:备份|导出)/,
+    ],
+    extractParams: () => ({}),
+  },
+  {
+    intent: 'sync_webdav',
+    agent: 'guardian',
+    patterns: [
+      /(?:同步|备份).*(?:云端|服务器|WebDAV|网盘)/,
+      /(?:上传|下载).*(?:备份|同步|数据)/,
+      /(?:多端|多设备).*(?:同步)/,
+      /(?:配置|设置).*(?:同步|WebDAV)/,
+    ],
+    extractParams: () => ({}),
+  },
+  {
+    intent: 'reimbursement',
+    agent: 'ledger',
+    patterns: [
+      /(?:报销|申请报销).*(?:记录|添加|创建)/,
+      /(?:添加|创建|记录).*(?:报销)/,
+      /(?:报销).*(?:审批|状态|进度)/,
+      /(?:查看|我的).*(?:报销)/,
+    ],
+    extractParams: () => ({}),
+  },
 ];
 
 export function classifyIntent(text: string): IntentResult {

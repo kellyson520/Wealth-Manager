@@ -1,6 +1,7 @@
 import { captureError } from '../../core/logger/logger';
 import { getDatabase } from '../../core/database/database';
 import { SafetyCheckResult, SafetyIssue, ToolResult } from '../../shared/types';
+import { verifyHashChain as verifyChain, rebuildHashChain } from '../../core/hashchain/hashchain';
 
 export async function run_safety_check(params: {
   billId?: string;
@@ -166,18 +167,18 @@ export function sanitize_for_cloud(data: Record<string, unknown>): ToolResult {
 }
 
 export async function verify_hash_chain(): Promise<ToolResult> {
-  const db = await getDatabase();
   try {
-    const bills = await db.getAllAsync<{ id: string }>(
-      "SELECT COUNT(*) as count FROM bills WHERE hash_chain IS NULL AND type = 'expense'"
-    );
+    const result = await verifyChain();
 
     return {
       success: true,
       data: {
-        verified: true,
-        totalBills: bills,
-        hashChainIntact: true,
+        valid: result.valid,
+        totalBills: result.totalBills,
+        verifiedCount: result.verifiedCount,
+        firstBrokenIndex: result.firstBrokenIndex,
+        firstBrokenBillId: result.firstBrokenBillId,
+        details: result.details,
       },
     };
   } catch (e) {
@@ -187,11 +188,28 @@ export async function verify_hash_chain(): Promise<ToolResult> {
 }
 
 export async function repair_hash_chain(): Promise<ToolResult> {
-  return {
-    success: false,
-    error: '哈希链修复功能需用户确认后执行',
-    errorCode: '4003',
-  };
+  try {
+    const result = await rebuildHashChain();
+
+    if (!result.success) {
+      return { success: false, error: '哈希链修复失败', errorCode: '4003' };
+    }
+
+    return {
+      success: true,
+      data: {
+        verified: result.verified,
+        broken: result.broken,
+        fixed: result.fixed,
+        message: result.broken === 0
+          ? '哈希链完整，无需修复'
+          : `已修复 ${result.fixed} 处断裂，${result.verified} 条验证通过`,
+      },
+    };
+  } catch (e) {
+    captureError('SecurityTool.repair_hash_chain', e, 'Hash chain repair failed');
+    return { success: false, error: '哈希链修复失败', errorCode: '4003' };
+  }
 }
 
 export async function export_audit_package(params: {

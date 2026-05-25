@@ -170,3 +170,61 @@ export async function delete_asset(params: { assetId: string }): Promise<ToolRes
     return { success: false, error: '删除资产时发生异常' };
   }
 }
+
+export async function transfer_asset(params: {
+  fromAssetId: string;
+  toAssetId: string;
+  amount: number;
+  note?: string;
+}): Promise<ToolResult> {
+  try {
+    if (!params.fromAssetId || !params.toAssetId) {
+      return { success: false, error: '转出和转入资产ID不能为空' };
+    }
+    if (!params.amount || params.amount <= 0) {
+      return { success: false, error: '转账金额必须大于0' };
+    }
+    if (params.fromAssetId === params.toAssetId) {
+      return { success: false, error: '不能向同一资产转账' };
+    }
+
+    const db = await getDatabase();
+    const now = new Date().toISOString();
+
+    const fromAsset = await db.getFirstAsync<{ id: string; amount: number; name: string; type: string }>(
+      'SELECT * FROM assets WHERE id = ?', [params.fromAssetId]
+    );
+    if (!fromAsset) return { success: false, error: '转出资产不存在' };
+
+    if (fromAsset.amount < params.amount) {
+      return { success: false, error: `${fromAsset.name} 余额不足 (当前: ${fromAsset.amount}, 需转: ${params.amount})` };
+    }
+
+    const toAsset = await db.getFirstAsync<{ id: string; amount: number; name: string }>(
+      'SELECT * FROM assets WHERE id = ?', [params.toAssetId]
+    );
+    if (!toAsset) return { success: false, error: '转入资产不存在' };
+
+    await db.runAsync(
+      'UPDATE assets SET amount = amount - ?, updated_at = ? WHERE id = ?',
+      [params.amount, now, params.fromAssetId]
+    );
+
+    await db.runAsync(
+      'UPDATE assets SET amount = amount + ?, updated_at = ? WHERE id = ?',
+      [params.amount, now, params.toAssetId]
+    );
+
+    return {
+      success: true,
+      data: {
+        from: { id: params.fromAssetId, name: fromAsset.name, newAmount: fromAsset.amount - params.amount },
+        to: { id: params.toAssetId, name: toAsset.name, newAmount: toAsset.amount + params.amount },
+        amount: params.amount,
+      },
+    };
+  } catch (e) {
+    captureError('transfer_asset', e, 'Failed to transfer asset');
+    return { success: false, error: '转账时发生异常' };
+  }
+}
