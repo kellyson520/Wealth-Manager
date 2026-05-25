@@ -72,6 +72,7 @@ import {
   update_asset_value,
   get_asset_summary,
   delete_asset,
+  transfer_asset,
 } from '../../tools/assets/assets.tool';
 import {
   add_tag,
@@ -84,6 +85,7 @@ import {
   list_debts,
   record_repayment,
   get_debt_summary,
+  add_credit_card,
 } from '../../tools/debt/debt.tool';
 import {
   import_csv,
