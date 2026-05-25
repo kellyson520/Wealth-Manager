@@ -178,7 +178,18 @@ async function initTables(db: SQLite.SQLiteDatabase): Promise<void> {
       expires_at TEXT,
       tags TEXT DEFAULT '[]'
     );
+
+    CREATE TABLE IF NOT EXISTS vector_store (
+      id TEXT PRIMARY KEY,
+      embedding TEXT NOT NULL,
+      metadata TEXT DEFAULT '{}',
+      source_type TEXT DEFAULT 'memory',
+      source_id TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
   `);
+
+  await db.execAsync(`CREATE INDEX IF NOT EXISTS idx_vector_source ON vector_store(source_type, source_id)`);
 
   await initRulesTable();
 
