@@ -11,6 +11,10 @@ export interface CloudRequest {
   messages: { role: string; content: string }[];
   model?: string;
   maxTokens?: number;
+  baseUrl?: string;
+  tokenParam?: 'max_tokens' | 'max_completion_tokens';
+  thinking?: Record<string, unknown>;
+  toolMode?: 'functions' | 'tools';
   functions?: {
     name: string;
     description: string;
@@ -100,16 +104,27 @@ export async function callCloudLLM(
     const body: Record<string, unknown> = {
       model: request.model || 'gpt-4o',
       messages: sanitizedMessages,
-      max_tokens: request.maxTokens || 500,
       temperature: request.temperature ?? 0.7,
     };
-
-    if (request.functions && request.functions.length > 0) {
-      body.functions = request.functions;
-      body.function_call = request.functionCall || 'auto';
+    body[request.tokenParam || 'max_tokens'] = request.maxTokens || 500;
+    if (request.thinking) {
+      body.thinking = request.thinking;
     }
 
-    const fetchResponse = await fetch('https://api.openai.com/v1/chat/completions', {
+    if (request.functions && request.functions.length > 0) {
+      if (request.toolMode === 'tools') {
+        body.tools = request.functions.map((fn) => ({
+          type: 'function',
+          function: fn,
+        }));
+        body.tool_choice = normalizeToolChoice(request.functionCall);
+      } else {
+        body.functions = request.functions;
+        body.function_call = request.functionCall || 'auto';
+      }
+    }
+
+    const fetchResponse = await fetch(resolveChatCompletionsUrl(request.baseUrl), {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -137,7 +152,8 @@ export async function callCloudLLM(
       },
     };
 
-    const fnCall = data.choices?.[0]?.message?.function_call;
+    const message = data.choices?.[0]?.message;
+    const fnCall = message?.function_call || normalizeToolCall(message?.tool_calls?.[0]);
     if (fnCall) {
       cloudResponse.functionCall = {
         name: fnCall.name,
@@ -158,6 +174,31 @@ export async function callCloudLLM(
 
 function sanitizeContent(content: string): string {
   return sanitizeTextForCloud(content);
+}
+
+function resolveChatCompletionsUrl(baseUrl?: string): string {
+  const normalized = (baseUrl || 'https://api.openai.com/v1').replace(/\/$/, '');
+  return normalized.endsWith('/chat/completions')
+    ? normalized
+    : `${normalized}/chat/completions`;
+}
+
+function normalizeToolChoice(
+  functionCall?: 'auto' | 'none' | { name: string }
+): 'auto' | 'none' | { type: 'function'; function: { name: string } } {
+  if (!functionCall || functionCall === 'auto' || functionCall === 'none') {
+    return functionCall || 'auto';
+  }
+  return { type: 'function', function: { name: functionCall.name } };
+}
+
+function normalizeToolCall(toolCall: unknown): { name: string; arguments: string } | undefined {
+  const call = toolCall as { function?: { name?: string; arguments?: string } } | undefined;
+  if (!call?.function?.name) return undefined;
+  return {
+    name: call.function.name,
+    arguments: call.function.arguments || '{}',
+  };
 }
 
 export async function* callCloudLLMStream(
@@ -209,24 +250,35 @@ export async function* callCloudLLMStream(
     const body: Record<string, unknown> = {
       model: request.model || 'gpt-4o',
       messages: sanitizedMessages,
-      max_tokens: request.maxTokens || 500,
       temperature: request.temperature ?? 0.7,
       stream: true,
     };
-
-    if (request.functions && request.functions.length > 0) {
-      body.functions = request.functions;
-      body.function_call = request.functionCall || 'auto';
+    body[request.tokenParam || 'max_tokens'] = request.maxTokens || 500;
+    if (request.thinking) {
+      body.thinking = request.thinking;
     }
 
-    const fetchResponse = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify(body),
-    });
+    if (request.functions && request.functions.length > 0) {
+      if (request.toolMode === 'tools') {
+        body.tools = request.functions.map((fn) => ({
+          type: 'function',
+          function: fn,
+        }));
+        body.tool_choice = normalizeToolChoice(request.functionCall);
+      } else {
+        body.functions = request.functions;
+        body.function_call = request.functionCall || 'auto';
+      }
+    }
+
+    const fetchResponse = await fetch(resolveChatCompletionsUrl(request.baseUrl), {
+	      method: 'POST',
+	      headers: {
+	        'Content-Type': 'application/json',
+	        Authorization: `Bearer ${apiKey}`,
+	      },
+	      body: JSON.stringify(body),
+	    });
 
     if (!fetchResponse.ok) {
       recordFailure(breaker);
@@ -269,15 +321,22 @@ export async function* callCloudLLMStream(
           const parsed = JSON.parse(jsonStr);
           const delta = parsed.choices?.[0]?.delta;
 
-          if (delta?.function_call) {
-            isFunctionCall = true;
-            if (delta.function_call.name) {
-              functionCallName = delta.function_call.name;
-            }
-            if (delta.function_call.arguments) {
-              functionCallArgs += delta.function_call.arguments;
-            }
-          } else if (delta?.content) {
+	          const streamedToolCall = delta?.tool_calls?.[0]?.function;
+	          if (delta?.function_call || streamedToolCall) {
+	            isFunctionCall = true;
+	            if (delta.function_call?.name) {
+	              functionCallName = delta.function_call.name;
+	            }
+	            if (delta.function_call?.arguments) {
+	              functionCallArgs += delta.function_call.arguments;
+	            }
+	            if (streamedToolCall?.name) {
+	              functionCallName = streamedToolCall.name;
+	            }
+	            if (streamedToolCall?.arguments) {
+	              functionCallArgs += streamedToolCall.arguments;
+	            }
+	          } else if (delta?.content) {
             yield { type: 'token', content: delta.content };
           }
 

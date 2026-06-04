@@ -22,6 +22,13 @@ import { messageBus } from '../../core/message-bus';
 let toolsInitialized = false;
 let messageBusInitialized = false;
 let cloudApiKey: string | undefined;
+let cloudApiConfig: {
+  baseUrl?: string;
+  model?: string;
+  tokenParam?: 'max_tokens' | 'max_completion_tokens';
+  thinking?: Record<string, unknown>;
+  toolMode?: 'functions' | 'tools';
+} = {};
 
 export function setCloudApiKey(key: string | undefined): void {
   cloudApiKey = key;
@@ -29,6 +36,10 @@ export function setCloudApiKey(key: string | undefined): void {
 
 export function getCloudApiKey(): string | undefined {
   return cloudApiKey;
+}
+
+export function setCloudApiConfig(config: typeof cloudApiConfig): void {
+  cloudApiConfig = { ...config };
 }
 
 export function initMessageBus(): void {
@@ -251,6 +262,11 @@ async function processWithLLM(
   const result = await callCloudLLM(
     {
       messages,
+      baseUrl: cloudApiConfig.baseUrl,
+      model: cloudApiConfig.model,
+      tokenParam: cloudApiConfig.tokenParam,
+      thinking: cloudApiConfig.thinking,
+      toolMode: cloudApiConfig.toolMode,
       temperature: 0.5,
       functions: functions.length > 0 ? functions : undefined,
       functionCall: functions.length > 0 ? 'auto' : undefined,
@@ -293,10 +309,10 @@ async function executeToolCall(
   }
 
   try {
-	    const result = await executeTool(entry, args, {
-	      agentId: 'master',
-	      userConfirmed: args.confirmed === true,
-	    });
+    const result = await executeTool(entry, args, {
+      agentId: 'master',
+      userConfirmed: args.confirmed === true,
+    });
     if (result && result.success) {
       if (result.data) {
         return typeof result.data === 'string'
@@ -361,7 +377,7 @@ export async function* processMessageStream(
   const messages: { role: string; content: string }[] = [
     {
       role: 'system',
-	      content: `${await getAgentSystemPrompt('master')}\n\n${buildSystemPrompt('Master', masterTools)}`,
+      content: `${await getAgentSystemPrompt('master')}\n\n${buildSystemPrompt('Master', masterTools)}`,
     },
   ];
 
@@ -383,6 +399,11 @@ export async function* processMessageStream(
   const stream = callCloudLLMStream(
     {
       messages,
+      baseUrl: cloudApiConfig.baseUrl,
+      model: cloudApiConfig.model,
+      tokenParam: cloudApiConfig.tokenParam,
+      thinking: cloudApiConfig.thinking,
+      toolMode: cloudApiConfig.toolMode,
       temperature: 0.5,
       functions: functions.length > 0 ? functions : undefined,
       functionCall: functions.length > 0 ? 'auto' : undefined,

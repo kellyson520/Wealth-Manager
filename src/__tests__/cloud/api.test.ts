@@ -258,6 +258,85 @@ describe('Cloud LLM API - Safety Chain', () => {
     });
   });
 
+  describe('OpenAI-compatible provider options', () => {
+    test('uses custom base URL, model, max_completion_tokens and thinking config', async () => {
+      (global.fetch as jest.Mock).mockResolvedValue({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            choices: [{ message: { content: 'AI_CONNECTIVITY_OK' } }],
+            model: 'mimo-v2.5-pro',
+            usage: { total_tokens: 12, prompt_tokens: 7, completion_tokens: 5 },
+          }),
+      });
+
+      const result = await callCloudLLM(
+        {
+          baseUrl: 'https://token-plan-cn.xiaomimimo.com/v1',
+          model: 'mimo-v2.5-pro',
+          tokenParam: 'max_completion_tokens',
+          thinking: { type: 'disabled' },
+          messages: [{ role: 'user', content: 'clean text' }],
+          maxTokens: 100,
+        },
+        'test-key'
+      );
+
+      expect(result.success).toBe(true);
+      expect(global.fetch).toHaveBeenCalledWith(
+        'https://token-plan-cn.xiaomimimo.com/v1/chat/completions',
+        expect.objectContaining({
+          body: expect.stringContaining('"max_completion_tokens":100'),
+        })
+      );
+      const body = JSON.parse((global.fetch as jest.Mock).mock.calls[0][1].body);
+      expect(body.model).toBe('mimo-v2.5-pro');
+      expect(body.thinking).toEqual({ type: 'disabled' });
+      expect(body.max_tokens).toBeUndefined();
+    });
+
+    test('sends tools format and parses tool_calls response', async () => {
+      (global.fetch as jest.Mock).mockResolvedValue({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            choices: [{
+              message: {
+                content: '',
+                tool_calls: [{
+                  type: 'function',
+                  function: { name: 'get_total', arguments: '{"period":"today"}' },
+                }],
+              },
+            }],
+            model: 'mimo-v2.5-pro',
+            usage: { total_tokens: 20 },
+          }),
+      });
+
+      const result = await callCloudLLM(
+        {
+          messages: [{ role: 'user', content: 'clean text' }],
+          toolMode: 'tools',
+          functions: [{
+            name: 'get_total',
+            description: '获取统计',
+            parameters: { type: 'object' },
+          }],
+        },
+        'test-key'
+      );
+
+      expect(result.response?.functionCall).toEqual({
+        name: 'get_total',
+        arguments: '{"period":"today"}',
+      });
+      const body = JSON.parse((global.fetch as jest.Mock).mock.calls[0][1].body);
+      expect(body.tools[0].function.name).toBe('get_total');
+      expect(body.functions).toBeUndefined();
+    });
+  });
+
   describe('degradation indicator', () => {
     test('degraded=true means app should fall back to local', async () => {
       const testCases = [
