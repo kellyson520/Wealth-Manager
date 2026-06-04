@@ -7,8 +7,22 @@ let db: SQLite.SQLiteDatabase | null = null;
 export async function getDatabase(): Promise<SQLite.SQLiteDatabase> {
   if (db) return db;
   db = await SQLite.openDatabaseAsync('wealth_manager.db');
+  await configureDatabaseSecurity(db);
   await initTables(db);
   return db;
+}
+
+async function configureDatabaseSecurity(db: SQLite.SQLiteDatabase): Promise<void> {
+  const key = getDatabaseKey();
+  await db.execAsync(`PRAGMA key = '${key.replace(/'/g, "''")}'`);
+  await db.execAsync('PRAGMA foreign_keys = ON');
+}
+
+function getDatabaseKey(): string {
+  const env = (globalThis as unknown as {
+    process?: { env?: Record<string, string | undefined> };
+  }).process?.env;
+  return env?.EXPO_PUBLIC_WEALTH_MANAGER_DB_KEY || 'development-only-wealth-manager-db-key';
 }
 
 async function initTables(db: SQLite.SQLiteDatabase): Promise<void> {
@@ -36,18 +50,21 @@ async function initTables(db: SQLite.SQLiteDatabase): Promise<void> {
       icon TEXT DEFAULT '📦'
     );
 
-    CREATE TABLE IF NOT EXISTS audit_log (
-      id TEXT PRIMARY KEY,
-      timestamp TEXT NOT NULL,
-      agent TEXT NOT NULL,
-      tool TEXT NOT NULL,
-      action TEXT NOT NULL,
-      params TEXT,
-      result_status TEXT DEFAULT 'success',
-      user_confirmed INTEGER DEFAULT 0,
-      error_code TEXT,
-      ttl_days INTEGER DEFAULT 365
-    );
+	    CREATE TABLE IF NOT EXISTS audit_log (
+	      id TEXT PRIMARY KEY,
+	      timestamp TEXT NOT NULL,
+	      agent TEXT NOT NULL,
+	      tool TEXT NOT NULL,
+	      action TEXT NOT NULL,
+	      params TEXT,
+	      params_hash TEXT,
+	      result_status TEXT DEFAULT 'success',
+	      user_confirmed INTEGER DEFAULT 0,
+	      error_code TEXT,
+	      permission_level INTEGER DEFAULT 0,
+	      duration_ms INTEGER,
+	      ttl_days INTEGER DEFAULT 365
+	    );
 
     CREATE TABLE IF NOT EXISTS user_profile (
       id TEXT PRIMARY KEY DEFAULT 'singleton',
@@ -199,12 +216,29 @@ async function initTables(db: SQLite.SQLiteDatabase): Promise<void> {
   `);
 
   await db.execAsync(`CREATE INDEX IF NOT EXISTS idx_vector_source ON vector_store(source_type, source_id)`);
+  await migrateAuditLog(db);
 
   await initRulesTable();
 
   await seedCategories(db);
   await seedAchievements(db);
   await seedUserProfile(db);
+}
+
+async function migrateAuditLog(db: SQLite.SQLiteDatabase): Promise<void> {
+  const migrations = [
+    `ALTER TABLE audit_log ADD COLUMN params_hash TEXT`,
+    `ALTER TABLE audit_log ADD COLUMN permission_level INTEGER DEFAULT 0`,
+    `ALTER TABLE audit_log ADD COLUMN duration_ms INTEGER`,
+  ];
+
+  for (const statement of migrations) {
+    try {
+      await db.execAsync(statement);
+    } catch {
+      // Column already exists on newer databases.
+    }
+  }
 }
 
 async function seedCategories(db: SQLite.SQLiteDatabase): Promise<void> {
@@ -317,19 +351,44 @@ export async function writeAuditLog(
 ): Promise<void> {
   const id = uuidv4();
   const now = new Date().toISOString();
+  const paramsHash = entry.params ? await hashParams(entry.params) : null;
   await db.runAsync(
-    `INSERT INTO audit_log (id, timestamp, agent, tool, action, params, result_status, user_confirmed, error_code)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO audit_log (id, timestamp, agent, tool, action, params, params_hash, result_status, user_confirmed, error_code)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       id,
       now,
       entry.agent,
       entry.tool,
       entry.action,
-      entry.params ? JSON.stringify(entry.params) : null,
+      null,
+      paramsHash,
       entry.resultStatus || 'success',
       entry.userConfirmed ? 1 : 0,
       entry.errorCode || null,
     ]
   );
+}
+
+function stableStringify(value: unknown): string {
+  if (value === null || typeof value !== 'object') return JSON.stringify(value);
+  if (Array.isArray(value)) return `[${value.map(stableStringify).join(',')}]`;
+  const obj = value as Record<string, unknown>;
+  return `{${Object.keys(obj).sort().map((key) => `${JSON.stringify(key)}:${stableStringify(obj[key])}`).join(',')}}`;
+}
+
+async function hashParams(params: Record<string, unknown>): Promise<string> {
+  const input = stableStringify(params);
+  try {
+    const bytes = new TextEncoder().encode(input);
+    const digest = await crypto.subtle.digest('SHA-256', bytes);
+    return Array.from(new Uint8Array(digest)).map((b) => b.toString(16).padStart(2, '0')).join('');
+  } catch {
+    let hash = 2166136261;
+    for (let i = 0; i < input.length; i++) {
+      hash ^= input.charCodeAt(i);
+      hash = Math.imul(hash, 16777619);
+    }
+    return (hash >>> 0).toString(16).padStart(8, '0');
+  }
 }

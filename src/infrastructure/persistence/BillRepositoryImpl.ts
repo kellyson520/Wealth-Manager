@@ -7,6 +7,7 @@ import type {
   BillSearchCriteria,
   AggregationResultDTO,
 } from '../../domain/billing/types';
+import { generateHashForBill, rebuildHashChain } from '../../core/hashchain/hashchain';
 
 function getStartDate(period: 'today' | 'week' | 'month'): string {
   const now = new Date();
@@ -30,23 +31,25 @@ export class BillRepositoryImpl implements BillRepository {
         'SELECT id FROM bills WHERE id = ?', [props.id]
       );
 
-      if (existing) {
-        await db.runAsync(
+	      if (existing) {
+	        await db.runAsync(
           `UPDATE bills SET amount=?, type=?, category=?, merchant=?, date=?, note=?, source=?, tags=?
            WHERE id=?`,
           [props.amount, props.type, props.category, props.merchant,
            props.date, props.note, props.source,
-           JSON.stringify(props.tags), props.id]
-        );
-      } else {
-        await db.runAsync(
+	           JSON.stringify(props.tags), props.id]
+	        );
+	        await rebuildHashChain();
+	      } else {
+	        await db.runAsync(
           `INSERT INTO bills (id, amount, type, category, merchant, date, note, source, tags, raw_description, created_at)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           [props.id, props.amount, props.type, props.category, props.merchant,
            props.date, props.note, props.source,
-           JSON.stringify(props.tags), props.merchant + ' ' + props.note, props.createdAt]
-        );
-      }
+	           JSON.stringify(props.tags), props.merchant + ' ' + props.note, props.createdAt]
+	        );
+	        await generateHashForBill(props.id);
+	      }
     } catch (e) {
       captureError('BillRepositoryImpl.save', e, 'Failed to save bill');
       throw e;
@@ -176,9 +179,10 @@ export class BillRepositoryImpl implements BillRepository {
 
   async delete(id: string): Promise<boolean> {
     try {
-      const db = await getDatabase();
-      await db.runAsync('DELETE FROM bills WHERE id = ?', [id]);
-      return true;
+	      const db = await getDatabase();
+	      await db.runAsync('DELETE FROM bills WHERE id = ?', [id]);
+	      await rebuildHashChain();
+	      return true;
     } catch (e) {
       captureError('BillRepositoryImpl.delete', e, 'Failed to delete bill');
       return false;

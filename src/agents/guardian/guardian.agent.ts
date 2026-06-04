@@ -19,8 +19,8 @@ export async function handleIntent(intent: IntentResult): Promise<string> {
       return handleSubscriptions();
     case 'verify_chain':
       return handleVerifyChain();
-    case 'repair_chain':
-      return handleRepairChain();
+	    case 'repair_chain':
+	      return handleRepairChain(intent.params);
     case 'export_audit':
       return handleExportAudit(intent.params);
     case 'revoke_cloud':
@@ -211,8 +211,8 @@ async function handleVerifyChain(): Promise<string> {
   return '✅ 哈希链完整性验证通过，数据未被篡改。';
 }
 
-async function handleRepairChain(): Promise<string> {
-  const result = await repair_hash_chain();
+async function handleRepairChain(params: Record<string, unknown> = {}): Promise<string> {
+  const result = await repair_hash_chain({ confirmed: params.confirmed === true });
 
   if (!result.success) {
     return `⚠️ 哈希链修复需要用户确认后才能执行，这是一项敏感操作。\n\n如需修复，请明确回复"确认修复哈希链"。`;

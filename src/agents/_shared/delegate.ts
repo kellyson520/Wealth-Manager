@@ -4,7 +4,7 @@ import {
   AgentMessage,
 } from '../../shared/types';
 import { getSecurityProfile } from './security-profile';
-import { isToolAllowedForAgent } from './tool-registry';
+import { getTool, isToolAllowedForAgent } from './tool-registry';
 
 export interface DelegationRequest {
   targetAgent: AgentId;
@@ -65,6 +65,14 @@ export function canCallTool(
     return {
       allowed: false,
       reason: `${agentId} 无权调用工具 ${toolName}`,
+    };
+  }
+  const profile = getSecurityProfile(agentId);
+  const tool = getTool(toolName);
+  if (tool && tool.definition.permissionLevel > profile.maxPermissionLevel) {
+    return {
+      allowed: false,
+      reason: `${agentId} 权限 L${profile.maxPermissionLevel} 不足以调用 L${tool.definition.permissionLevel} 工具 ${toolName}`,
     };
   }
   return { allowed: true };

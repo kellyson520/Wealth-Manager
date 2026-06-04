@@ -4,14 +4,6 @@ import { captureError } from '../logger/logger';
 import { addRule, searchRules } from './rule-store';
 import type { RuleConditionGroup, RuleAction } from './rule-types';
 
-interface CorrectionRecord {
-  billId: string;
-  merchant: string;
-  originalCategory: string;
-  correctedCategory: string;
-  correctedAt: string;
-}
-
 export async function recordCorrection(params: {
   billId: string;
   merchant: string;

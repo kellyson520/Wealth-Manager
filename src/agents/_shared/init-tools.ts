@@ -233,7 +233,7 @@ export function initToolRegistry(): void {
       retryable: false,
       idempotent: false,
     },
-    handler: async (params: { billId: string }) => delete_bill(params),
+    handler: async (params: { billId: string; confirmed?: boolean }) => delete_bill(params),
     allowedAgents: ['ledger', 'guardian'],
   });
 
@@ -610,7 +610,7 @@ export function initToolRegistry(): void {
       retryable: false,
       idempotent: false,
     },
-    handler: repair_hash_chain,
+    handler: async (params?: { confirmed?: boolean }) => repair_hash_chain(params),
     allowedAgents: ['guardian'],
   });
 

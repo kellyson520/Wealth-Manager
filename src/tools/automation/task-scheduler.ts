@@ -62,12 +62,10 @@ function shouldExecuteNow(task: RecurringTask, now: Date): boolean {
     return minutesDiff >= 60;
   }
 
-  const [minute, hour, dayOfMonth, _month, _dayOfWeek] = cronParts;
+  const [minute, hour] = cronParts;
 
   const nowMinute = now.getMinutes();
   const nowHour = now.getHours();
-  const nowDay = now.getDate();
-
   let minuteMatch = false;
   if (minute === '*') {
     minuteMatch = true;

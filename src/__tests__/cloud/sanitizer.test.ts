@@ -1,4 +1,4 @@
-import { sanitizeForCloud, detectPII } from '../../core/cloud/sanitizer';
+import { sanitizeForCloud, sanitizeTextForCloud, detectPII } from '../../core/cloud/sanitizer';
 
 describe('Cloud Data Sanitizer', () => {
   describe('sanitizeForCloud', () => {
@@ -66,6 +66,18 @@ describe('Cloud Data Sanitizer', () => {
         category: '110101199001011234',
       });
       expect(result.category).toBe('***');
+    });
+  });
+
+  describe('sanitizeTextForCloud', () => {
+    test('removes script content from free text', () => {
+      const result = sanitizeTextForCloud('hello <script>alert(1)</script> world');
+      expect(result).toBe('hello  world');
+    });
+
+    test('masks repeated amount sequences in free text', () => {
+      const result = sanitizeTextForCloud('10元 20元 30元');
+      expect(result).toBe('[amount_sequence]');
     });
   });
 

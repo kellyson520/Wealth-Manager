@@ -6,11 +6,15 @@ import type { ToolResult } from '../../shared/types';
 interface WebDAVConfig {
   url: string;
   username: string;
-  password: string;
+  password?: string;
+  passwordCiphertext?: string;
+  passwordSalt?: string;
   enabled: boolean;
   lastSyncAt?: string;
   lastSyncStatus?: 'success' | 'error' | 'conflict';
 }
+
+const SECRET_STORAGE_KEY = 'wealth-manager-webdav-config-secret-v1';
 
 async function getConfig(db: Awaited<ReturnType<typeof getDatabase>>): Promise<WebDAVConfig | null> {
   try {
@@ -18,7 +22,16 @@ async function getConfig(db: Awaited<ReturnType<typeof getDatabase>>): Promise<W
       "SELECT value FROM sync_state WHERE key = 'webdav_config'"
     );
     if (!row) return null;
-    return JSON.parse(row.value) as WebDAVConfig;
+    const config = JSON.parse(row.value) as WebDAVConfig;
+    if (!config.password && config.passwordCiphertext && config.passwordSalt) {
+      const password = await decryptPayload(
+        config.passwordCiphertext,
+        getPasswordStorageKey(config),
+        config.passwordSalt
+      );
+      if (password) config.password = password;
+    }
+    return config;
   } catch {
     return null;
   }
@@ -29,10 +42,23 @@ async function saveConfig(
   config: WebDAVConfig
 ): Promise<void> {
   const now = new Date().toISOString();
+  const storedConfig: WebDAVConfig = { ...config };
+  if (config.password) {
+    const encrypted = await encryptPayload(config.password, getPasswordStorageKey(config));
+    if (encrypted) {
+      storedConfig.passwordCiphertext = encrypted.ciphertext;
+      storedConfig.passwordSalt = encrypted.salt;
+      delete storedConfig.password;
+    }
+  }
   await db.runAsync(
     "INSERT OR REPLACE INTO sync_state (key, value, updated_at) VALUES ('webdav_config', ?, ?)",
-    [JSON.stringify(config), now]
+    [JSON.stringify(storedConfig), now]
   );
+}
+
+function getPasswordStorageKey(config: Pick<WebDAVConfig, 'url' | 'username'>): string {
+  return `${SECRET_STORAGE_KEY}:${config.url}:${config.username}`;
 }
 
 async function updateLastSync(
@@ -61,6 +87,9 @@ async function webdavRequest(
   body?: string
 ): Promise<{ ok: boolean; status: number; body?: string; error?: string }> {
   try {
+    if (!config.password) {
+      return { ok: false, status: 401, error: 'WebDAV 密码未配置或无法解密' };
+    }
     const auth = base64Encode(`${config.username}:${config.password}`);
     const headers: Record<string, string> = {
       Authorization: `Basic ${auth}`,
@@ -104,6 +133,9 @@ export async function configure_webdav(params: {
   try {
     if (!params.url || !params.url.trim()) {
       return { success: false, error: 'WebDAV 服务器地址不能为空' };
+    }
+    if (!/^https:\/\//i.test(params.url.trim())) {
+      return { success: false, error: 'WebDAV 地址必须使用 HTTPS' };
     }
     if (!params.username || !params.password) {
       return { success: false, error: '用户名和密码不能为空' };
@@ -157,6 +189,9 @@ export async function sync_upload(params?: {
     if (!config || !config.enabled) {
       return { success: false, error: '请先配置并启用 WebDAV 同步' };
     }
+    if (!config.password) {
+      return { success: false, error: 'WebDAV 密码未配置或无法解密，请重新配置同步' };
+    }
 
     const tables = ['bills', 'debts', 'repayments', 'assets', 'tags', 'bill_tags', 'savings_goals', 'achievements', 'classification_rules', 'recurring_tasks', 'reimbursement_tasks'];
     const backup: Record<string, unknown> = {
@@ -177,7 +212,7 @@ export async function sync_upload(params?: {
       }
     }
 
-    const folder = params?.subfolder ? `/wealth_manager/${params.subfolder.replace(/^\//, '')}` : '/wealth_manager';
+    const folder = params?.subfolder ? `/wealth_manager/${sanitizePathSegment(params.subfolder)}` : '/wealth_manager';
     await webdavRequest(config, 'MKCOL', folder);
 
     const now = new Date();
@@ -187,12 +222,18 @@ export async function sync_upload(params?: {
     let finalContent = content;
     let encryptionInfo: { encrypted: boolean; salt?: string } = { encrypted: false };
 
-    if (params?.encrypt && params?.passphrase) {
-      const encrypted = encryptPayload(content, params.passphrase);
+    if (!params?.encrypt || !params?.passphrase) {
+      return { success: false, error: '同步上传必须启用加密并提供 passphrase' };
+    }
+
+    if (params.encrypt && params.passphrase) {
+      const encrypted = await encryptPayload(content, params.passphrase);
       if (encrypted) {
         finalContent = encrypted.ciphertext;
         encryptionInfo = { encrypted: true, salt: encrypted.salt };
         logger.info('WebDAV', `Encrypted payload before upload (salt: ${encrypted.salt.slice(0, 8)}...)`);
+      } else {
+        return { success: false, error: '加密失败：当前运行环境不支持 WebCrypto AES-GCM' };
       }
     }
 
@@ -238,8 +279,11 @@ export async function sync_download(params?: {
     if (!config || !config.enabled) {
       return { success: false, error: '请先配置并启用 WebDAV 同步' };
     }
+    if (!config.password) {
+      return { success: false, error: 'WebDAV 密码未配置或无法解密，请重新配置同步' };
+    }
 
-    const folder = params?.subfolder ? `/wealth_manager/${params.subfolder.replace(/^\//, '')}` : '/wealth_manager';
+    const folder = params?.subfolder ? `/wealth_manager/${sanitizePathSegment(params.subfolder)}` : '/wealth_manager';
 
     let filename: string;
     if (params?.filename) {
@@ -265,14 +309,15 @@ export async function sync_download(params?: {
     }
 
     let rawData = result.body;
-    if (params?.decrypt && params?.passphrase && params?.salt) {
-      const decrypted = decryptPayload(rawData, params.passphrase, params.salt);
-      if (!decrypted) {
-        return { success: false, error: '解密失败：密码错误或数据已损坏' };
-      }
-      rawData = decrypted;
-      logger.info('WebDAV', 'Decrypted downloaded payload');
+    if (!params?.decrypt || !params?.passphrase || !params?.salt) {
+      return { success: false, error: '同步下载必须提供解密 passphrase 和 salt' };
     }
+    const decrypted = await decryptPayload(rawData, params.passphrase, params.salt);
+    if (!decrypted) {
+      return { success: false, error: '解密失败：密码错误或数据已损坏' };
+    }
+    rawData = decrypted;
+    logger.info('WebDAV', 'Decrypted downloaded payload');
 
     let backup: Record<string, unknown>;
     try {
@@ -389,8 +434,10 @@ async function mergeData(
             }
           }
 
-          const columns = Object.keys(row).filter((k) => !k.startsWith('_'));
-          if (columns.length === 0) continue;
+        const allowedColumns = TABLE_COLUMNS[table] || [];
+        const columns = Object.keys(row)
+          .filter((k) => allowedColumns.includes(k) && isPrimitiveDbValue(row[k]));
+        if (columns.length === 0) continue;
 
           const placeholders = columns.map(() => '?').join(', ');
           const values = columns.map((k) => row[k] as string | number | null);
@@ -413,6 +460,30 @@ async function mergeData(
 
   return { billsImported, mergedTables, errors };
 }
+
+function sanitizePathSegment(segment: string): string {
+  return segment
+    .split('/')
+    .filter(Boolean)
+    .map((part) => part.replace(/[^A-Za-z0-9._-]/g, '_'))
+    .join('/');
+}
+
+function isPrimitiveDbValue(value: unknown): boolean {
+  return value === null || typeof value === 'string' || typeof value === 'number';
+}
+
+const TABLE_COLUMNS: Record<string, string[]> = {
+  bills: ['id', 'amount', 'type', 'category', 'tags', 'merchant', 'raw_description', 'date', 'note', 'source', 'created_at', 'hash', 'prev_hash'],
+  debts: ['id', 'title', 'type', 'principal', 'remaining', 'counterparty', 'interest_rate', 'start_date', 'due_date', 'status', 'note', 'created_at', 'updated_at'],
+  repayments: ['id', 'debt_id', 'amount', 'date', 'note', 'created_at'],
+  assets: ['id', 'name', 'type', 'amount', 'currency', 'note', 'created_at', 'updated_at'],
+  savings_goals: ['id', 'name', 'target_amount', 'current_amount', 'deadline', 'created_at'],
+  achievements: ['id', 'name', 'description', 'unlocked', 'progress', 'max_progress', 'unlocked_at'],
+  classification_rules: ['id', 'name', 'description', 'priority', 'enabled', 'conditions', 'actions', 'hit_count', 'last_hit_at', 'created_at', 'updated_at', 'created_by'],
+  recurring_tasks: ['id', 'name', 'type', 'cron', 'enabled', 'last_triggered', 'created_at'],
+  reimbursement_tasks: ['id', 'title', 'amount', 'category', 'status', 'merchant', 'date', 'note', 'created_at', 'updated_at'],
+};
 
 export async function list_sync_files(params?: {
   subfolder?: string;

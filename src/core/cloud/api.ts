@@ -1,4 +1,4 @@
-import { sanitizeForCloud, detectPII } from './sanitizer';
+import { sanitizeTextForCloud, detectPII } from './sanitizer';
 import {
   checkTokenBudget,
   consumeTokens,
@@ -58,13 +58,8 @@ export async function callCloudLLM(
     return { success: false, error: rateCheck.reason, degraded: false };
   }
 
-  const sanitizedMessages = request.messages.map((m) => ({
-    ...m,
-    content: sanitizeContent(m.content),
-  }));
-
-  const promptText = sanitizedMessages.map((m) => m.content).join(' ');
-  const piiCheck = detectPII(promptText);
+  const originalPromptText = request.messages.map((m) => m.content).join(' ');
+  const piiCheck = detectPII(originalPromptText);
   if (piiCheck.hasPII) {
     return {
       success: false,
@@ -73,6 +68,12 @@ export async function callCloudLLM(
     };
   }
 
+  const sanitizedMessages = request.messages.map((m) => ({
+    ...m,
+    content: sanitizeContent(m.content),
+  }));
+
+  const promptText = sanitizedMessages.map((m) => m.content).join(' ');
   const estimatedTokens = Math.ceil(promptText.length / 3);
   const budgetCheck = checkTokenBudget(tokenBudget, estimatedTokens);
   if (!budgetCheck.allowed) {
@@ -156,8 +157,7 @@ export async function callCloudLLM(
 }
 
 function sanitizeContent(content: string): string {
-  const sanitized = sanitizeForCloud({ content });
-  return (sanitized.content as string) || content;
+  return sanitizeTextForCloud(content);
 }
 
 export async function* callCloudLLMStream(
@@ -175,18 +175,19 @@ export async function* callCloudLLMStream(
     return;
   }
 
+  const originalPromptText = request.messages.map((m) => m.content).join(' ');
+  const piiCheck = detectPII(originalPromptText);
+  if (piiCheck.hasPII) {
+    yield { type: 'error', error: `内容包含敏感信息: ${piiCheck.types.join(', ')}，已阻止上传` };
+    return;
+  }
+
   const sanitizedMessages = request.messages.map((m) => ({
     ...m,
     content: sanitizeContent(m.content),
   }));
 
   const promptText = sanitizedMessages.map((m) => m.content).join(' ');
-  const piiCheck = detectPII(promptText);
-  if (piiCheck.hasPII) {
-    yield { type: 'error', error: `内容包含敏感信息: ${piiCheck.types.join(', ')}，已阻止上传` };
-    return;
-  }
-
   const estimatedTokens = Math.ceil(promptText.length / 3);
   const budgetCheck = checkTokenBudget(tokenBudget, estimatedTokens);
   if (!budgetCheck.allowed) {

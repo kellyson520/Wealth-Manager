@@ -1,6 +1,8 @@
 import { getDatabase } from '../../core/database/database';
 import { v4 as uuidv4 } from 'uuid';
 import type { ToolEntry } from '../../agents/_shared/tool-registry';
+import { getSecurityProfile } from '../../agents/_shared/security-profile';
+import type { AgentId } from '../../shared/types';
 
 export interface ToolExecutionResult {
   success: boolean;
@@ -11,12 +13,42 @@ export interface ToolExecutionResult {
   auditLogId: string;
 }
 
+export interface ToolExecutionOptions {
+  agentId?: AgentId;
+  userConfirmed?: boolean;
+}
+
 export async function executeTool(
   entry: ToolEntry,
-  params: Record<string, unknown>
+  params: Record<string, unknown>,
+  options: ToolExecutionOptions = {}
 ): Promise<ToolExecutionResult> {
   const startTime = Date.now();
-  const agentId = 'master';
+  const agentId = options.agentId || 'master';
+
+  const denial = getExecutionDenial(entry, agentId, options.userConfirmed === true);
+  if (denial) {
+    const executionTimeMs = Date.now() - startTime;
+    const auditLogId = await logToolExecution({
+      agent: agentId,
+      tool: entry.definition.name,
+      action: 'execute',
+      params,
+      resultStatus: 'rejected',
+      errorCode: denial.code,
+      executionTimeMs,
+      permissionLevel: entry.definition.permissionLevel,
+      userConfirmed: options.userConfirmed === true,
+    });
+
+    return {
+      success: false,
+      error: denial.message,
+      errorCode: denial.code,
+      executionTimeMs,
+      auditLogId,
+    };
+  }
 
   try {
     const result = await Promise.race([
@@ -31,7 +63,7 @@ export async function executeTool(
 
     const executionTimeMs = Date.now() - startTime;
 
-    await logToolExecution({
+    const auditLogId = await logToolExecution({
       agent: agentId,
       tool: entry.definition.name,
       action: 'execute',
@@ -39,18 +71,20 @@ export async function executeTool(
       resultStatus: result?.success === false ? 'error' : 'success',
       errorCode: result?.errorCode,
       executionTimeMs,
+      permissionLevel: entry.definition.permissionLevel,
+      userConfirmed: options.userConfirmed === true,
     });
 
     return {
       ...result,
       executionTimeMs,
-      auditLogId: '',
+      auditLogId,
     };
   } catch (e) {
     const executionTimeMs = Date.now() - startTime;
     const errorMessage = e instanceof Error ? e.message : 'Unknown error';
 
-    await logToolExecution({
+    const auditLogId = await logToolExecution({
       agent: agentId,
       tool: entry.definition.name,
       action: 'execute',
@@ -58,13 +92,16 @@ export async function executeTool(
       resultStatus: errorMessage.includes('timed out') ? 'timeout' : 'error',
       errorCode: 'EXECUTION_ERROR',
       executionTimeMs,
+      permissionLevel: entry.definition.permissionLevel,
+      userConfirmed: options.userConfirmed === true,
     });
 
     return {
       success: false,
       error: errorMessage,
+      errorCode: 'EXECUTION_ERROR',
       executionTimeMs,
-      auditLogId: '',
+      auditLogId,
     };
   }
 }
@@ -72,12 +109,13 @@ export async function executeTool(
 export async function executeWithRetry(
   entry: ToolEntry,
   params: Record<string, unknown>,
-  maxRetries: number = 3
+  maxRetries: number = 3,
+  options: ToolExecutionOptions = {}
 ): Promise<ToolExecutionResult> {
   let lastResult: ToolExecutionResult | null = null;
 
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
-    lastResult = await executeTool(entry, params);
+    lastResult = await executeTool(entry, params, options);
 
     if (lastResult.success || !entry.definition.retryable || attempt >= maxRetries) {
       return lastResult;
@@ -90,6 +128,33 @@ export async function executeWithRetry(
   return lastResult!;
 }
 
+function getExecutionDenial(
+  entry: ToolEntry,
+  agentId: AgentId,
+  userConfirmed: boolean
+): { code: string; message: string } | null {
+  const profile = getSecurityProfile(agentId);
+  if (!profile) {
+    return { code: 'UNKNOWN_AGENT', message: `未知 Agent: ${agentId}` };
+  }
+  if (!entry.allowedAgents.includes(agentId)) {
+    return { code: 'AGENT_NOT_ALLOWED', message: `${agentId} 无权调用工具 ${entry.definition.name}` };
+  }
+  if (entry.definition.permissionLevel > profile.maxPermissionLevel) {
+    return {
+      code: 'PERMISSION_EXCEEDED',
+      message: `${agentId} 权限 L${profile.maxPermissionLevel} 不足以调用 L${entry.definition.permissionLevel} 工具 ${entry.definition.name}`,
+    };
+  }
+  if (entry.definition.permissionLevel === 2 && !userConfirmed) {
+    return {
+      code: 'CONFIRMATION_REQUIRED',
+      message: `敏感工具 ${entry.definition.name} 需要用户显式确认`,
+    };
+  }
+  return null;
+}
+
 async function logToolExecution(params: {
   agent: string;
   tool: string;
@@ -98,27 +163,58 @@ async function logToolExecution(params: {
   resultStatus: 'success' | 'error' | 'rejected' | 'timeout';
   errorCode?: string;
   executionTimeMs: number;
-}): Promise<void> {
+  permissionLevel: number;
+  userConfirmed: boolean;
+}): Promise<string> {
+  const id = uuidv4();
   try {
     const db = await getDatabase();
-    const id = uuidv4();
     const now = new Date().toISOString();
+    const paramsHash = await hashParams(params.params);
 
     await db.runAsync(
-      `INSERT INTO audit_log (id, timestamp, agent, tool, action, params, result_status, error_code)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO audit_log (id, timestamp, agent, tool, action, params, params_hash, result_status, user_confirmed, error_code, permission_level, duration_ms)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         id,
         now,
         params.agent,
         params.tool,
         params.action,
-        JSON.stringify(params.params),
+        null,
+        paramsHash,
         params.resultStatus,
+        params.userConfirmed ? 1 : 0,
         params.errorCode || null,
+        params.permissionLevel,
+        params.executionTimeMs,
       ]
     );
   } catch {
     // Non-critical, audit logging failure should not break tool execution
+  }
+  return id;
+}
+
+function stableStringify(value: unknown): string {
+  if (value === null || typeof value !== 'object') return JSON.stringify(value);
+  if (Array.isArray(value)) return `[${value.map(stableStringify).join(',')}]`;
+  const obj = value as Record<string, unknown>;
+  return `{${Object.keys(obj).sort().map((key) => `${JSON.stringify(key)}:${stableStringify(obj[key])}`).join(',')}}`;
+}
+
+async function hashParams(params: Record<string, unknown>): Promise<string> {
+  const input = stableStringify(params);
+  try {
+    const bytes = new TextEncoder().encode(input);
+    const digest = await crypto.subtle.digest('SHA-256', bytes);
+    return Array.from(new Uint8Array(digest)).map((b) => b.toString(16).padStart(2, '0')).join('');
+  } catch {
+    let hash = 2166136261;
+    for (let i = 0; i < input.length; i++) {
+      hash ^= input.charCodeAt(i);
+      hash = Math.imul(hash, 16777619);
+    }
+    return (hash >>> 0).toString(16).padStart(8, '0');
   }
 }

@@ -5,13 +5,13 @@ import { handleIntent as handleAnalyst } from '../analyst/analyst.agent';
 import { handleIntent as handleCoach } from '../coach/coach.agent';
 import { handleIntent as handleGuardian, sanitizeText } from '../guardian/guardian.agent';
 import {
-  getDelegationTargets,
-  rememberMoment,
-  initToolRegistry,
-  getAllTools,
-  getTool,
-  listToolsForAgent,
-} from '../_shared';
+	  getDelegationTargets,
+	  rememberMoment,
+	  initToolRegistry,
+	  getTool,
+	  listToolsForAgent,
+	  executeTool,
+	} from '../_shared';
 import { callCloudLLM, callCloudLLMStream } from '../../core/cloud/api';
 import { toolsToOpenAIFunctions, buildSystemPrompt } from '../../core/cloud/function-calling';
 import { getAgentSystemPrompt } from '../../core/cloud/prompts/agent-prompts';
@@ -226,12 +226,12 @@ async function processWithLLM(
   const context = await recallRecentContext('master', 5);
   const masterTools = listToolsForAgent('master');
 
-  const functions = toolsToOpenAIFunctions([...getAllTools().values()]);
+  const functions = toolsToOpenAIFunctions(masterTools);
 
   const messages: { role: string; content: string }[] = [
     {
       role: 'system',
-      content: `${await getAgentSystemPrompt('master')}\n\n${generatePersonaPrompt()}\n${buildSystemPrompt('Master', [...getAllTools().values()])}`,
+	      content: `${await getAgentSystemPrompt('master')}\n\n${generatePersonaPrompt()}\n${buildSystemPrompt('Master', masterTools)}`,
     },
   ];
 
@@ -293,7 +293,10 @@ async function executeToolCall(
   }
 
   try {
-    const result = await entry.handler(args);
+	    const result = await executeTool(entry, args, {
+	      agentId: 'master',
+	      userConfirmed: args.confirmed === true,
+	    });
     if (result && result.success) {
       if (result.data) {
         return typeof result.data === 'string'
@@ -332,7 +335,6 @@ export async function* processMessageStream(
     toolsInitialized = true;
   }
 
-  const agentId: AgentId = 'master';
   const sanitized = sanitizeText(userMessage);
   const intent = classifyIntent(sanitized);
 
@@ -353,13 +355,13 @@ export async function* processMessageStream(
   (yield { type: 'thinking' as const, content: '分析中...', messageId }) as void;
 
   const context = await recallRecentContext('master', 5);
-  const allTools = [...getAllTools().values()];
-  const functions = toolsToOpenAIFunctions(allTools);
+  const masterTools = listToolsForAgent('master');
+  const functions = toolsToOpenAIFunctions(masterTools);
 
   const messages: { role: string; content: string }[] = [
     {
       role: 'system',
-      content: `${await getAgentSystemPrompt('master')}\n\n${buildSystemPrompt('Master', allTools)}`,
+	      content: `${await getAgentSystemPrompt('master')}\n\n${buildSystemPrompt('Master', masterTools)}`,
     },
   ];
 

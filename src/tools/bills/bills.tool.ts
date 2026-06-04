@@ -2,7 +2,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { getDatabase } from '../../core/database/database';
 import { BillRecord, ToolResult } from '../../shared/types';
 import { captureError } from '../../core/logger/logger';
-import { generateHashForBill } from '../../core/hashchain/hashchain';
+import { generateHashForBill, rebuildHashChain } from '../../core/hashchain/hashchain';
 import { recordCorrection } from '../../core/rules/rule-learner';
 
 export async function add_bill(params: {
@@ -44,7 +44,7 @@ export async function add_bill(params: {
       [id]
     );
 
-    generateHashForBill(id).catch(() => {});
+	    await generateHashForBill(id);
 
     return { success: true, data: bill };
   } catch (e) {
@@ -110,14 +110,15 @@ export async function modify_bill(params: {
       `UPDATE bills SET ${updates.join(', ')} WHERE id = ?`, values
     );
 
-    if (params.category !== undefined && params.category !== oldCategory) {
-      recordCorrection({
+	    if (params.category !== undefined && params.category !== oldCategory) {
+	      recordCorrection({
         billId: params.billId,
         merchant: oldMerchant,
         originalCategory: oldCategory,
         correctedCategory: params.category,
-      }).catch(() => {});
-    }
+	      }).catch(() => {});
+	    }
+	    await rebuildHashChain();
 
     const updated = await db.getFirstAsync<BillRecord>(
       'SELECT * FROM bills WHERE id = ?', [params.billId]
@@ -129,17 +130,21 @@ export async function modify_bill(params: {
   }
 }
 
-export async function delete_bill(params: { billId: string }): Promise<ToolResult> {
-  try {
-    if (!params.billId) return { success: false, error: '账单ID不能为空' };
-    const db = await getDatabase();
+export async function delete_bill(params: { billId: string; confirmed?: boolean }): Promise<ToolResult> {
+	  try {
+	    if (!params.billId) return { success: false, error: '账单ID不能为空' };
+	    if (!params.confirmed) {
+	      return { success: false, error: '删除账单需要用户显式确认', errorCode: 'CONFIRMATION_REQUIRED' };
+	    }
+	    const db = await getDatabase();
 
     const existing = await db.getFirstAsync<BillRecord>(
       'SELECT * FROM bills WHERE id = ?', [params.billId]
     );
     if (!existing) return { success: false, error: '账单不存在' };
 
-    await db.runAsync('DELETE FROM bills WHERE id = ?', [params.billId]);
+	    await db.runAsync('DELETE FROM bills WHERE id = ?', [params.billId]);
+	    await rebuildHashChain();
     return { success: true, data: { id: params.billId, deleted: true, amount: existing.amount, merchant: existing.merchant } };
   } catch (e) {
     captureError('BillsTool.delete_bill', e, 'Failed to delete bill');

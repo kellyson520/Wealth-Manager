@@ -20,6 +20,15 @@ export function sanitizeForCloud(data: Record<string, unknown>): Record<string, 
   return filtered;
 }
 
+export function sanitizeTextForCloud(text: string): string {
+  return maskIfSensitive(text)
+    .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
+    .replace(/javascript\s*:/gi, '')
+    .replace(/on\w+\s*=\s*["'][^"']*["']/gi, '')
+    .replace(/\b(?:\d+(?:\.\d{1,2})?\s*(?:元|块|¥|￥|CNY|RMB)\s*){2,}/gi, '[amount_sequence]')
+    .slice(0, 2000);
+}
+
 function maskIfSensitive(value: string): string {
   for (const pattern of SENSITIVE_PATTERNS) {
     if (pattern.test(value)) {

@@ -68,7 +68,14 @@ describe('add_bill Tool', () => {
 
       expect(result.success).toBe(true);
       expect(result.data).toEqual(mockBill);
-      expect(mockDb.runAsync).toHaveBeenCalledTimes(1);
+      expect(mockDb.runAsync).toHaveBeenCalledWith(
+        expect.stringContaining('INSERT INTO bills'),
+        expect.any(Array)
+      );
+      expect(mockDb.runAsync).toHaveBeenCalledWith(
+        expect.stringContaining('UPDATE bills SET hash'),
+        expect.any(Array)
+      );
     });
 
     test('creates an income bill successfully', async () => {

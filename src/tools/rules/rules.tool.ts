@@ -1,5 +1,4 @@
 import { getDatabase } from '../../core/database/database';
-import { v4 as uuidv4 } from 'uuid';
 import { captureError } from '../../core/logger/logger';
 import {
   addRule,

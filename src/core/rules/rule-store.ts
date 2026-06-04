@@ -38,13 +38,13 @@ async function seedDefaultRules(
 
   const now = new Date().toISOString();
 
-  const defaultRules: Array<{
+  const defaultRules: {
     name: string;
     description: string;
     priority: number;
     conditions: RuleConditionGroup;
     actions: unknown[];
-  }> = [
+  }[] = [
     {
       name: '餐饮自动分类',
       description: '匹配含餐饮关键词的账单',

@@ -11,7 +11,7 @@ export abstract class AggregateRoot {
     this._domainEvents.push(event);
   }
 
-  get domainEvents(): ReadonlyArray<DomainEvent> {
+  get domainEvents(): readonly DomainEvent[] {
     return this._domainEvents;
   }
 

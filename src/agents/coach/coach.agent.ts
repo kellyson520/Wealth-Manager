@@ -1,10 +1,9 @@
 import { IntentResult, AgentId } from '../../shared/types';
-import { set_budget, create_savings_goal, get_savings_progress, update_savings_progress } from '../../tools/budget/budget.tool';
+import { set_budget, create_savings_goal, get_savings_progress } from '../../tools/budget/budget.tool';
 import { get_streak_info, get_achievement } from '../../tools/gamification/gamification.tool';
 import { get_budget_status } from '../../tools/stats/stats.tool';
 import { run_proactive_check, get_proactive_insights, get_today_summary } from '../../tools/proactive/proactive.tool';
 import { schedule_daily_reminder } from '../../tools/automation/automation.tool';
-import { evaluate_all_scenarios } from '../../tools/automation/scenario-triggers';
 import {
   canCallTool,
   rememberThis,
