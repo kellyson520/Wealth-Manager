@@ -225,3 +225,80 @@ describe('NLU Confidence Scoring', () => {
     expect(match1.confidence).toBeGreaterThan(match2.confidence);
   });
 });
+
+describe('NLU real model regression cases', () => {
+  test.each([
+    ['午饭美团外卖花了42.8元，帮我记一笔', 'add_expense', 'ledger'],
+    ['工资到账12800，备注6月工资', 'add_income', 'ledger'],
+    ['这周我餐饮一共花了多少？', 'get_summary', 'analyst'],
+    ['我最近是不是有异常消费？', 'get_anomaly', 'analyst'],
+    ['我想知道哪些订阅还在扣费', 'subscriptions', 'guardian'],
+  ])('"%s" routes to %s/%s', (input, expectedIntent, expectedAgent) => {
+    const result = classifyIntent(input);
+    expect(result.intent).toBe(expectedIntent);
+    expect(result.agent).toBe(expectedAgent);
+  });
+
+  test('routes consumption trend chart request to chart analysis', () => {
+    const result = classifyIntent('帮我看一下这个月消费趋势，最好给个图');
+    expect(result.intent).toBe('get_chart');
+    expect(result.agent).toBe('analyst');
+    expect(result.params.chartType).toBe('line');
+    expect(result.params.period).toBe('month');
+  });
+
+  test('extracts multiple budgets from a single utterance', () => {
+    const result = classifyIntent('把餐饮预算设成1800，交通预算设成600');
+    expect(result.intent).toBe('set_budget');
+    expect(result.params.category).toBe('餐饮');
+    expect(result.params.limit).toBe(1800);
+    expect(result.params.budgets).toEqual([
+      { category: '餐饮', limit: 1800 },
+      { category: '交通', limit: 600 },
+    ]);
+  });
+
+  test('routes delete bill request through guardian confirmation flow', () => {
+    const result = classifyIntent('昨晚星巴克那笔删掉吧');
+    expect(result.intent).toBe('delete_bill');
+    expect(result.agent).toBe('guardian');
+    expect(result.params.keyword).toBe('星巴克');
+    expect(result.params.requiresConfirmation).toBe(true);
+  });
+
+  test('uses scheduler-compatible five-field cron for recurring reminders', () => {
+    const result = classifyIntent('每晚9点提醒我记账');
+    expect(result.intent).toBe('create_reminder');
+    expect(result.agent).toBe('guardian');
+    expect(result.params.cron).toBe('0 9 * * *');
+  });
+
+  test('extracts bank balance as an asset addition', () => {
+    const result = classifyIntent('招商银行活期余额23000，帮我加到资产里');
+    expect(result.intent).toBe('add_asset');
+    expect(result.agent).toBe('ledger');
+    expect(result.params.name).toBe('招商银行活期');
+    expect(result.params.amount).toBe(23000);
+    expect(result.params.type).toBe('银行账户');
+  });
+
+  test('extracts lent money and relative due date', () => {
+    const result = classifyIntent('借给小王3000，下个月15号还');
+    const now = new Date();
+    const dueDate = new Date(now.getFullYear(), now.getMonth() + 1, 15);
+    const expectedDueDate = `${dueDate.getFullYear()}-${String(dueDate.getMonth() + 1).padStart(2, '0')}-15`;
+    expect(result.intent).toBe('add_debt');
+    expect(result.agent).toBe('ledger');
+    expect(result.params.counterparty).toBe('小王');
+    expect(result.params.principal).toBe(3000);
+    expect(result.params.type).toBe('借出');
+    expect(result.params.dueDate).toBe(expectedDueDate);
+  });
+
+  test('keeps pasted bill text for import handler', () => {
+    const result = classifyIntent('导入这段账单：2026-06-01 滴滴 28.5；2026-06-02 全家 19.8');
+    expect(result.intent).toBe('import_bills');
+    expect(result.agent).toBe('ledger');
+    expect(result.params.rawText).toBe('2026-06-01 滴滴 28.5；2026-06-02 全家 19.8');
+  });
+});

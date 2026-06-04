@@ -17,6 +17,8 @@ export async function handleIntent(intent: IntentResult): Promise<string> {
       return handlePrivacyReport();
     case 'subscriptions':
       return handleSubscriptions();
+    case 'delete_bill':
+      return handleDeleteBill(intent.params);
     case 'verify_chain':
       return handleVerifyChain();
 	    case 'repair_chain':
@@ -198,6 +200,61 @@ async function handleSubscriptions(): Promise<string> {
     reply += '\n💡 检测到可能已停用但仍扣费的订阅，建议检查。';
   }
 
+  return reply;
+}
+
+async function handleDeleteBill(params: Record<string, unknown>): Promise<string> {
+  const billId = params.billId as string | undefined;
+  const confirmed = params.confirmed === true;
+
+  if (billId) {
+    if (!confirmed) {
+      return `删除账单是不可恢复操作。请确认后再执行：确认删除账单 ${billId}`;
+    }
+
+    const toolCheck = canCallTool(AGENT_ID, 'delete_bill');
+    if (!toolCheck.allowed) {
+      return `操作被拒绝：${toolCheck.reason}`;
+    }
+
+    const tool = getTool('delete_bill');
+    if (!tool) return '删除账单功能暂不可用。';
+
+    const result = await tool.handler({ billId, confirmed: true });
+    if (result.success) {
+      const data = result.data as { merchant?: string; amount?: number };
+      await rememberMoment(AGENT_ID, `删除账单:${billId}|${data.merchant || ''}|¥${data.amount || 0}`);
+      return `✅ 已删除账单 ${billId}${data.merchant ? `（${data.merchant} ¥${Number(data.amount || 0).toFixed(2)}）` : ''}。`;
+    }
+    return `删除账单失败：${result.error}`;
+  }
+
+  const searchTool = getTool('search_bills');
+  if (!searchTool) return '账单搜索功能暂不可用，无法定位要删除的记录。';
+
+  const searchParams: Record<string, unknown> = { limit: 5 };
+  if (params.keyword) searchParams.keyword = params.keyword;
+  if (params.date) {
+    searchParams.startDate = params.date;
+    searchParams.endDate = params.date;
+  }
+
+  const result = await searchTool.handler(searchParams);
+  if (!result.success || !Array.isArray(result.data)) {
+    return `定位账单失败：${result.error || '请重试'}`;
+  }
+
+  const bills = result.data as { id: string; merchant: string; amount: number; type: string; date: string }[];
+  if (bills.length === 0) {
+    return '没有找到符合条件的账单。请提供更明确的商户、金额或日期。';
+  }
+
+  let reply = '找到以下可能要删除的账单：\n';
+  for (const bill of bills) {
+    const typeLabel = bill.type === 'income' ? '收入' : '支出';
+    reply += `${bill.id} | ${bill.date} | ${typeLabel} | ${bill.merchant} ¥${bill.amount.toFixed(2)}\n`;
+  }
+  reply += '\n删除不可恢复。请回复“确认删除账单 <账单ID>”执行删除。';
   return reply;
 }
 

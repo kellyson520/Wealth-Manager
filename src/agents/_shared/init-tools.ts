@@ -177,7 +177,7 @@ export function initToolRegistry(): void {
       idempotent: true,
     },
     handler: search_bills,
-    allowedAgents: ['ledger', 'analyst'],
+    allowedAgents: ['ledger', 'analyst', 'guardian'],
   });
 
   registerTool({

@@ -1,6 +1,162 @@
 import { IntentResult } from '../../shared/types';
 
-const intentPatterns: { intent: string; patterns: RegExp[]; agent: string; extractParams: (match: RegExpMatchArray | null, text: string) => Record<string, unknown> }[] = [
+const BUDGET_PAIR_PATTERN = /([\u4e00-\u9fa5A-Za-z]{1,16})预算(?:设成|设置为|设为|调整为|定为|是|为)?\s*(\d+(?:\.\d{1,2})?)/g;
+
+function cleanupCategory(raw: string): string {
+  return raw
+    .replace(/^(?:把|将|给|帮我|请|设置|设定|调整|新增|添加|预算)+/, '')
+    .replace(/[，。,.、\s]/g, '')
+    .trim();
+}
+
+function extractBudgets(text: string): { category: string; limit: number }[] {
+  const budgets: { category: string; limit: number }[] = [];
+  for (const match of text.matchAll(BUDGET_PAIR_PATTERN)) {
+    const category = cleanupCategory(match[1]);
+    const limit = parseFloat(match[2]);
+    if (category && limit > 0) {
+      budgets.push({ category, limit });
+    }
+  }
+  return budgets;
+}
+
+function extractAmount(text: string): number {
+  const match = text.match(/(\d+(?:\.\d{1,2})?)/);
+  return match ? parseFloat(match[1]) : 0;
+}
+
+function normalizeDate(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function extractRelativeDate(text: string): string | undefined {
+  const now = new Date();
+  if (text.includes('昨天') || text.includes('昨晚')) {
+    return normalizeDate(new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1));
+  }
+  if (text.includes('今天') || text.includes('刚才')) {
+    return normalizeDate(now);
+  }
+  const nextMonthMatch = text.match(/下个月\s*(\d{1,2})[号日]/);
+  if (nextMonthMatch) {
+    return normalizeDate(new Date(now.getFullYear(), now.getMonth() + 1, parseInt(nextMonthMatch[1], 10)));
+  }
+  const monthDayMatch = text.match(/(\d{1,2})月\s*(\d{1,2})[号日]/);
+  if (monthDayMatch) {
+    const month = parseInt(monthDayMatch[1], 10) - 1;
+    const day = parseInt(monthDayMatch[2], 10);
+    const candidate = new Date(now.getFullYear(), month, day);
+    if (candidate.getTime() < new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime()) {
+      candidate.setFullYear(candidate.getFullYear() + 1);
+    }
+    return normalizeDate(candidate);
+  }
+  const dayMatch = text.match(/(?:本月|这个月|下次)?\s*(\d{1,2})[号日](?:还|归还|还款)?/);
+  if (dayMatch) {
+    const day = parseInt(dayMatch[1], 10);
+    const candidate = new Date(now.getFullYear(), now.getMonth(), day);
+    if (candidate.getTime() < new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime()) {
+      candidate.setMonth(candidate.getMonth() + 1);
+    }
+    return normalizeDate(candidate);
+  }
+  return undefined;
+}
+
+function extractDeleteKeyword(text: string): string | undefined {
+  const beforeDelete = text.match(/(?:昨天|昨晚|今天|刚才|上次|最近)?\s*([^，。,.！？\s]{2,20})(?:那笔|这笔|那条|这条|账单|记录).*(?:删|删除|移除|撤销)/);
+  if (beforeDelete) return beforeDelete[1].trim();
+
+  const afterDelete = text.match(/(?:删除|删掉|删了|移除|撤销).{0,6}?([^，。,.！？\s]{2,20})(?:那笔|这笔|账单|记录|消费)?/);
+  if (afterDelete) return afterDelete[1].trim();
+
+  return undefined;
+}
+
+function inferAssetType(text: string): string {
+  if (/(银行|存款|活期|余额|账户|卡)/.test(text)) return '银行账户';
+  if (/股票/.test(text)) return '股票';
+  if (/基金/.test(text)) return '基金';
+  if (/房|房产/.test(text)) return '房产';
+  if (/车|车辆/.test(text)) return '车辆';
+  if (/现金/.test(text)) return '现金';
+  return '其他';
+}
+
+function extractAssetParams(text: string): Record<string, unknown> {
+  const amount = extractAmount(text);
+  let name = '';
+
+  const balanceMatch = text.match(/(?:我(?:的)?|把|将)?\s*([^，。,.！？\s]+?)(?:余额|存款|市值|资产)\s*\d/);
+  if (balanceMatch) {
+    name = balanceMatch[1].trim();
+    if (text.includes('活期') && !name.includes('活期')) name += '活期';
+  }
+
+  if (!name) {
+    const addMatch = text.match(/(?:添加|增加|新增|记录|录入).{0,6}(?:资产)?\s*([^，。,.！？\d]+?)\s*\d/);
+    if (addMatch) name = addMatch[1].trim();
+  }
+
+  if (!name) {
+    name = text
+      .replace(/(?:帮我|请|把|将|添加|增加|新增|记录|录入|加到资产里|资产|余额|金额)/g, '')
+      .replace(/\d+(?:\.\d{1,2})?/g, '')
+      .replace(/[，。,.！？\s]/g, '')
+      .trim();
+  }
+
+  return {
+    name: name || '资产',
+    amount,
+    type: inferAssetType(text),
+  };
+}
+
+function extractDebtParams(text: string): Record<string, unknown> {
+  const amount = extractAmount(text);
+  const lendMatch = text.match(/(?:借给|借出给)\s*([\u4e00-\u9fa5A-Za-z_]{1,20})\s*(\d+(?:\.\d{1,2})?)/);
+  if (lendMatch) {
+    const counterparty = lendMatch[1];
+    const principal = parseFloat(lendMatch[2]);
+    return {
+      title: `借给${counterparty}`,
+      type: '借出',
+      principal,
+      amount: principal,
+      counterparty,
+      dueDate: extractRelativeDate(text),
+    };
+  }
+
+  const borrowMatch = text.match(/(?:向|找)\s*([\u4e00-\u9fa5A-Za-z_]{1,20})\s*(?:借了|借)\s*(\d+(?:\.\d{1,2})?)/);
+  if (borrowMatch) {
+    const counterparty = borrowMatch[1];
+    const principal = parseFloat(borrowMatch[2]);
+    return {
+      title: `向${counterparty}借款`,
+      type: '借入',
+      principal,
+      amount: principal,
+      counterparty,
+      dueDate: extractRelativeDate(text),
+    };
+  }
+
+  return {
+    title: text.replace(/[，。,.！？]/g, '').trim(),
+    type: text.includes('借给') || text.includes('借出') ? '借出' : '借入',
+    principal: amount,
+    amount,
+    dueDate: extractRelativeDate(text),
+  };
+}
+
+const intentPatterns: { intent: string; patterns: RegExp[]; agent: string; priority?: number; extractParams: (match: RegExpMatchArray | null, text: string) => Record<string, unknown> }[] = [
   {
     intent: 'add_expense',
     agent: 'ledger',
@@ -57,8 +213,8 @@ const intentPatterns: { intent: string; patterns: RegExp[]; agent: string; extra
     patterns: [
       /查[询找看]?\s*(?:账单|记录|消费|支出|收入)?\s*(.+)?/,
       /最近.*(?:账单|消费|记录)/,
-      /这个月.*(?:账单|消费|记录)?/,
-      /今天.*(?:账单|消费|记录)?/,
+      /这个月.*(?:账单|记录)/,
+      /今天.*(?:账单|记录)/,
       /历史.*(?:账单|记录)/,
     ],
     extractParams: (match, text) => {
@@ -68,6 +224,26 @@ const intentPatterns: { intent: string; patterns: RegExp[]; agent: string; extra
       else if (text.includes('本周') || text.includes('这周')) period = 'week';
       else if (text.includes('本月') || text.includes('这个月')) period = 'month';
       return { keyword, period };
+    },
+  },
+  {
+    intent: 'delete_bill',
+    agent: 'guardian',
+    priority: 0.2,
+    patterns: [
+      /.*(?:删掉|删除|删了|移除|撤销).*(?:账单|记录|消费|那笔|这笔).*/,
+      /.*(?:那笔|这笔|那条|这条).*(?:删掉|删除|删了|移除|撤销).*/,
+    ],
+    extractParams: (_match, text) => {
+      const keyword = extractDeleteKeyword(text);
+      const billId = text.match(/(?:账单|记录|id|ID)\s*([0-9a-f-]{8,36})/i)?.[1];
+      return {
+        billId,
+        keyword,
+        date: extractRelativeDate(text),
+        confirmed: /确认/.test(text),
+        requiresConfirmation: !/确认/.test(text),
+      };
     },
   },
   {
@@ -90,7 +266,9 @@ const intentPatterns: { intent: string; patterns: RegExp[]; agent: string; extra
   {
     intent: 'get_category_trend',
     agent: 'analyst',
+    priority: 0.05,
     patterns: [
+      /.*(?:消费|支出).*(?:趋势|变化|走势).*/,
       /分类.*(?:趋势|变化|分析)/,
       /趋势.*(?:分析|报告)/,
       /哪个.*(?:分类|类别).*(?:多|少|高|低)/,
@@ -104,7 +282,9 @@ const intentPatterns: { intent: string; patterns: RegExp[]; agent: string; extra
   {
     intent: 'get_anomaly',
     agent: 'analyst',
+    priority: 0.15,
     patterns: [
+      /.*(?:异常消费|消费异常|不正常|可疑消费).*/,
       /(?:异常|可疑).*(?:检测|消费|账单|交易)/,
       /(?:检测|发现).*(?:异常|可疑)/,
       /消费.*(?:异常|不正常|可疑)/,
@@ -149,9 +329,12 @@ const intentPatterns: { intent: string; patterns: RegExp[]; agent: string; extra
   {
     intent: 'get_chart',
     agent: 'analyst',
+    priority: 0.2,
     patterns: [
+      /.*(?:消费|支出).*(?:趋势|变化|走势).*(?:图|图表|可视化).*/,
+      /.*(?:图|图表|可视化).*(?:消费|支出).*(?:趋势|变化|走势).*/,
       /(?:生成|画|显示|看).*(?:图表|饼图|折线|柱状)/,
-      /(?:图|chart)/i,
+      /(?:图表|饼图|折线图|柱状图|chart)/i,
       /可视化.*(?:消费|账单|收入)/,
     ],
     extractParams: (_match, text) => {
@@ -190,13 +373,23 @@ const intentPatterns: { intent: string; patterns: RegExp[]; agent: string; extra
   {
     intent: 'set_budget',
     agent: 'coach',
+    priority: 0.1,
     patterns: [
+      /.*预算(?:设成|设置为|设为|调整为|定为|是|为)?\s*\d+(?:\.\d{1,2})?.*/,
       /(?:设置|设定|设定一个).*预算\s*.+\s*(\d+(?:\.\d{1,2})?)/,
       /(.+).*预算.*(\d+(?:\.\d{1,2})?)/,
       /预算\s*(?:是|为|设为).*(\d+(?:\.\d{1,2})?)/,
       /限[制定].*(.+?).*\s*(\d+)/,
     ],
     extractParams: (match, text) => {
+      const budgets = extractBudgets(text);
+      if (budgets.length > 0) {
+        return {
+          category: budgets[0].category,
+          limit: budgets[0].limit,
+          budgets,
+        };
+      }
       if (!match) return {};
       let category = '';
       let limit = 0;
@@ -205,7 +398,7 @@ const intentPatterns: { intent: string; patterns: RegExp[]; agent: string; extra
         if (/^\d+(\.\d{1,2})?$/.test(v)) {
           limit = parseFloat(v);
         } else if (v) {
-          category = v.replace(/[设置预算是为设制定限制]/g, '').trim();
+          category = cleanupCategory(v.replace(/[预算是为设制定限制]/g, ''));
         }
       }
       if (!category) category = '餐饮';
@@ -334,7 +527,7 @@ const intentPatterns: { intent: string; patterns: RegExp[]; agent: string; extra
       if (timeMatch) {
         const hour = parseInt(timeMatch[1]);
         const minute = timeMatch[2] ? parseInt(timeMatch[2]) : 0;
-        cron = `0 ${minute} ${hour} * * *`;
+        cron = `${minute} ${hour} * * *`;
       }
       return { name, type, cron };
     },
@@ -441,12 +634,14 @@ const intentPatterns: { intent: string; patterns: RegExp[]; agent: string; extra
   {
     intent: 'add_asset',
     agent: 'ledger',
+    priority: 0.15,
     patterns: [
+      /.*(?:余额|存款|市值)\s*\d+(?:\.\d{1,2})?.*(?:加到|添加到|记到|录入到)?资产.*/,
       /(?:添加|增加|新增|记录).*(?:资产)/,
       /(?:资产|存款|房产|股票|基金).*(?:添加|记录)/,
       /我(?:有|的).*?(?:存款|房产|股票|基金)\s*(\d+(?:\.\d{1,2})?)/,
     ],
-    extractParams: () => ({}),
+    extractParams: (_match, text) => extractAssetParams(text),
   },
   {
     intent: 'list_debts',
@@ -462,12 +657,15 @@ const intentPatterns: { intent: string; patterns: RegExp[]; agent: string; extra
   {
     intent: 'add_debt',
     agent: 'ledger',
+    priority: 0.15,
     patterns: [
+      /.*(?:借给|借出给)\s*[\u4e00-\u9fa5A-Za-z0-9_]{1,20}\s*\d+(?:\.\d{1,2})?.*/,
+      /.*(?:向|找)\s*[\u4e00-\u9fa5A-Za-z0-9_]{1,20}\s*(?:借了|借)\s*\d+(?:\.\d{1,2})?.*/,
       /(?:添加|记录|新增).*(?:债务|欠款|借款)/,
       /(?:借给|借了|欠).*(?:钱|多少)/,
       /(?:别人|谁).*欠.*钱/,
     ],
-    extractParams: () => ({}),
+    extractParams: (_match, text) => extractDebtParams(text),
   },
   {
     intent: 'list_tags',
@@ -490,12 +688,17 @@ const intentPatterns: { intent: string; patterns: RegExp[]; agent: string; extra
   {
     intent: 'import_bills',
     agent: 'ledger',
+    priority: 0.1,
     patterns: [
+      /(?:导入|上传|批量导入).*(?:这段|以下|这些).*/,
       /(?:导入|上传|批量导入).*(?:账单|数据)/,
       /(?:微信|支付宝|CSV).*(?:账单|导入)/,
       /(?:导入).*(?:微信|支付宝)账单/,
     ],
-    extractParams: () => ({}),
+    extractParams: (_match, text) => {
+      const rawText = text.split(/[：:]/).slice(1).join(':').trim();
+      return rawText ? { rawText } : {};
+    },
   },
   {
     intent: 'export_data',
@@ -592,13 +795,16 @@ const intentPatterns: { intent: string; patterns: RegExp[]; agent: string; extra
 
 export function classifyIntent(text: string): IntentResult {
   let bestMatch: IntentResult = { intent: 'unknown', params: {}, confidence: 0, agent: 'master' };
+  let bestScore = 0;
 
   for (const item of intentPatterns) {
     for (const pattern of item.patterns) {
       const match = text.match(pattern);
       if (match) {
         const confidence = calculateConfidence(match, text);
-        if (confidence > bestMatch.confidence) {
+        const score = confidence + (item.priority || 0);
+        if (score > bestScore) {
+          bestScore = score;
           bestMatch = {
             intent: item.intent,
             params: item.extractParams(match, text),

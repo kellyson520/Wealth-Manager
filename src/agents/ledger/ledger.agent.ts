@@ -283,12 +283,34 @@ async function handleAddDebt(params: Record<string, unknown>): Promise<string> {
     type: params.type || '借出',
     principal: params.principal || params.amount || 0,
     counterparty: params.counterparty || params.title,
+    dueDate: params.dueDate,
+    note: params.note,
   });
   if (result.success) return `已记录债务 "${params.title}"`;
   return `记录债务失败: ${result.error}`;
 }
 
-async function handleImportBills(_params: Record<string, unknown>): Promise<string> {
+async function handleImportBills(params: Record<string, unknown>): Promise<string> {
+  const rawText = typeof params.rawText === 'string' ? params.rawText.trim() : '';
+  if (rawText) {
+    const tool = getTool('ocr_import');
+    if (!tool) return '导入功能暂不可用。';
+    const normalizedText = normalizeInlineBillText(rawText);
+    const result = await tool.handler({ rawText: normalizedText, source: 'text' });
+    if (result.success && result.data) {
+      const data = result.data as { importedCount: number; imported?: { merchant: string; amount: number }[] };
+      if (data.importedCount > 0) {
+        const preview = (data.imported || [])
+          .slice(0, 3)
+          .map((bill) => `${bill.merchant} ¥${bill.amount.toFixed(2)}`)
+          .join('，');
+        return `已导入 ${data.importedCount} 条账单${preview ? `：${preview}` : ''}`;
+      }
+      return '没有从这段文本中识别到账单。请按“日期 商户 金额”的格式粘贴，例如“2026-06-01 滴滴 28.5”。';
+    }
+    return `导入账单失败：${result.error}`;
+  }
+
   const tool = getTool('get_import_history');
   if (!tool) return '导入功能暂不可用。';
   const result = await tool.handler({ limit: 10 });
@@ -298,6 +320,20 @@ async function handleImportBills(_params: Record<string, unknown>): Promise<stri
     return `最近导入记录:\n${history.map((h) => `${h.date}: ${h.count}笔`).join('\n')}`;
   }
   return '查询导入历史失败。';
+}
+
+function normalizeInlineBillText(rawText: string): string {
+  return rawText
+    .split(/[；;\n]+/)
+    .map((entry) => entry.trim())
+    .filter(Boolean)
+    .map((entry) => {
+      const match = entry.match(/^(\d{4}[-/]\d{1,2}[-/]\d{1,2})\s+(.+?)\s+(\d+(?:\.\d{1,2})?)$/);
+      if (!match) return entry;
+      const [, date, merchant, amount] = match;
+      return `${merchant.trim()} - ${amount} ${date.replace(/\//g, '-')}`;
+    })
+    .join('\n');
 }
 
 async function handleReimbursement(params: Record<string, unknown>): Promise<string> {
