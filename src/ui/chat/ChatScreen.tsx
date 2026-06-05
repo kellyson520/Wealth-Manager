@@ -120,7 +120,7 @@ export default function ChatScreen() {
           <View style={styles.avatar}>
             <Text style={styles.avatarText}>¥</Text>
           </View>
-          <View style={{ flex: 1 }}>
+          <View style={{ flex: 1, minWidth: 0 }}>
             <View style={styles.titleRow}>
               <View style={styles.statusDot} />
               <Text style={styles.title}>Wealth Manager</Text>
@@ -132,6 +132,13 @@ export default function ChatScreen() {
             </View>
           </View>
           <View style={styles.headerActions}>
+            <TouchableOpacity
+              style={styles.headerBtn}
+              onPress={() => router.push('/settings')}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.headerBtnText}>设置</Text>
+            </TouchableOpacity>
             <TouchableOpacity
               style={styles.headerBtn}
               onPress={() => router.push('/ai-cache')}
@@ -249,12 +256,12 @@ const styles = StyleSheet.create({
   },
   headerActions: {
     flexDirection: 'row',
-    gap: spacing.sm,
+    gap: 6,
   },
   headerBtn: {
-    minHeight: 36,
+    minHeight: 34,
     justifyContent: 'center',
-    paddingHorizontal: spacing.md,
+    paddingHorizontal: spacing.sm,
     paddingVertical: spacing.sm,
     borderRadius: radius.md,
     backgroundColor: colors.surfaceRaised,
