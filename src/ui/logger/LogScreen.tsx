@@ -12,6 +12,7 @@ import * as Clipboard from 'expo-clipboard';
 import { LogEntry, LogLevel } from '../../shared/types';
 import { logger } from '../../core/logger/logger';
 import { colors, radius, shadow, spacing } from '../theme';
+import AppShell from '../layout/AppShell';
 
 const LEVEL_COLORS: Record<LogLevel, string> = {
   debug: colors.textSubtle,
@@ -130,6 +131,7 @@ export default function LogScreen() {
   }, [entries]);
 
   return (
+    <AppShell>
     <View style={styles.container}>
       <View style={styles.header}>
         <View>
@@ -179,6 +181,7 @@ export default function LogScreen() {
         />
       )}
     </View>
+    </AppShell>
   );
 }
 

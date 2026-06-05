@@ -14,6 +14,7 @@ import {
   PromptCacheRuntimeStats,
 } from '../../core/cloud/prompt-cache';
 import { colors, radius, shadow, spacing } from '../theme';
+import AppShell from '../layout/AppShell';
 
 function formatPercent(value: number): string {
   return `${Math.round(value * 10) / 10}%`;
@@ -83,19 +84,22 @@ export default function AiCacheScreen() {
 
   if (loading && !dashboard) {
     return (
-      <View style={styles.loading}>
-        <ActivityIndicator color={colors.accent} />
-        <Text style={styles.loadingText}>加载 AI 运行数据</Text>
-      </View>
+      <AppShell>
+        <View style={styles.loading}>
+          <ActivityIndicator color={colors.accent} />
+          <Text style={styles.loadingText}>加载 AI 运行数据</Text>
+        </View>
+      </AppShell>
     );
   }
 
   return (
-    <ScrollView
-      style={styles.container}
-      contentContainerStyle={styles.content}
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => refresh(true)} tintColor={colors.accent} />}
-    >
+    <AppShell>
+      <ScrollView
+        style={styles.container}
+        contentContainerStyle={styles.content}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => refresh(true)} tintColor={colors.accent} />}
+      >
       <View style={styles.header}>
         <View>
           <Text style={styles.title}>AI 运行面板</Text>
@@ -155,7 +159,8 @@ export default function AiCacheScreen() {
           </View>
         ))}
       </View>
-    </ScrollView>
+      </ScrollView>
+    </AppShell>
   );
 }
 

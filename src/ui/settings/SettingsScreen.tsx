@@ -3,31 +3,35 @@ import type { ReactNode } from 'react';
 import {
   ActivityIndicator,
   RefreshControl,
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   Switch,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
-import { useRouter } from 'expo-router';
 import type { PersonaParams, UserPreferences } from '../../shared/types';
 import {
   getPersonaSnapshot,
   isNluLearningEnabled,
   listAiMemories,
   setNluLearningEnabled,
+  updatePersonaSnapshot,
 } from '../../core/memory/adaptive-context';
 import { getPromptCacheDashboard } from '../../core/cloud/prompt-cache';
 import { loadPersona, setPersonaParams, setPreferences } from '../../core/persona/persona-engine';
 import { colors, radius, shadow, spacing } from '../theme';
+import AppShell from '../layout/AppShell';
 
 type SettingsState = {
   personaParams: PersonaParams;
   preferences: UserPreferences;
   learningEnabled: boolean;
   personaVersion: number;
+  soul: string;
+  toneRulesText: string;
+  boundariesText: string;
   memoryCount: number;
   cacheHitRate: number;
 };
@@ -37,6 +41,9 @@ const DEFAULT_STATE: SettingsState = {
   preferences: { currency: 'CNY', language: 'zh-Hans', theme: 'dark', firstDayOfWeek: 1 },
   learningEnabled: true,
   personaVersion: 1,
+  soul: '',
+  toneRulesText: '',
+  boundariesText: '',
   memoryCount: 0,
   cacheHitRate: 0,
 };
@@ -48,7 +55,6 @@ const PERSONA_CONTROLS: { key: keyof PersonaParams; label: string; hint: string 
 ];
 
 export default function SettingsScreen() {
-  const router = useRouter();
   const [state, setState] = useState<SettingsState>(DEFAULT_STATE);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -70,6 +76,9 @@ export default function SettingsScreen() {
         preferences: persona.preferences,
         learningEnabled,
         personaVersion: snapshot.version,
+        soul: snapshot.soul,
+        toneRulesText: snapshot.toneRules.join('\n'),
+        boundariesText: snapshot.boundaries.join('\n'),
         memoryCount: memories.length,
         cacheHitRate: cache.overall.averageHitRate,
       });
@@ -120,18 +129,42 @@ export default function SettingsScreen() {
     }
   }, []);
 
+  const savePersonaSnapshot = useCallback(async () => {
+    setSavingKey('snapshot');
+    try {
+      const snapshot = await updatePersonaSnapshot({
+        soul: state.soul,
+        toneRules: splitLines(state.toneRulesText),
+        boundaries: splitLines(state.boundariesText),
+        source: 'settings',
+      });
+      setState((prev) => ({
+        ...prev,
+        personaVersion: snapshot.version,
+        soul: snapshot.soul,
+        toneRulesText: snapshot.toneRules.join('\n'),
+        boundariesText: snapshot.boundaries.join('\n'),
+      }));
+    } finally {
+      setSavingKey(null);
+    }
+  }, [state.boundariesText, state.soul, state.toneRulesText]);
+
   if (loading) {
     return (
-      <SafeAreaView style={styles.loading}>
-        <ActivityIndicator color={colors.accent} />
-        <Text style={styles.loadingText}>加载设置</Text>
-      </SafeAreaView>
+      <AppShell>
+        <View style={styles.loading}>
+          <ActivityIndicator color={colors.accent} />
+          <Text style={styles.loadingText}>加载设置</Text>
+        </View>
+      </AppShell>
     );
   }
 
   return (
-    <SafeAreaView style={styles.container}>
+    <AppShell>
       <ScrollView
+        style={styles.container}
         contentContainerStyle={styles.content}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => refresh(true)} tintColor={colors.accent} />}
       >
@@ -140,9 +173,6 @@ export default function SettingsScreen() {
             <Text style={styles.title}>设置</Text>
             <Text style={styles.subtitle}>人格 · 记忆 · 学习 · 运行</Text>
           </View>
-          <TouchableOpacity style={styles.headerBtn} onPress={() => router.push('/ai-cache')}>
-            <Text style={styles.headerBtnText}>运行面板</Text>
-          </TouchableOpacity>
         </View>
 
         <View style={styles.summaryGrid}>
@@ -177,6 +207,54 @@ export default function SettingsScreen() {
               </View>
             </View>
           ))}
+        </Section>
+
+        <Section title="人格定义">
+          <View style={styles.editorBlock}>
+            <Text style={styles.controlLabel}>SOUL</Text>
+            <TextInput
+              style={[styles.textInput, styles.soulInput]}
+              value={state.soul}
+              onChangeText={(soul) => setState((prev) => ({ ...prev, soul }))}
+              multiline
+              textAlignVertical="top"
+              placeholder="稳定身份、目标和约束"
+              placeholderTextColor={colors.textSubtle}
+            />
+          </View>
+          <View style={styles.editorBlock}>
+            <Text style={styles.controlLabel}>语气规则</Text>
+            <TextInput
+              style={styles.textInput}
+              value={state.toneRulesText}
+              onChangeText={(toneRulesText) => setState((prev) => ({ ...prev, toneRulesText }))}
+              multiline
+              textAlignVertical="top"
+              placeholder="每行一条"
+              placeholderTextColor={colors.textSubtle}
+            />
+          </View>
+          <View style={styles.editorBlock}>
+            <Text style={styles.controlLabel}>边界规则</Text>
+            <TextInput
+              style={styles.textInput}
+              value={state.boundariesText}
+              onChangeText={(boundariesText) => setState((prev) => ({ ...prev, boundariesText }))}
+              multiline
+              textAlignVertical="top"
+              placeholder="每行一条"
+              placeholderTextColor={colors.textSubtle}
+            />
+          </View>
+          <View style={styles.saveRow}>
+            <TouchableOpacity
+              style={[styles.saveBtn, savingKey === 'snapshot' && styles.saveBtnDisabled]}
+              onPress={savePersonaSnapshot}
+              disabled={savingKey === 'snapshot'}
+            >
+              <Text style={styles.saveText}>{savingKey === 'snapshot' ? '保存中' : '保存人格'}</Text>
+            </TouchableOpacity>
+          </View>
         </Section>
 
         <Section title="偏好">
@@ -217,14 +295,8 @@ export default function SettingsScreen() {
           </View>
         </Section>
 
-        <Section title="调试入口">
-          <View style={styles.navGrid}>
-            <NavButton label="AI运行" onPress={() => router.push('/ai-cache')} />
-            <NavButton label="日志" onPress={() => router.push('/log')} />
-          </View>
-        </Section>
       </ScrollView>
-    </SafeAreaView>
+    </AppShell>
   );
 }
 
@@ -282,12 +354,11 @@ function SegmentedRow({
   );
 }
 
-function NavButton({ label, onPress }: { label: string; onPress: () => void }) {
-  return (
-    <TouchableOpacity style={styles.navBtn} onPress={onPress} activeOpacity={0.75}>
-      <Text style={styles.navText}>{label}</Text>
-    </TouchableOpacity>
-  );
+function splitLines(text: string): string[] {
+  return text
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean);
 }
 
 const styles = StyleSheet.create({
@@ -326,18 +397,6 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
     fontSize: 12,
     marginTop: 3,
-  },
-  headerBtn: {
-    minHeight: 36,
-    justifyContent: 'center',
-    paddingHorizontal: spacing.md,
-    borderRadius: radius.md,
-    backgroundColor: colors.accentStrong,
-  },
-  headerBtnText: {
-    color: colors.white,
-    fontSize: 13,
-    fontWeight: '700',
   },
   summaryGrid: {
     flexDirection: 'row',
@@ -473,23 +532,43 @@ const styles = StyleSheet.create({
     padding: spacing.md,
     gap: spacing.md,
   },
-  navGrid: {
-    flexDirection: 'row',
-    gap: spacing.sm,
+  editorBlock: {
     padding: spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+    gap: spacing.sm,
   },
-  navBtn: {
-    flex: 1,
-    minHeight: 42,
-    alignItems: 'center',
-    justifyContent: 'center',
+  textInput: {
+    minHeight: 92,
     borderRadius: radius.md,
-    backgroundColor: colors.surfaceSoft,
     borderWidth: 1,
     borderColor: colors.borderStrong,
-  },
-  navText: {
+    backgroundColor: colors.surface,
     color: colors.text,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  soulInput: {
+    minHeight: 132,
+  },
+  saveRow: {
+    padding: spacing.md,
+    alignItems: 'flex-end',
+  },
+  saveBtn: {
+    minHeight: 38,
+    justifyContent: 'center',
+    paddingHorizontal: spacing.lg,
+    borderRadius: radius.md,
+    backgroundColor: colors.accentStrong,
+  },
+  saveBtnDisabled: {
+    backgroundColor: colors.surfaceSoft,
+  },
+  saveText: {
+    color: colors.white,
     fontSize: 13,
     fontWeight: '800',
   },

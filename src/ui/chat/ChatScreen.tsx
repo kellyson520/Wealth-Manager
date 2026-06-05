@@ -4,11 +4,8 @@ import {
   Text,
   FlatList,
   StyleSheet,
-  SafeAreaView,
   StatusBar,
-  TouchableOpacity,
 } from 'react-native';
-import { useRouter } from 'expo-router';
 import MessageBubble from './MessageBubble';
 import InputBar from './InputBar';
 import QuickBar from './QuickBar';
@@ -16,6 +13,7 @@ import { ChatMessage } from '../../shared/types';
 import { processMessage } from '../../agents/master/master.agent';
 import { logger, captureError } from '../../core/logger/logger';
 import { colors, radius, shadow, spacing } from '../theme';
+import AppShell from '../layout/AppShell';
 
 const WELCOME_MESSAGE: ChatMessage = {
   id: 'welcome',
@@ -28,7 +26,6 @@ export default function ChatScreen() {
   const [messages, setMessages] = useState<ChatMessage[]>([WELCOME_MESSAGE]);
   const [isProcessing, setIsProcessing] = useState(false);
   const flatListRef = useRef<FlatList>(null);
-  const router = useRouter();
 
   useEffect(() => {
     const originalHandler = ErrorUtils.getGlobalHandler?.();
@@ -113,7 +110,8 @@ export default function ChatScreen() {
   const keyExtractor = useCallback((item: ChatMessage) => item.id, []);
 
   return (
-    <SafeAreaView style={styles.container}>
+    <AppShell>
+    <View style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor={colors.bg} />
       <View style={styles.header}>
         <View style={styles.headerContent}>
@@ -130,29 +128,6 @@ export default function ChatScreen() {
               <Text style={styles.contextDivider}>·</Text>
               <Text style={styles.subtitle}>AI 财务助手</Text>
             </View>
-          </View>
-          <View style={styles.headerActions}>
-            <TouchableOpacity
-              style={styles.headerBtn}
-              onPress={() => router.push('/settings')}
-              activeOpacity={0.7}
-            >
-              <Text style={styles.headerBtnText}>设置</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.headerBtn}
-              onPress={() => router.push('/ai-cache')}
-              activeOpacity={0.7}
-            >
-              <Text style={styles.headerBtnText}>运行</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.headerBtn}
-              onPress={() => router.push('/log')}
-              activeOpacity={0.7}
-            >
-              <Text style={styles.headerBtnText}>日志</Text>
-            </TouchableOpacity>
           </View>
         </View>
       </View>
@@ -182,7 +157,8 @@ export default function ChatScreen() {
         onVoice={() => handleSend('语音记账')}
         onOCR={() => handleSend('OCR导入小票')}
       />
-    </SafeAreaView>
+    </View>
+    </AppShell>
   );
 }
 
@@ -253,25 +229,6 @@ const styles = StyleSheet.create({
   subtitle: {
     fontSize: 12,
     color: colors.textMuted,
-  },
-  headerActions: {
-    flexDirection: 'row',
-    gap: 6,
-  },
-  headerBtn: {
-    minHeight: 34,
-    justifyContent: 'center',
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.sm,
-    borderRadius: radius.md,
-    backgroundColor: colors.surfaceRaised,
-    borderWidth: 1,
-    borderColor: colors.borderStrong,
-  },
-  headerBtnText: {
-    fontSize: 12,
-    color: colors.text,
-    fontWeight: '700',
   },
   messageList: {
     flex: 1,
