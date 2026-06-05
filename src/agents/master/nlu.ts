@@ -882,6 +882,26 @@ const intentPatterns: { intent: string; patterns: RegExp[]; agent: string; prior
     }),
   },
   {
+    intent: 'remember_user_preference',
+    agent: 'master',
+    priority: 0.35,
+    patterns: [
+      /^(?:请)?记住[：:\s]*(?!.*(?:什么|哪些))(.+)/,
+      /^我(?:喜欢|偏好|习惯|希望)[：:\s]*(.+)/,
+    ],
+    extractParams: (_match, text) => {
+      const value = text
+        .replace(/^(?:请)?记住[：:\s]*/, '')
+        .replace(/^我(?:喜欢|偏好|习惯|希望)[：:\s]*/, '')
+        .trim();
+      const key = /回复|回答|语气|简洁|详细/.test(text) ? '沟通偏好'
+        : /提醒|通知/.test(text) ? '提醒偏好'
+          : /预算|消费|超支/.test(text) ? '预算偏好'
+            : '用户偏好';
+      return { key, value, confidence: 0.9 };
+    },
+  },
+  {
     intent: 'update_ai_persona',
     agent: 'master',
     priority: 0.25,

@@ -20,6 +20,10 @@ import { generatePersonaPrompt, updateMood, loadPersona } from '../../core/perso
 import { messageBus } from '../../core/message-bus';
 import { buildAdaptiveContextPrompt } from '../../core/memory/adaptive-context';
 import {
+  maybeStoreUserPreferenceFromText,
+  recordToolProcedureMemory,
+} from '../../core/memory/memory-extractor';
+import {
   inferIntentFromToolCall,
   learnIntentAlias,
   loadNluLearningSamples,
@@ -188,6 +192,7 @@ export async function processMessage(
   const sanitized = sanitizeText(userMessage);
   await loadNluLearningSamples();
   const intent = classifyIntent(sanitized);
+  maybeStoreUserPreferenceFromText(sanitized).catch(() => {});
 
   let replyContent: string;
   let safetyWarning: string | undefined;
@@ -245,6 +250,7 @@ async function handleMasterControl(intent: IntentResult): Promise<string> {
     delete_ai_memory: 'delete_ai_memory',
     update_ai_persona: 'update_ai_persona',
     set_ai_learning_enabled: 'set_ai_learning_enabled',
+    remember_user_preference: 'remember_user_preference',
   };
   const toolName = toolMap[intent.intent];
   if (!toolName) return generateFallbackReply();
@@ -273,6 +279,10 @@ async function handleMasterControl(intent: IntentResult): Promise<string> {
 
   if (intent.intent === 'update_ai_persona') {
     return '已更新 AI 人格设置。';
+  }
+
+  if (intent.intent === 'remember_user_preference') {
+    return '已记住这个偏好。';
   }
 
   return '已完成。';
@@ -349,6 +359,13 @@ async function processWithLLM(
       response.functionCall.name,
       response.functionCall.arguments
     );
+    if (toolResult) {
+      recordToolProcedureMemory({
+        userText,
+        toolName: response.functionCall.name,
+        args,
+      }).catch(() => {});
+    }
     if (toolResult) return toolResult;
   }
 
@@ -415,6 +432,7 @@ export async function* processMessageStream(
   const sanitized = sanitizeText(userMessage);
   await loadNluLearningSamples();
   const intent = classifyIntent(sanitized);
+  maybeStoreUserPreferenceFromText(sanitized).catch(() => {});
 
   if (!cloudApiKey) {
     const reply = intent.intent === 'unknown' || intent.confidence < 0.3
@@ -495,6 +513,13 @@ export async function* processMessageStream(
             chunk.functionCall.name,
             chunk.functionCall.arguments
           );
+          if (toolResult) {
+            recordToolProcedureMemory({
+              userText: sanitized,
+              toolName: chunk.functionCall.name,
+              args: parseToolArgs(chunk.functionCall.arguments),
+            }).catch(() => {});
+          }
 
           yield { type: 'tool_result', content: toolResult || '工具执行完成', messageId };
         }

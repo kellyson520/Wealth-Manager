@@ -249,6 +249,7 @@ export function inferIntentFromToolCall(
     case 'delete_ai_memory':
     case 'update_ai_persona':
     case 'set_ai_learning_enabled':
+    case 'remember_user_preference':
       return { intent: toolName, agent: 'master', params: args };
     default:
       return null;

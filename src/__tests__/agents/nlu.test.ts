@@ -453,6 +453,7 @@ describe('NLU real model regression cases', () => {
     ['关闭自动学习', 'set_ai_learning_enabled', 'master'],
     ['开启自学习', 'set_ai_learning_enabled', 'master'],
     ['严谨一点', 'update_ai_persona', 'master'],
+    ['请记住：以后回复简洁一点', 'remember_user_preference', 'master'],
   ])('routes second-pass Mimo fuzz case "%s" to %s/%s', (input, expectedIntent, expectedAgent) => {
     const result = classifyIntent(input);
     expect(result.intent).toBe(expectedIntent);
