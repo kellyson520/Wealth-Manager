@@ -88,4 +88,20 @@ describe('NLU learning layer', () => {
     expect(result.intent).toBe('set_budget');
     expect(result.agent).toBe('coach');
   });
+
+  test('learned alias gains confidence after repeated exact hits', () => {
+    addNluLearningSampleForTest({
+      text: '奶茶封印',
+      intent: 'set_budget',
+      agent: 'coach',
+      source: 'user_feedback',
+      confidence: 0.94,
+    });
+
+    const first = classifyIntent('奶茶封印');
+    const second = classifyIntent('奶茶封印');
+
+    expect(first.intent).toBe('set_budget');
+    expect(second.confidence).toBeGreaterThan(first.confidence);
+  });
 });

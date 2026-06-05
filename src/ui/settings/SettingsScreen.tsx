@@ -26,7 +26,14 @@ import {
 import { getPromptCacheDashboard } from '../../core/cloud/prompt-cache';
 import { DatabaseSecurityStatus, getDatabaseSecurityStatus } from '../../core/database/database';
 import { loadPersona, setPersonaParams, setPreferences } from '../../core/persona/persona-engine';
-import { approveNluLearningCandidate, listNluLearningCandidates, NluLearningSample } from '../../agents/master/nlu-learning';
+import {
+  approveNluLearningCandidate,
+  getNluLearningReviewStats,
+  listNluLearningCandidates,
+  NluLearningReviewStats,
+  NluLearningSample,
+  rejectNluLearningCandidate,
+} from '../../agents/master/nlu-learning';
 import { colors, radius, shadow, spacing } from '../theme';
 import AppShell from '../layout/AppShell';
 
@@ -43,6 +50,7 @@ type SettingsState = {
   databaseSecurity: DatabaseSecurityStatus | null;
   personaHistory: PersonaSnapshot[];
   nluCandidates: NluLearningSample[];
+  nluStats: NluLearningReviewStats;
 };
 
 const DEFAULT_STATE: SettingsState = {
@@ -58,6 +66,7 @@ const DEFAULT_STATE: SettingsState = {
   databaseSecurity: null,
   personaHistory: [],
   nluCandidates: [],
+  nluStats: { total: 0, candidates: 0, approved: 0, autoPromoted: 0 },
 };
 
 const PERSONA_CONTROLS: { key: keyof PersonaParams; label: string; hint: string }[] = [
@@ -76,7 +85,7 @@ export default function SettingsScreen() {
     if (silent) setRefreshing(true);
     else setLoading(true);
     try {
-      const [persona, snapshot, learningEnabled, memories, cache, databaseSecurity, personaHistory, nluCandidates] = await Promise.all([
+      const [persona, snapshot, learningEnabled, memories, cache, databaseSecurity, personaHistory, nluCandidates, nluStats] = await Promise.all([
         loadPersona(),
         getPersonaSnapshot(),
         isNluLearningEnabled(),
@@ -85,6 +94,7 @@ export default function SettingsScreen() {
         getDatabaseSecurityStatus(),
         listPersonaSnapshots(6),
         listNluLearningCandidates(6),
+        getNluLearningReviewStats(),
       ]);
       setState({
         personaParams: persona.personaParams,
@@ -99,6 +109,7 @@ export default function SettingsScreen() {
         databaseSecurity,
         personaHistory,
         nluCandidates,
+        nluStats,
       });
     } finally {
       setLoading(false);
@@ -201,6 +212,18 @@ export default function SettingsScreen() {
     setSavingKey(`nlu:${id}`);
     try {
       await approveNluLearningCandidate(id);
+      await refresh(true);
+    } finally {
+      setSavingKey(null);
+    }
+  }, [refresh]);
+
+  const rejectCandidate = useCallback(async (id: string) => {
+    const confirmed = await confirmAction('拒绝学习样本', '该候选表达会从审核队列删除，不会进入自动意图匹配。');
+    if (!confirmed) return;
+    setSavingKey(`nlu-reject:${id}`);
+    try {
+      await rejectNluLearningCandidate(id);
       await refresh(true);
     } finally {
       setSavingKey(null);
@@ -362,6 +385,11 @@ export default function SettingsScreen() {
         </Section>
 
         <Section title="学习">
+          <View style={styles.learningStats}>
+            <SummaryItem label="候选" value={`${state.nluStats.candidates}`} />
+            <SummaryItem label="已启用" value={`${state.nluStats.approved}`} valueColor={colors.income} />
+            <SummaryItem label="自提升" value={`${state.nluStats.autoPromoted}`} valueColor={colors.accent} />
+          </View>
           <View style={styles.switchRow}>
             <View style={styles.controlText}>
               <Text style={styles.controlLabel}>NLU 自动扩充</Text>
@@ -381,13 +409,22 @@ export default function SettingsScreen() {
                 <Text style={styles.controlLabel}>{candidate.text}{' -> '}{candidate.intent}</Text>
                 <Text style={styles.controlHint}>hits {candidate.hits} · {candidate.source}</Text>
               </View>
-              <TouchableOpacity
-                style={styles.smallActionBtn}
-                onPress={() => approveCandidate(candidate.id)}
-                disabled={savingKey === `nlu:${candidate.id}`}
-              >
-                <Text style={styles.smallActionText}>批准</Text>
-              </TouchableOpacity>
+              <View style={styles.actionGroup}>
+                <TouchableOpacity
+                  style={styles.smallActionBtn}
+                  onPress={() => approveCandidate(candidate.id)}
+                  disabled={savingKey === `nlu:${candidate.id}`}
+                >
+                  <Text style={styles.smallActionText}>批准</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.smallActionBtn, styles.rejectActionBtn]}
+                  onPress={() => rejectCandidate(candidate.id)}
+                  disabled={savingKey === `nlu-reject:${candidate.id}`}
+                >
+                  <Text style={styles.rejectActionText}>拒绝</Text>
+                </TouchableOpacity>
+              </View>
             </View>
           ))}
         </Section>
@@ -659,6 +696,14 @@ const styles = StyleSheet.create({
     padding: spacing.md,
     gap: spacing.md,
   },
+  learningStats: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
+    padding: spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
   securityRow: {
     minHeight: 76,
     flexDirection: 'row',
@@ -748,6 +793,21 @@ const styles = StyleSheet.create({
   },
   smallActionText: {
     color: colors.text,
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  actionGroup: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'flex-end',
+    gap: spacing.sm,
+  },
+  rejectActionBtn: {
+    borderColor: colors.danger,
+    backgroundColor: colors.dangerSoft,
+  },
+  rejectActionText: {
+    color: colors.danger,
     fontSize: 12,
     fontWeight: '800',
   },

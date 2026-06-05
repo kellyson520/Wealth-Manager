@@ -331,6 +331,7 @@ async function initTables(db: SQLite.SQLiteDatabase): Promise<void> {
       hit_rate REAL DEFAULT 0,
       source TEXT DEFAULT 'non_stream',
       model TEXT,
+      miss_reason TEXT,
       created_at TEXT NOT NULL
     );
   `);
@@ -369,6 +370,7 @@ async function migrateAuditLog(db: SQLite.SQLiteDatabase): Promise<void> {
 async function migrateAdaptiveMemory(db: SQLite.SQLiteDatabase): Promise<void> {
   const migrations = [
     `ALTER TABLE user_profile_memory ADD COLUMN hits INTEGER DEFAULT 1`,
+    `ALTER TABLE prompt_cache_telemetry ADD COLUMN miss_reason TEXT`,
   ];
 
   for (const statement of migrations) {

@@ -151,10 +151,33 @@ describe('prompt cache planning', () => {
     expect(scope).toBe('coach:mimo-v2.5-pro:p3:tabcdef12');
     expect(stats.agentId).toBe('coach');
     expect(stats.averageHitRate).toBe(90);
+    expect(stats.targetHitRate).toBe(90);
+    expect(stats.advice.status).toBe('healthy');
     await Promise.resolve();
     expect(mockRunAsync).toHaveBeenCalledWith(
       expect.stringContaining('INSERT INTO prompt_cache_telemetry'),
       expect.arrayContaining(['coach:mimo-v2.5-pro:p3:tabcdef12', 'coach', 1600, 120, 1440, 90, 'stream', 'mimo-v2.5-pro'])
+    );
+  });
+
+  test('records cache miss reason and recommends pressure handling', async () => {
+    recordPromptCacheUsage(
+      'master:mimo-v2.5-pro',
+      { promptTokens: 1600, cachedPromptTokens: 0, completionTokens: 100 },
+      { agentId: 'master', source: 'non_stream', model: 'mimo-v2.5-pro' }
+    );
+    const stats = recordPromptCacheUsage(
+      'master:mimo-v2.5-pro',
+      { promptTokens: 1600, cachedPromptTokens: 400, completionTokens: 80 },
+      { agentId: 'master', source: 'stream', model: 'mimo-v2.5-pro' }
+    );
+
+    expect(stats.budgetPressure).toBe('tighten');
+    expect(stats.advice.status).toBe('dynamic_pressure');
+    await Promise.resolve();
+    expect(mockRunAsync).toHaveBeenLastCalledWith(
+      expect.stringContaining('miss_reason'),
+      expect.arrayContaining(['dynamic_context_pressure'])
     );
   });
 
@@ -209,5 +232,7 @@ describe('prompt cache planning', () => {
     expect(dashboard.recent).toHaveLength(2);
     expect(dashboard.cost.savedPromptTokens).toBe(1600);
     expect(dashboard.cost.cacheSavingsRate).toBe(48.48);
+    expect(dashboard.cost.estimatedUncachedCostUnits).toBe(3450);
+    expect(dashboard.cost.savedCostUnits).toBeGreaterThan(0);
   });
 });

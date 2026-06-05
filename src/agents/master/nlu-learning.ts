@@ -30,6 +30,13 @@ export interface LearnIntentAliasParams {
   confidence?: number;
 }
 
+export interface NluLearningReviewStats {
+  total: number;
+  candidates: number;
+  approved: number;
+  autoPromoted: number;
+}
+
 const MIN_ALIAS_LENGTH = 2;
 const MAX_ALIAS_LENGTH = 120;
 const HIGH_CONFIDENCE_STATIC_MATCH = 0.85;
@@ -234,6 +241,42 @@ export async function approveNluLearningCandidate(id: string): Promise<boolean> 
   return (result.changes || 0) > 0;
 }
 
+export async function rejectNluLearningCandidate(id: string): Promise<boolean> {
+  if (!id) return false;
+  const db = await getDatabase();
+  const result = await db.runAsync(
+    'DELETE FROM nlu_learning_samples WHERE id = ? AND enabled = 0',
+    [id]
+  );
+  loaded = false;
+  return (result.changes || 0) > 0;
+}
+
+export async function getNluLearningReviewStats(): Promise<NluLearningReviewStats> {
+  const db = await getDatabase();
+  const row = await db.getFirstAsync<{
+    total?: number;
+    candidates?: number;
+    approved?: number;
+    auto_promoted?: number;
+  }>(
+    `SELECT
+       COUNT(*) as total,
+       SUM(CASE WHEN enabled = 0 THEN 1 ELSE 0 END) as candidates,
+       SUM(CASE WHEN enabled = 1 THEN 1 ELSE 0 END) as approved,
+       SUM(CASE WHEN enabled = 1 AND source = 'cloud_function' AND hits >= ? THEN 1 ELSE 0 END) as auto_promoted
+     FROM nlu_learning_samples`,
+    [AUTO_ENABLE_HITS]
+  );
+
+  return {
+    total: row?.total || 0,
+    candidates: row?.candidates || 0,
+    approved: row?.approved || 0,
+    autoPromoted: row?.auto_promoted || 0,
+  };
+}
+
 export function applyLearnedIntent(text: string, base: IntentResult): IntentResult {
   if (learnedSamples.length === 0) return base;
   const normalizedText = normalizeNluText(text);
@@ -241,6 +284,7 @@ export function applyLearnedIntent(text: string, base: IntentResult): IntentResu
 
   const exact = learnedSamples.find((sample) => sample.enabled && sample.normalizedText === normalizedText);
   if (exact) {
+    reinforceSample(exact, 0.01);
     return sampleToIntent(exact, base, 0.94);
   }
 
@@ -253,6 +297,7 @@ export function applyLearnedIntent(text: string, base: IntentResult): IntentResu
     .find((sample) => normalizedText.includes(sample.normalizedText) || sample.normalizedText.includes(normalizedText));
 
   if (fuzzy && (base.intent === 'unknown' || base.confidence < LOW_CONFIDENCE_MATCH)) {
+    reinforceSample(fuzzy, 0.005);
     return sampleToIntent(fuzzy, base, 0.86);
   }
 
@@ -380,6 +425,26 @@ function upsertMemorySample(sample: NluLearningSample): void {
   }
   learnedSamples.unshift(sample);
   if (learnedSamples.length > 200) learnedSamples.length = 200;
+}
+
+function reinforceSample(sample: NluLearningSample, confidenceDelta: number): void {
+  const now = new Date().toISOString();
+  sample.hits += 1;
+  sample.confidence = clampConfidence(sample.confidence + confidenceDelta);
+  sample.updatedAt = now;
+  persistSampleReinforcement(sample.id, confidenceDelta, now).catch(() => {});
+}
+
+async function persistSampleReinforcement(id: string, confidenceDelta: number, now: string): Promise<void> {
+  const db = await getDatabase();
+  await db.runAsync(
+    `UPDATE nlu_learning_samples
+     SET hits = hits + 1,
+         confidence = MIN(0.97, confidence + ?),
+         updated_at = ?
+     WHERE id = ? AND enabled = 1`,
+    [confidenceDelta, now, id]
+  );
 }
 
 function sampleToIntent(sample: NluLearningSample, base: IntentResult, confidenceFloor: number): IntentResult {

@@ -125,6 +125,7 @@ export default function AiCacheScreen() {
         <StatTile label="热缓存" value={formatNumber(overall?.warmCalls || 0)} tone={(overall?.warmCalls || 0) > 0 ? 'good' : 'warn'} />
         <StatTile label="均值 Token" value={formatNumber(overall?.averagePromptTokens || 0)} />
         <StatTile label="节省 Token" value={formatNumber(dashboard?.cost.savedPromptTokens || 0)} tone={(dashboard?.cost.savedPromptTokens || 0) > 0 ? 'good' : 'warn'} />
+        <StatTile label="节省成本" value={formatNumber(dashboard?.cost.savedCostUnits || 0)} tone={(dashboard?.cost.savedCostUnits || 0) > 0 ? 'good' : 'warn'} />
         <StatTile label="成本单位" value={formatNumber(dashboard?.cost.estimatedCostUnits || 0)} />
         <StatTile
           label="成本压力"
@@ -150,8 +151,16 @@ export default function AiCacheScreen() {
               <Text style={styles.metricText}>calls {stat.calls}</Text>
               <Text style={styles.metricText}>cached {formatNumber(stat.averageCachedTokens)}</Text>
               <Text style={styles.metricText}>completion {formatNumber(stat.averageCompletionTokens)}</Text>
+              <Text style={styles.metricText}>target {formatPercent(stat.targetHitRate)}</Text>
             </View>
             <BudgetLine stats={stat} />
+            <View style={styles.adviceBox}>
+              <Text style={styles.adviceTitle}>{stat.advice.title}</Text>
+              <Text style={styles.adviceDetail}>{stat.advice.detail}</Text>
+              {stat.advice.actions.slice(0, 3).map((action) => (
+                <Text key={action} style={styles.adviceAction}>- {action}</Text>
+              ))}
+            </View>
           </View>
         )) : (
           <View style={styles.empty}>
@@ -356,6 +365,31 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
     fontSize: 12,
     fontWeight: '700',
+  },
+  adviceBox: {
+    marginTop: spacing.sm,
+    padding: spacing.sm,
+    borderRadius: radius.md,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  adviceTitle: {
+    color: colors.text,
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  adviceDetail: {
+    color: colors.textMuted,
+    fontSize: 11,
+    lineHeight: 16,
+    marginTop: 3,
+  },
+  adviceAction: {
+    color: colors.textSubtle,
+    fontSize: 11,
+    lineHeight: 16,
+    marginTop: 2,
   },
   sampleRow: {
     minHeight: 58,

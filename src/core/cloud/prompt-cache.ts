@@ -51,7 +51,10 @@ export interface PromptCacheRuntimeStats {
   averagePromptTokens: number;
   averageCachedTokens: number;
   averageCompletionTokens: number;
+  targetHitRate: number;
+  budgetPressure: 'cold' | 'healthy' | 'watch' | 'tighten';
   recommendedBudget: DynamicPromptBudget;
+  advice: PromptCacheOptimizationAdvice;
 }
 
 export interface PromptCacheTelemetryRow {
@@ -68,6 +71,13 @@ export interface PromptCacheTelemetryRow {
   createdAt: string;
 }
 
+export interface PromptCacheOptimizationAdvice {
+  status: 'cold_start' | 'healthy' | 'prefix_unstable' | 'dynamic_pressure' | 'partial_reuse';
+  title: string;
+  detail: string;
+  actions: string[];
+}
+
 export interface PromptCacheDashboard {
   overall: PromptCacheRuntimeStats;
   stats: PromptCacheRuntimeStats[];
@@ -81,7 +91,9 @@ export interface PromptCacheCostSummary {
   completionTokens: number;
   savedPromptTokens: number;
   cacheSavingsRate: number;
+  estimatedUncachedCostUnits: number;
   estimatedCostUnits: number;
+  savedCostUnits: number;
   pressure: 'low' | 'medium' | 'high';
 }
 
@@ -112,6 +124,7 @@ type TelemetrySample = {
   hitRate: number;
   source: string;
   model?: string;
+  missReason?: string;
   createdAt: string;
 };
 
@@ -191,6 +204,7 @@ export function recordPromptCacheUsage(
   const hitRate = promptTokens > 0
     ? Math.round((cachedPromptTokens / promptTokens) * 10000) / 100
     : 0;
+  const missReason = inferCacheMissReason(promptTokens, cachedPromptTokens, hitRate);
   const sample: TelemetrySample = {
     id: `pc_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
     scope,
@@ -201,6 +215,7 @@ export function recordPromptCacheUsage(
     hitRate,
     source: meta.source || 'non_stream',
     model: meta.model,
+    missReason,
     createdAt: new Date().toISOString(),
   };
 
@@ -219,6 +234,7 @@ export function getPromptCacheRuntimeStats(scope: string): PromptCacheRuntimeSta
   const warmRows = rows.filter((row) => row.cachedPromptTokens > 0);
   const sourceRows = warmRows.length > 0 ? warmRows : rows;
   const averageHitRate = average(sourceRows.map((row) => row.hitRate));
+  const advice = buildOptimizationAdvice(rows, averageHitRate);
 
   return {
     scope,
@@ -230,7 +246,10 @@ export function getPromptCacheRuntimeStats(scope: string): PromptCacheRuntimeSta
     averagePromptTokens: Math.round(average(sourceRows.map((row) => row.promptTokens))),
     averageCachedTokens: Math.round(average(sourceRows.map((row) => row.cachedPromptTokens))),
     averageCompletionTokens: Math.round(average(sourceRows.map((row) => row.completionTokens))),
+    targetHitRate: TARGET_CACHE_HIT_RATE,
+    budgetPressure: getBudgetPressure(rows, averageHitRate),
     recommendedBudget: getAdaptiveDynamicBudget(scope),
+    advice,
   };
 }
 
@@ -410,8 +429,8 @@ async function persistPromptCacheTelemetry(sample: TelemetrySample): Promise<voi
   await db.runAsync(
     `INSERT INTO prompt_cache_telemetry (
       id, scope, agent_id, prompt_tokens, completion_tokens,
-      cached_prompt_tokens, hit_rate, source, model, created_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      cached_prompt_tokens, hit_rate, source, model, miss_reason, created_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       sample.id,
       sample.scope,
@@ -422,6 +441,7 @@ async function persistPromptCacheTelemetry(sample: TelemetrySample): Promise<voi
       sample.hitRate,
       sample.source,
       sample.model || null,
+      sample.missReason || null,
       sample.createdAt,
     ]
   );
@@ -455,10 +475,11 @@ async function loadPromptCacheRecentRows(options?: {
       hit_rate: number;
       source: string;
       model?: string | null;
+      miss_reason?: string | null;
       created_at: string;
     }>(
       `SELECT id, scope, agent_id, prompt_tokens, completion_tokens,
-        cached_prompt_tokens, hit_rate, source, model, created_at
+        cached_prompt_tokens, hit_rate, source, model, miss_reason, created_at
        FROM prompt_cache_telemetry
        ${where.length > 0 ? `WHERE ${where.join(' AND ')}` : ''}
        ORDER BY created_at DESC
@@ -475,7 +496,7 @@ async function loadPromptCacheRecentRows(options?: {
       hitRate: row.hit_rate || 0,
       source: row.source || 'non_stream',
       model: row.model || undefined,
-      missReason: inferCacheMissReason(row.prompt_tokens || 0, row.cached_prompt_tokens || 0, row.hit_rate || 0),
+      missReason: row.miss_reason || inferCacheMissReason(row.prompt_tokens || 0, row.cached_prompt_tokens || 0, row.hit_rate || 0),
       createdAt: row.created_at,
     }));
   } catch {
@@ -500,6 +521,59 @@ function inferCacheMissReason(promptTokens: number, cachedPromptTokens: number, 
   return undefined;
 }
 
+function getBudgetPressure(rows: TelemetrySample[], averageHitRate: number): PromptCacheRuntimeStats['budgetPressure'] {
+  if (rows.length < 2) return 'cold';
+  if (averageHitRate >= TARGET_CACHE_HIT_RATE) return 'healthy';
+  if (averageHitRate >= 70) return 'watch';
+  return 'tighten';
+}
+
+function buildOptimizationAdvice(rows: TelemetrySample[], averageHitRate: number): PromptCacheOptimizationAdvice {
+  if (rows.length === 0) {
+    return {
+      status: 'cold_start',
+      title: '等待样本',
+      detail: '还没有足够的云端调用样本，先保持默认预算。',
+      actions: ['完成几次同 agent 的连续对话', '确认 provider 返回 usage.cached_tokens'],
+    };
+  }
+
+  const lastMiss = [...rows].reverse().find((row) => row.missReason)?.missReason;
+  if (averageHitRate >= TARGET_CACHE_HIT_RATE) {
+    return {
+      status: 'healthy',
+      title: '缓存健康',
+      detail: `平均命中率已达到 ${TARGET_CACHE_HIT_RATE}% 目标。`,
+      actions: ['继续保持人格版本和工具集稳定', '只在必要时修改系统提示词'],
+    };
+  }
+
+  if (lastMiss === 'cold_or_changed_prefix') {
+    return {
+      status: 'prefix_unstable',
+      title: '前缀不稳定',
+      detail: '最近样本没有复用到缓存，通常是 model、人格版本、工具集或系统提示词发生变化。',
+      actions: ['减少人格快照频繁保存', '确认工具列表排序稳定', '同一 agent/model 连续测试至少 3 次'],
+    };
+  }
+
+  if (lastMiss === 'dynamic_context_pressure' || averageHitRate < 70) {
+    return {
+      status: 'dynamic_pressure',
+      title: '动态上下文压力',
+      detail: '缓存可复用，但动态上下文占比偏高，系统会收紧记忆、最近上下文和 NLU 片段预算。',
+      actions: ['压缩 recentContext', '刷新 agent memory digest', '把稳定人格规则放入 SOUL/TONE/BOUNDARIES'],
+    };
+  }
+
+  return {
+    status: 'partial_reuse',
+    title: '部分复用',
+    detail: '已有缓存复用，但仍低于目标命中率，需要继续收敛动态内容。',
+    actions: ['保持同一 scope 连续调用', '减少用户画像和最近对话的重复文本', '观察下一轮 warm cache 命中'],
+  };
+}
+
 function buildOverallStats(stats: PromptCacheRuntimeStats[]): PromptCacheRuntimeStats {
   const calls = stats.reduce((sum, stat) => sum + stat.calls, 0);
   const warmCalls = stats.reduce((sum, stat) => sum + stat.warmCalls, 0);
@@ -513,7 +587,16 @@ function buildOverallStats(stats: PromptCacheRuntimeStats[]): PromptCacheRuntime
     averagePromptTokens: Math.round(average(stats.map((stat) => stat.averagePromptTokens).filter((value) => value > 0))),
     averageCachedTokens: Math.round(average(stats.map((stat) => stat.averageCachedTokens).filter((value) => value > 0))),
     averageCompletionTokens: Math.round(average(stats.map((stat) => stat.averageCompletionTokens).filter((value) => value > 0))),
+    targetHitRate: TARGET_CACHE_HIT_RATE,
+    budgetPressure: stats.some((stat) => stat.budgetPressure === 'tighten')
+      ? 'tighten'
+      : stats.some((stat) => stat.budgetPressure === 'watch')
+        ? 'watch'
+        : stats.some((stat) => stat.budgetPressure === 'healthy')
+          ? 'healthy'
+          : 'cold',
     recommendedBudget: stats[0]?.recommendedBudget || { ...DEFAULT_DYNAMIC_BUDGET },
+    advice: stats[0]?.advice || buildOptimizationAdvice([], 0),
   };
 }
 
@@ -530,13 +613,17 @@ function buildCostSummary(rows: PromptCacheTelemetryRow[]): PromptCacheCostSumma
     cachedPromptTokens * 0.1 +
     completionTokens
   ) * 100) / 100;
+  const estimatedUncachedCostUnits = Math.round((promptTokens + completionTokens) * 100) / 100;
+  const savedCostUnits = Math.round(Math.max(0, estimatedUncachedCostUnits - estimatedCostUnits) * 100) / 100;
   return {
     promptTokens,
     cachedPromptTokens,
     completionTokens,
     savedPromptTokens,
     cacheSavingsRate,
+    estimatedUncachedCostUnits,
     estimatedCostUnits,
+    savedCostUnits,
     pressure: estimatedCostUnits > 12000 ? 'high' : estimatedCostUnits > 5000 ? 'medium' : 'low',
   };
 }
