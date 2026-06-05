@@ -252,6 +252,7 @@ async function initTables(db: SQLite.SQLiteDatabase): Promise<void> {
       key TEXT NOT NULL UNIQUE,
       value TEXT NOT NULL,
       confidence REAL DEFAULT 0.7,
+      hits INTEGER DEFAULT 1,
       source TEXT DEFAULT 'agent',
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
@@ -271,6 +272,7 @@ async function initTables(db: SQLite.SQLiteDatabase): Promise<void> {
   await db.execAsync(`CREATE INDEX IF NOT EXISTS idx_nlu_learning_lookup ON nlu_learning_samples(normalized_text, enabled, hits)`);
   await db.execAsync(`CREATE INDEX IF NOT EXISTS idx_agent_memory_digest_agent ON agent_memory_digest(agent_id, updated_at)`);
   await migrateAuditLog(db);
+  await migrateAdaptiveMemory(db);
 
   await initRulesTable();
 
@@ -284,6 +286,20 @@ async function migrateAuditLog(db: SQLite.SQLiteDatabase): Promise<void> {
     `ALTER TABLE audit_log ADD COLUMN params_hash TEXT`,
     `ALTER TABLE audit_log ADD COLUMN permission_level INTEGER DEFAULT 0`,
     `ALTER TABLE audit_log ADD COLUMN duration_ms INTEGER`,
+  ];
+
+  for (const statement of migrations) {
+    try {
+      await db.execAsync(statement);
+    } catch {
+      // Column already exists on newer databases.
+    }
+  }
+}
+
+async function migrateAdaptiveMemory(db: SQLite.SQLiteDatabase): Promise<void> {
+  const migrations = [
+    `ALTER TABLE user_profile_memory ADD COLUMN hits INTEGER DEFAULT 1`,
   ];
 
   for (const statement of migrations) {

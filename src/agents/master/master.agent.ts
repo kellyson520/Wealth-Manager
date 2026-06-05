@@ -20,10 +20,12 @@ import { generatePersonaPrompt, updateMood, loadPersona } from '../../core/perso
 import { messageBus } from '../../core/message-bus';
 import { buildAdaptiveContextPrompt } from '../../core/memory/adaptive-context';
 import {
+  extractNluCorrection,
   maybeStoreUserPreferenceFromText,
   recordToolProcedureMemory,
 } from '../../core/memory/memory-extractor';
 import {
+  inferIntentFromCorrectionTarget,
   inferIntentFromToolCall,
   learnIntentAlias,
   loadNluLearningSamples,
@@ -192,12 +194,15 @@ export async function processMessage(
   const sanitized = sanitizeText(userMessage);
   await loadNluLearningSamples();
   const intent = classifyIntent(sanitized);
+  const correctionLearned = await maybeLearnNluCorrection(sanitized);
   maybeStoreUserPreferenceFromText(sanitized).catch(() => {});
 
   let replyContent: string;
   let safetyWarning: string | undefined;
 
-  if (intent.intent === 'unknown' || intent.confidence < 0.3) {
+  if (correctionLearned) {
+    replyContent = `已学习：以后会把「${correctionLearned.aliasText}」理解为 ${correctionLearned.intent}。`;
+  } else if (intent.intent === 'unknown' || intent.confidence < 0.3) {
     if (cloudApiKey) {
       replyContent = await processWithLLM(sanitized, intent);
     } else {
@@ -432,7 +437,18 @@ export async function* processMessageStream(
   const sanitized = sanitizeText(userMessage);
   await loadNluLearningSamples();
   const intent = classifyIntent(sanitized);
+  const correctionLearned = await maybeLearnNluCorrection(sanitized);
   maybeStoreUserPreferenceFromText(sanitized).catch(() => {});
+
+  if (correctionLearned) {
+    const messageId = `msg_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    const reply = `已学习：以后会把「${correctionLearned.aliasText}」理解为 ${correctionLearned.intent}。`;
+    for (const char of reply) {
+      yield { type: 'token', content: char, messageId };
+    }
+    yield { type: 'done', messageId };
+    return;
+  }
 
   if (!cloudApiKey) {
     const reply = intent.intent === 'unknown' || intent.confidence < 0.3
@@ -548,4 +564,39 @@ function parseToolArgs(rawArgs: string): Record<string, unknown> {
   } catch {
     return {};
   }
+}
+
+async function maybeLearnNluCorrection(text: string): Promise<{
+  aliasText: string;
+  intent: string;
+  agent: string;
+} | null> {
+  const correction = extractNluCorrection(text);
+  if (!correction) return null;
+
+  const classifiedTarget = classifyIntent(correction.targetText);
+  const target = classifiedTarget.intent !== 'unknown' && classifiedTarget.confidence >= 0.3
+    ? {
+      intent: classifiedTarget.intent,
+      agent: classifiedTarget.agent,
+      params: classifiedTarget.params,
+    }
+    : inferIntentFromCorrectionTarget(correction.targetText);
+
+  if (!target) return null;
+
+  await learnIntentAlias({
+    text: correction.aliasText,
+    intent: target.intent,
+    agent: target.agent,
+    params: target.params,
+    source: 'user_feedback',
+    confidence: correction.confidence,
+  });
+
+  return {
+    aliasText: correction.aliasText,
+    intent: target.intent,
+    agent: target.agent,
+  };
 }

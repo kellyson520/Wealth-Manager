@@ -1,6 +1,7 @@
 import { classifyIntent } from '../../agents/master/nlu';
 import {
   addNluLearningSampleForTest,
+  inferIntentFromCorrectionTarget,
   inferIntentFromToolCall,
   resetNluLearningForTest,
 } from '../../agents/master/nlu-learning';
@@ -55,5 +56,36 @@ describe('NLU learning layer', () => {
       agent: 'coach',
     });
     expect(inferIntentFromToolCall('unknown_tool', {})).toBeNull();
+  });
+
+  test('infers learnable intent from user correction labels', () => {
+    expect(inferIntentFromCorrectionTarget('设置预算')).toMatchObject({
+      intent: 'set_budget',
+      agent: 'coach',
+    });
+    expect(inferIntentFromCorrectionTarget('记一笔支出')).toMatchObject({
+      intent: 'add_expense',
+      agent: 'ledger',
+    });
+    expect(inferIntentFromCorrectionTarget('提醒')).toMatchObject({
+      intent: 'create_reminder',
+      agent: 'guardian',
+    });
+    expect(inferIntentFromCorrectionTarget('完全不知道')).toBeNull();
+  });
+
+  test('learned alias from user feedback improves future routing', () => {
+    addNluLearningSampleForTest({
+      text: '少买奶茶',
+      intent: 'set_budget',
+      agent: 'coach',
+      source: 'user_feedback',
+      confidence: 0.9,
+    });
+
+    const result = classifyIntent('少买奶茶');
+
+    expect(result.intent).toBe('set_budget');
+    expect(result.agent).toBe('coach');
   });
 });

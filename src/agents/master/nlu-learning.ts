@@ -256,6 +256,55 @@ export function inferIntentFromToolCall(
   }
 }
 
+export function inferIntentFromCorrectionTarget(
+  targetText: string
+): { intent: string; agent: string; params: Record<string, unknown> } | null {
+  const text = targetText.replace(/\s+/g, '').toLowerCase();
+  if (!text || text.length > 120) return null;
+
+  if (/(预算|限额|控制消费|少买|少花)/.test(text)) {
+    return { intent: 'set_budget', agent: 'coach', params: {} };
+  }
+  if (/(收入|工资|奖金|到账|进账)/.test(text)) {
+    return { intent: 'add_income', agent: 'ledger', params: { type: 'income' } };
+  }
+  if (/(记账|支出|花钱|消费|花了|买了)/.test(text)) {
+    return { intent: 'add_expense', agent: 'ledger', params: { type: 'expense' } };
+  }
+  if (/(查账单|找账单|搜索账单|账单查询|找记录|查记录)/.test(text)) {
+    return { intent: 'search_bills', agent: 'ledger', params: {} };
+  }
+  if (/(汇总|统计|花了多少|收支|总览)/.test(text)) {
+    return { intent: 'get_summary', agent: 'analyst', params: {} };
+  }
+  if (/(趋势|图表|画图|走势图|对比图)/.test(text)) {
+    return { intent: 'get_chart', agent: 'analyst', params: {} };
+  }
+  if (/(提醒|通知|定时|闹钟)/.test(text)) {
+    return { intent: 'create_reminder', agent: 'guardian', params: {} };
+  }
+  if (/(删除|删账单|删记录|移除记录)/.test(text)) {
+    return { intent: 'delete_bill', agent: 'guardian', params: { requiresConfirmation: true } };
+  }
+  if (/(查看|列出|有哪些|列表).*(资产|账户)/.test(text)) {
+    return { intent: 'list_assets', agent: 'ledger', params: {} };
+  }
+  if (/(资产|账户|余额)/.test(text)) {
+    return { intent: 'add_asset', agent: 'ledger', params: {} };
+  }
+  if (/(查看|列出|有哪些|列表).*(债务|欠款|贷款)/.test(text)) {
+    return { intent: 'list_debts', agent: 'ledger', params: {} };
+  }
+  if (/(债务|欠款|贷款)/.test(text)) {
+    return { intent: 'add_debt', agent: 'ledger', params: {} };
+  }
+  if (/(ai记忆|记忆|偏好|记住了什么)/.test(text)) {
+    return { intent: 'list_ai_memories', agent: 'master', params: {} };
+  }
+
+  return null;
+}
+
 function upsertMemorySample(sample: NluLearningSample): void {
   const index = learnedSamples.findIndex(
     (existing) => existing.normalizedText === sample.normalizedText && existing.intent === sample.intent
