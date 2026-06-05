@@ -290,7 +290,9 @@ async function handleAddAsset(params: Record<string, unknown>): Promise<string> 
     return failures.length > 0 ? `添加资产失败: ${failures.join('；')}` : '请告诉我资产名称和金额，例如"添加资产 银行存款 50000"。';
   }
 
-  if (!params.name) return '请告诉我资产名称和金额，例如"添加资产 银行存款 50000"。';
+  if (!params.name || !params.amount || Number(params.amount) <= 0) {
+    return '请告诉我资产名称和金额，例如"添加资产 银行存款 50000"。';
+  }
   const result = await tool.handler({ name: params.name, amount: params.amount || 0, type: params.type });
   if (result.success) return `已添加资产 "${params.name}" ${params.amount || ''}`;
   return `添加资产失败: ${result.error}`;
