@@ -13,6 +13,7 @@ import {
   PromptCacheDashboard,
   PromptCacheRuntimeStats,
 } from '../../core/cloud/prompt-cache';
+import { CloudProviderCompatibility, getCloudProviderCompatibility } from '../../core/cloud/api';
 import { colors, radius, shadow, spacing } from '../theme';
 import AppShell from '../layout/AppShell';
 
@@ -61,6 +62,7 @@ function BudgetLine({ stats }: { stats: PromptCacheRuntimeStats }) {
 
 export default function AiCacheScreen() {
   const [dashboard, setDashboard] = useState<PromptCacheDashboard | null>(null);
+  const [compatibility, setCompatibility] = useState<CloudProviderCompatibility[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -72,6 +74,7 @@ export default function AiCacheScreen() {
     }
     try {
       setDashboard(await getPromptCacheDashboard({ limit: 50 }));
+      setCompatibility(getCloudProviderCompatibility());
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -164,6 +167,7 @@ export default function AiCacheScreen() {
             <View>
               <Text style={styles.sampleScope}>{row.scope}</Text>
               <Text style={styles.sampleMeta}>{row.source} · {row.createdAt.slice(11, 19)}</Text>
+              {row.missReason ? <Text style={styles.sampleMeta}>miss: {row.missReason}</Text> : null}
             </View>
             <View style={styles.sampleRight}>
               <Text style={styles.sampleHit}>{formatPercent(row.hitRate)}</Text>
@@ -171,6 +175,25 @@ export default function AiCacheScreen() {
             </View>
           </View>
         ))}
+      </View>
+
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>供应商兼容</Text>
+        {compatibility.length > 0 ? compatibility.map((item) => (
+          <View key={item.key} style={styles.compatRow}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.sampleScope}>{item.key}</Text>
+              <Text style={styles.sampleMeta}>usage: {item.usageFormat || 'unknown'} · cached: {item.returnsCachedTokens ? 'yes' : 'no'}</Text>
+            </View>
+            <View style={styles.hitBadge}>
+              <Text style={styles.hitText}>{item.supportsStreamUsage === false ? 'fallback' : 'stream'}</Text>
+            </View>
+          </View>
+        )) : (
+          <View style={styles.empty}>
+            <Text style={styles.emptyText}>暂无云端兼容记录，完成一次调用后自动生成。</Text>
+          </View>
+        )}
       </View>
       </ScrollView>
     </AppShell>
@@ -336,6 +359,16 @@ const styles = StyleSheet.create({
   },
   sampleRow: {
     minHeight: 58,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: spacing.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+    gap: spacing.md,
+  },
+  compatRow: {
+    minHeight: 64,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',

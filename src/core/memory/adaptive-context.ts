@@ -112,6 +112,39 @@ export async function updatePersonaSnapshot(params: {
   return snapshot;
 }
 
+export async function listPersonaSnapshots(limit: number = 8): Promise<PersonaSnapshot[]> {
+  const db = await getDatabase();
+  await ensureDefaultPersonaSnapshot();
+  const rows = await db.getAllAsync<{
+    id: string;
+    version: number;
+    soul: string;
+    tone_rules: string;
+    boundaries: string;
+    source: string;
+    created_at: string;
+    updated_at: string;
+  }>(
+    `SELECT * FROM persona_snapshots
+     ORDER BY version DESC, updated_at DESC
+     LIMIT ?`,
+    [Math.min(Math.max(limit, 1), 20)]
+  );
+  return rows.map((row) => rowToPersona(row));
+}
+
+export async function rollbackPersonaSnapshot(version: number): Promise<PersonaSnapshot> {
+  const snapshots = await listPersonaSnapshots(20);
+  const target = snapshots.find((snapshot) => snapshot.version === version);
+  if (!target) throw new Error('未找到该人格版本');
+  return updatePersonaSnapshot({
+    soul: target.soul,
+    toneRules: target.toneRules,
+    boundaries: target.boundaries,
+    source: `rollback:v${version}`,
+  });
+}
+
 export async function upsertUserProfileMemory(params: {
   key: string;
   value: string;

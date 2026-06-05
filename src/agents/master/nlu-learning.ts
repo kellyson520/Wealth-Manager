@@ -34,6 +34,7 @@ const MIN_ALIAS_LENGTH = 2;
 const MAX_ALIAS_LENGTH = 120;
 const HIGH_CONFIDENCE_STATIC_MATCH = 0.85;
 const LOW_CONFIDENCE_MATCH = 0.6;
+const AUTO_ENABLE_HITS = 3;
 
 const learnedSamples: NluLearningSample[] = [];
 let loaded = false;
@@ -125,6 +126,8 @@ export async function learnIntentAlias(params: LearnIntentAliasParams): Promise<
   if (!canLearnAlias(normalizedText, params.intent)) return;
 
   const now = new Date().toISOString();
+  const source = params.source || 'cloud_function';
+  const enabled = source !== 'cloud_function';
   const sample: NluLearningSample = {
     id: uuidv4(),
     text: params.text.trim(),
@@ -132,10 +135,10 @@ export async function learnIntentAlias(params: LearnIntentAliasParams): Promise<
     intent: params.intent,
     agent: params.agent,
     params: params.params || {},
-    source: params.source || 'cloud_function',
+    source,
     confidence: clampConfidence(params.confidence ?? 0.82),
     hits: 1,
-    enabled: true,
+    enabled,
     createdAt: now,
     updatedAt: now,
   };
@@ -147,7 +150,7 @@ export async function learnIntentAlias(params: LearnIntentAliasParams): Promise<
     await db.runAsync(
       `INSERT INTO nlu_learning_samples
        (id, phrase, normalized_text, intent, agent, params, source, confidence, hits, enabled, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, 1, ?, ?)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?)
        ON CONFLICT(normalized_text, intent) DO UPDATE SET
          phrase = excluded.phrase,
          agent = excluded.agent,
@@ -155,7 +158,11 @@ export async function learnIntentAlias(params: LearnIntentAliasParams): Promise<
          source = excluded.source,
          confidence = MAX(nlu_learning_samples.confidence, excluded.confidence),
          hits = nlu_learning_samples.hits + 1,
-         enabled = 1,
+         enabled = CASE
+           WHEN nlu_learning_samples.enabled = 1 THEN 1
+           WHEN nlu_learning_samples.hits + 1 >= ? THEN 1
+           ELSE excluded.enabled
+         END,
          updated_at = excluded.updated_at`,
       [
         sample.id,
@@ -166,13 +173,65 @@ export async function learnIntentAlias(params: LearnIntentAliasParams): Promise<
         JSON.stringify(sample.params),
         sample.source,
         sample.confidence,
+        sample.enabled ? 1 : 0,
         now,
         now,
+        AUTO_ENABLE_HITS,
       ]
     );
   } catch (e) {
     captureError('nlu_learning.learn', e, 'Failed to persist NLU learning sample');
   }
+}
+
+export async function listNluLearningCandidates(limit: number = 20): Promise<NluLearningSample[]> {
+  const db = await getDatabase();
+  const rows = await db.getAllAsync<{
+    id: string;
+    phrase: string;
+    normalized_text: string;
+    intent: string;
+    agent: string;
+    params: string;
+    source: string;
+    confidence: number;
+    hits: number;
+    enabled: number;
+    created_at: string;
+    updated_at: string;
+  }>(
+    `SELECT id, phrase, normalized_text, intent, agent, params, source, confidence, hits, enabled, created_at, updated_at
+     FROM nlu_learning_samples
+     WHERE enabled = 0
+     ORDER BY hits DESC, confidence DESC, updated_at DESC
+     LIMIT ?`,
+    [Math.min(Math.max(limit, 1), 80)]
+  );
+  return rows.map((row) => ({
+    id: row.id,
+    text: row.phrase,
+    normalizedText: row.normalized_text,
+    intent: row.intent,
+    agent: row.agent,
+    params: safeParseParams(row.params),
+    source: normalizeSource(row.source),
+    confidence: row.confidence,
+    hits: row.hits,
+    enabled: row.enabled === 1,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  }));
+}
+
+export async function approveNluLearningCandidate(id: string): Promise<boolean> {
+  if (!id) return false;
+  const db = await getDatabase();
+  const result = await db.runAsync(
+    'UPDATE nlu_learning_samples SET enabled = 1, updated_at = ? WHERE id = ?',
+    [new Date().toISOString(), id]
+  );
+  loaded = false;
+  return (result.changes || 0) > 0;
 }
 
 export function applyLearnedIntent(text: string, base: IntentResult): IntentResult {

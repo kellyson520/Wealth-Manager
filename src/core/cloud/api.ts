@@ -44,6 +44,14 @@ export type CloudStreamChunk = {
   error?: string;
 };
 
+export interface CloudProviderCompatibility {
+  key: string;
+  supportsStreamUsage?: boolean;
+  returnsCachedTokens?: boolean;
+  usageFormat?: 'prompt_tokens_details' | 'input_token_details' | 'cache_read_input_tokens' | 'cached_tokens' | 'none';
+  lastCheckedAt: string;
+}
+
 const defaultBudget = {
   monthlyLimit: 50000,
   used: 0,
@@ -53,14 +61,20 @@ const defaultBudget = {
 
 let tokenBudget: TokenBudget = { ...defaultBudget };
 const breaker = createCircuitBreaker(5, 30000);
+const providerCompatibility = new Map<string, CloudProviderCompatibility>();
 
 export function resetForTest(): void {
   tokenBudget = { ...defaultBudget };
   resetCircuitBreaker(breaker);
+  providerCompatibility.clear();
 }
 
 export function setTokenBudget(budget: Partial<TokenBudget>): void {
   tokenBudget = { ...tokenBudget, ...budget };
+}
+
+export function getCloudProviderCompatibility(): CloudProviderCompatibility[] {
+  return Array.from(providerCompatibility.values()).sort((a, b) => b.lastCheckedAt.localeCompare(a.lastCheckedAt));
 }
 
 export async function callCloudLLM(
@@ -158,6 +172,7 @@ export async function callCloudLLM(
     const actualTokens = (data.usage?.total_tokens || estimatedTokens);
     consumeTokens(tokenBudget, actualTokens);
     recordSuccess(breaker);
+    recordProviderUsageCompatibility(request, data.usage);
 
     const cloudResponse: CloudResponse = {
       content: data.choices?.[0]?.message?.content || '',
@@ -320,6 +335,7 @@ export async function* callCloudLLMStream(
     if (!fetchResponse.ok && body.stream_options) {
       delete body.stream_options;
       fetchResponse = await sendStreamRequest();
+      recordProviderCompatibility(request, { supportsStreamUsage: fetchResponse.ok ? false : undefined });
     }
 
     if (!fetchResponse.ok) {
@@ -389,6 +405,8 @@ export async function* callCloudLLMStream(
             promptTokens = parsed.usage.prompt_tokens || promptTokens;
             completionTokens = parsed.usage.completion_tokens || completionTokens;
             cachedPromptTokens = extractCachedPromptTokens(parsed.usage) || cachedPromptTokens;
+            recordProviderUsageCompatibility(request, parsed.usage);
+            recordProviderCompatibility(request, { supportsStreamUsage: true });
           }
         } catch {
           // Skip malformed JSON chunks
@@ -419,4 +437,47 @@ export async function* callCloudLLMStream(
     recordFailure(breaker);
     yield { type: 'error', error: e instanceof Error ? e.message : '网络异常' };
   }
+}
+
+function providerKey(request: CloudRequest): string {
+  return `${request.baseUrl || 'https://api.openai.com/v1'}|${request.model || 'gpt-4o'}`;
+}
+
+function recordProviderCompatibility(
+  request: CloudRequest,
+  patch: Partial<CloudProviderCompatibility>
+): void {
+  const key = providerKey(request);
+  const current = providerCompatibility.get(key) || {
+    key,
+    lastCheckedAt: new Date().toISOString(),
+  };
+  providerCompatibility.set(key, {
+    ...current,
+    ...patch,
+    key,
+    lastCheckedAt: new Date().toISOString(),
+  });
+}
+
+function recordProviderUsageCompatibility(request: CloudRequest, usage: unknown): void {
+  const usageFormat = detectUsageFormat(usage);
+  recordProviderCompatibility(request, {
+    usageFormat,
+    returnsCachedTokens: extractCachedPromptTokens(usage) > 0,
+  });
+}
+
+function detectUsageFormat(usage: unknown): CloudProviderCompatibility['usageFormat'] {
+  const u = usage as {
+    prompt_tokens_details?: { cached_tokens?: number };
+    input_token_details?: { cached_tokens?: number; cache_read?: number };
+    cache_read_input_tokens?: number;
+    cached_tokens?: number;
+  } | undefined;
+  if (u?.prompt_tokens_details) return 'prompt_tokens_details';
+  if (u?.input_token_details) return 'input_token_details';
+  if (u?.cache_read_input_tokens !== undefined) return 'cache_read_input_tokens';
+  if (u?.cached_tokens !== undefined) return 'cached_tokens';
+  return 'none';
 }

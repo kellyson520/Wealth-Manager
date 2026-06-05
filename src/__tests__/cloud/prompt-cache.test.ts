@@ -13,6 +13,7 @@ import {
   getAdaptiveDynamicBudget,
   getPromptCacheDashboard,
   getPromptCacheRuntimeStats,
+  hashToolsetForPromptCache,
   hydratePromptCacheTelemetry,
   recordPromptCacheUsage,
   resetPromptCacheTelemetryForTest,
@@ -137,21 +138,38 @@ describe('prompt cache planning', () => {
   });
 
   test('persists telemetry samples and scopes budget by agent model', async () => {
-    const scope = buildPromptCacheScope('coach', 'mimo-v2.5-pro');
+    const scope = buildPromptCacheScope('coach', 'mimo-v2.5-pro', {
+      personaVersion: 3,
+      toolsetHash: 'abcdef12',
+    });
     const stats = recordPromptCacheUsage(
       scope,
       { promptTokens: 1600, cachedPromptTokens: 1440, completionTokens: 120 },
       { agentId: 'coach', source: 'stream', model: 'mimo-v2.5-pro' }
     );
 
-    expect(scope).toBe('coach:mimo-v2.5-pro');
+    expect(scope).toBe('coach:mimo-v2.5-pro:p3:tabcdef12');
     expect(stats.agentId).toBe('coach');
     expect(stats.averageHitRate).toBe(90);
     await Promise.resolve();
     expect(mockRunAsync).toHaveBeenCalledWith(
       expect.stringContaining('INSERT INTO prompt_cache_telemetry'),
-      expect.arrayContaining(['coach:mimo-v2.5-pro', 'coach', 1600, 120, 1440, 90, 'stream', 'mimo-v2.5-pro'])
+      expect.arrayContaining(['coach:mimo-v2.5-pro:p3:tabcdef12', 'coach', 1600, 120, 1440, 90, 'stream', 'mimo-v2.5-pro'])
     );
+  });
+
+  test('hashes toolsets deterministically for cache scopes', () => {
+    const first = hashToolsetForPromptCache([
+      { definition: { name: 'search_bills' } },
+      { definition: { name: 'add_bill' } },
+    ] as any);
+    const second = hashToolsetForPromptCache([
+      { definition: { name: 'add_bill' } },
+      { definition: { name: 'search_bills' } },
+    ] as any);
+
+    expect(first).toBe(second);
+    expect(first).toHaveLength(8);
   });
 
   test('hydrates telemetry from SQLite and returns dashboard stats', async () => {

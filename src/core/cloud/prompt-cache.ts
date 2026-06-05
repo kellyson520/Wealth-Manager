@@ -64,6 +64,7 @@ export interface PromptCacheTelemetryRow {
   hitRate: number;
   source: string;
   model?: string;
+  missReason?: string;
   createdAt: string;
 }
 
@@ -258,9 +259,21 @@ export async function getPromptCacheDashboard(options?: {
   };
 }
 
-export function buildPromptCacheScope(agentId: AgentId | string, model?: string): string {
+export function buildPromptCacheScope(
+  agentId: AgentId | string,
+  model?: string,
+  parts?: { personaVersion?: number; toolsetHash?: string }
+): string {
   const normalizedModel = (model || '').trim();
-  return normalizedModel ? `${agentId}:${normalizedModel}` : String(agentId);
+  const scopeParts = [String(agentId)];
+  if (normalizedModel) scopeParts.push(normalizedModel);
+  if (parts?.personaVersion) scopeParts.push(`p${parts.personaVersion}`);
+  if (parts?.toolsetHash) scopeParts.push(`t${parts.toolsetHash}`);
+  return scopeParts.join(':');
+}
+
+export function hashToolsetForPromptCache(tools: ToolEntry[]): string {
+  return hashForCache(tools.map((tool) => tool.definition.name).sort().join('|')).slice(0, 8);
 }
 
 export function getAdaptiveDynamicBudget(scope: string): DynamicPromptBudget {
@@ -462,6 +475,7 @@ async function loadPromptCacheRecentRows(options?: {
       hitRate: row.hit_rate || 0,
       source: row.source || 'non_stream',
       model: row.model || undefined,
+      missReason: inferCacheMissReason(row.prompt_tokens || 0, row.cached_prompt_tokens || 0, row.hit_rate || 0),
       createdAt: row.created_at,
     }));
   } catch {
@@ -471,8 +485,19 @@ async function loadPromptCacheRecentRows(options?: {
       .filter((row) => !options?.agentId || row.agentId === options.agentId)
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
       .slice(0, options?.limit || 40)
-      .map((row) => ({ ...row }));
+      .map((row) => ({
+        ...row,
+        missReason: inferCacheMissReason(row.promptTokens, row.cachedPromptTokens, row.hitRate),
+      }));
   }
+}
+
+function inferCacheMissReason(promptTokens: number, cachedPromptTokens: number, hitRate: number): string | undefined {
+  if (promptTokens <= 0) return undefined;
+  if (cachedPromptTokens <= 0) return 'cold_or_changed_prefix';
+  if (hitRate < 70) return 'dynamic_context_pressure';
+  if (hitRate < 90) return 'partial_prefix_reuse';
+  return undefined;
 }
 
 function buildOverallStats(stats: PromptCacheRuntimeStats[]): PromptCacheRuntimeStats {

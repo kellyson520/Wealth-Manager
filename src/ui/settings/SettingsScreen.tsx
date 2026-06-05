@@ -16,13 +16,17 @@ import type { PersonaParams, UserPreferences } from '../../shared/types';
 import {
   getPersonaSnapshot,
   isNluLearningEnabled,
+  listPersonaSnapshots,
   listAiMemories,
+  PersonaSnapshot,
+  rollbackPersonaSnapshot,
   setNluLearningEnabled,
   updatePersonaSnapshot,
 } from '../../core/memory/adaptive-context';
 import { getPromptCacheDashboard } from '../../core/cloud/prompt-cache';
 import { DatabaseSecurityStatus, getDatabaseSecurityStatus } from '../../core/database/database';
 import { loadPersona, setPersonaParams, setPreferences } from '../../core/persona/persona-engine';
+import { approveNluLearningCandidate, listNluLearningCandidates, NluLearningSample } from '../../agents/master/nlu-learning';
 import { colors, radius, shadow, spacing } from '../theme';
 import AppShell from '../layout/AppShell';
 
@@ -37,6 +41,8 @@ type SettingsState = {
   memoryCount: number;
   cacheHitRate: number;
   databaseSecurity: DatabaseSecurityStatus | null;
+  personaHistory: PersonaSnapshot[];
+  nluCandidates: NluLearningSample[];
 };
 
 const DEFAULT_STATE: SettingsState = {
@@ -50,6 +56,8 @@ const DEFAULT_STATE: SettingsState = {
   memoryCount: 0,
   cacheHitRate: 0,
   databaseSecurity: null,
+  personaHistory: [],
+  nluCandidates: [],
 };
 
 const PERSONA_CONTROLS: { key: keyof PersonaParams; label: string; hint: string }[] = [
@@ -68,13 +76,15 @@ export default function SettingsScreen() {
     if (silent) setRefreshing(true);
     else setLoading(true);
     try {
-      const [persona, snapshot, learningEnabled, memories, cache, databaseSecurity] = await Promise.all([
+      const [persona, snapshot, learningEnabled, memories, cache, databaseSecurity, personaHistory, nluCandidates] = await Promise.all([
         loadPersona(),
         getPersonaSnapshot(),
         isNluLearningEnabled(),
         listAiMemories({ limit: 80 }),
         getPromptCacheDashboard({ limit: 40 }),
         getDatabaseSecurityStatus(),
+        listPersonaSnapshots(6),
+        listNluLearningCandidates(6),
       ]);
       setState({
         personaParams: persona.personaParams,
@@ -87,6 +97,8 @@ export default function SettingsScreen() {
         memoryCount: memories.length,
         cacheHitRate: cache.overall.averageHitRate,
         databaseSecurity,
+        personaHistory,
+        nluCandidates,
       });
     } finally {
       setLoading(false);
@@ -136,6 +148,12 @@ export default function SettingsScreen() {
   }, []);
 
   const savePersonaSnapshot = useCallback(async () => {
+    const nextVersion = state.personaVersion + 1;
+    const confirmed = await confirmAction(
+      '保存人格',
+      `将创建 v${nextVersion} 人格快照，并影响后续 prompt cache。`
+    );
+    if (!confirmed) return;
     setSavingKey('snapshot');
     try {
       const snapshot = await updatePersonaSnapshot({
@@ -156,7 +174,38 @@ export default function SettingsScreen() {
     } finally {
       setSavingKey(null);
     }
-  }, [state.boundariesText, state.soul, state.toneRulesText]);
+  }, [state.boundariesText, state.personaVersion, state.soul, state.toneRulesText]);
+
+  const rollbackPersona = useCallback(async (version: number) => {
+    const confirmed = await confirmAction('回滚人格', `将基于 v${version} 创建新的当前人格快照。`);
+    if (!confirmed) return;
+    setSavingKey(`rollback:${version}`);
+    try {
+      const snapshot = await rollbackPersonaSnapshot(version);
+      setState((prev) => ({
+        ...prev,
+        personaVersion: snapshot.version,
+        soul: snapshot.soul,
+        toneRulesText: snapshot.toneRules.join('\n'),
+        boundariesText: snapshot.boundaries.join('\n'),
+      }));
+      await refresh(true);
+    } catch (e) {
+      Alert.alert('回滚失败', e instanceof Error ? e.message : '人格版本回滚失败');
+    } finally {
+      setSavingKey(null);
+    }
+  }, [refresh]);
+
+  const approveCandidate = useCallback(async (id: string) => {
+    setSavingKey(`nlu:${id}`);
+    try {
+      await approveNluLearningCandidate(id);
+      await refresh(true);
+    } finally {
+      setSavingKey(null);
+    }
+  }, [refresh]);
 
   if (loading) {
     return (
@@ -270,6 +319,26 @@ export default function SettingsScreen() {
           </View>
         </Section>
 
+        <Section title="人格版本">
+          {state.personaHistory.map((snapshot) => (
+            <View key={snapshot.id} style={styles.versionRow}>
+              <View style={styles.controlText}>
+                <Text style={styles.controlLabel}>v{snapshot.version} · {snapshot.source}</Text>
+                <Text style={styles.controlHint} numberOfLines={2}>{snapshot.soul}</Text>
+              </View>
+              <TouchableOpacity
+                style={styles.smallActionBtn}
+                onPress={() => rollbackPersona(snapshot.version)}
+                disabled={snapshot.version === state.personaVersion || savingKey === `rollback:${snapshot.version}`}
+              >
+                <Text style={styles.smallActionText}>
+                  {snapshot.version === state.personaVersion ? '当前' : '回滚'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          ))}
+        </Section>
+
         <Section title="偏好">
           <SegmentedRow
             label="货币"
@@ -306,6 +375,21 @@ export default function SettingsScreen() {
               thumbColor={state.learningEnabled ? colors.accent : colors.textSubtle}
             />
           </View>
+          {state.nluCandidates.map((candidate) => (
+            <View key={candidate.id} style={styles.versionRow}>
+              <View style={styles.controlText}>
+                <Text style={styles.controlLabel}>{candidate.text}{' -> '}{candidate.intent}</Text>
+                <Text style={styles.controlHint}>hits {candidate.hits} · {candidate.source}</Text>
+              </View>
+              <TouchableOpacity
+                style={styles.smallActionBtn}
+                onPress={() => approveCandidate(candidate.id)}
+                disabled={savingKey === `nlu:${candidate.id}`}
+              >
+                <Text style={styles.smallActionText}>批准</Text>
+              </TouchableOpacity>
+            </View>
+          ))}
         </Section>
 
         <Section title="安全">
@@ -391,6 +475,15 @@ function splitLines(text: string): string[] {
     .split('\n')
     .map((line) => line.trim())
     .filter(Boolean);
+}
+
+function confirmAction(title: string, message: string): Promise<boolean> {
+  return new Promise((resolve) => {
+    Alert.alert(title, message, [
+      { text: '取消', style: 'cancel', onPress: () => resolve(false) },
+      { text: '确认', onPress: () => resolve(true) },
+    ]);
+  });
 }
 
 const styles = StyleSheet.create({
@@ -632,6 +725,30 @@ const styles = StyleSheet.create({
   saveText: {
     color: colors.white,
     fontSize: 13,
+    fontWeight: '800',
+  },
+  versionRow: {
+    minHeight: 76,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+    gap: spacing.md,
+  },
+  smallActionBtn: {
+    minHeight: 32,
+    justifyContent: 'center',
+    paddingHorizontal: spacing.md,
+    borderRadius: radius.md,
+    backgroundColor: colors.surfaceSoft,
+    borderWidth: 1,
+    borderColor: colors.borderStrong,
+  },
+  smallActionText: {
+    color: colors.text,
+    fontSize: 12,
     fontWeight: '800',
   },
 });

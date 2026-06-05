@@ -1,4 +1,4 @@
-import { callCloudLLM, callCloudLLMStream, resetForTest, setTokenBudget } from '../../core/cloud/api';
+import { callCloudLLM, callCloudLLMStream, getCloudProviderCompatibility, resetForTest, setTokenBudget } from '../../core/cloud/api';
 import { _resetAllForTest } from '../../core/safety/guard';
 
 global.fetch = jest.fn();
@@ -380,6 +380,11 @@ describe('Cloud LLM API - Safety Chain', () => {
       });
       const body = JSON.parse((global.fetch as jest.Mock).mock.calls[0][1].body);
       expect(body.stream_options).toEqual({ include_usage: true });
+      expect(getCloudProviderCompatibility()[0]).toMatchObject({
+        supportsStreamUsage: true,
+        returnsCachedTokens: true,
+        usageFormat: 'prompt_tokens_details',
+      });
     });
 
     test('retries stream without usage option when provider rejects stream_options', async () => {
@@ -405,6 +410,9 @@ describe('Cloud LLM API - Safety Chain', () => {
       expect(JSON.parse((global.fetch as jest.Mock).mock.calls[0][1].body).stream_options).toEqual({ include_usage: true });
       expect(JSON.parse((global.fetch as jest.Mock).mock.calls[1][1].body).stream_options).toBeUndefined();
       expect(events[0]).toEqual({ type: 'token', content: 'OK' });
+      expect(getCloudProviderCompatibility()[0]).toMatchObject({
+        supportsStreamUsage: false,
+      });
     });
   });
 

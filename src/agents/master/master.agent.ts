@@ -19,13 +19,14 @@ import {
   buildPromptCacheScope,
   buildCacheOptimizedMessages,
   getAdaptiveDynamicBudget,
+  hashToolsetForPromptCache,
   recordPromptCacheUsage,
   sortToolsForPromptCache,
 } from '../../core/cloud/prompt-cache';
 import { recallRecentContext } from '../_shared/memory';
 import { generatePersonaPrompt, updateMood, loadPersona } from '../../core/persona/persona-engine';
 import { messageBus } from '../../core/message-bus';
-import { buildAdaptiveContextPrompt } from '../../core/memory/adaptive-context';
+import { buildAdaptiveContextPrompt, getPersonaSnapshot } from '../../core/memory/adaptive-context';
 import {
   extractNluCorrection,
   maybeStoreUserPreferenceFromText,
@@ -321,9 +322,13 @@ async function processWithLLM(
   intent: IntentResult
 ): Promise<string> {
   const agentId: AgentId = 'master';
-  const cacheScope = buildPromptCacheScope(agentId, cloudApiConfig.model);
   const context = await recallRecentContext(agentId, 2);
   const masterTools = sortToolsForPromptCache(listToolsForAgent(agentId));
+  const personaSnapshot = await getPersonaSnapshot();
+  const cacheScope = buildPromptCacheScope(agentId, cloudApiConfig.model, {
+    personaVersion: personaSnapshot.version,
+    toolsetHash: hashToolsetForPromptCache(masterTools),
+  });
   const adaptiveContext = await buildAdaptiveContextPrompt(agentId);
 
   const functions = toolsToOpenAIFunctions(masterTools);
@@ -490,9 +495,13 @@ export async function* processMessageStream(
   (yield { type: 'thinking' as const, content: '分析中...', messageId }) as void;
 
   const agentId: AgentId = 'master';
-  const cacheScope = buildPromptCacheScope(agentId, cloudApiConfig.model);
   const context = await recallRecentContext(agentId, 2);
   const masterTools = sortToolsForPromptCache(listToolsForAgent(agentId));
+  const personaSnapshot = await getPersonaSnapshot();
+  const cacheScope = buildPromptCacheScope(agentId, cloudApiConfig.model, {
+    personaVersion: personaSnapshot.version,
+    toolsetHash: hashToolsetForPromptCache(masterTools),
+  });
   const functions = toolsToOpenAIFunctions(masterTools);
   const adaptiveContext = await buildAdaptiveContextPrompt(agentId);
 
