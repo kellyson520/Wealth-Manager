@@ -266,11 +266,26 @@ async function initTables(db: SQLite.SQLiteDatabase): Promise<void> {
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS prompt_cache_telemetry (
+      id TEXT PRIMARY KEY,
+      scope TEXT NOT NULL,
+      agent_id TEXT NOT NULL,
+      prompt_tokens INTEGER DEFAULT 0,
+      completion_tokens INTEGER DEFAULT 0,
+      cached_prompt_tokens INTEGER DEFAULT 0,
+      hit_rate REAL DEFAULT 0,
+      source TEXT DEFAULT 'non_stream',
+      model TEXT,
+      created_at TEXT NOT NULL
+    );
   `);
 
   await db.execAsync(`CREATE INDEX IF NOT EXISTS idx_vector_source ON vector_store(source_type, source_id)`);
   await db.execAsync(`CREATE INDEX IF NOT EXISTS idx_nlu_learning_lookup ON nlu_learning_samples(normalized_text, enabled, hits)`);
   await db.execAsync(`CREATE INDEX IF NOT EXISTS idx_agent_memory_digest_agent ON agent_memory_digest(agent_id, updated_at)`);
+  await db.execAsync(`CREATE INDEX IF NOT EXISTS idx_prompt_cache_scope_time ON prompt_cache_telemetry(scope, created_at)`);
+  await db.execAsync(`CREATE INDEX IF NOT EXISTS idx_prompt_cache_agent_time ON prompt_cache_telemetry(agent_id, created_at)`);
   await migrateAuditLog(db);
   await migrateAdaptiveMemory(db);
 

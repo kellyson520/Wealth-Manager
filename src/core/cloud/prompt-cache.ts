@@ -1,4 +1,6 @@
 import type { ToolEntry } from '../../agents/_shared/tool-registry';
+import { getDatabase } from '../database/database';
+import type { AgentId } from '../../shared/types';
 
 export interface CacheOptimizedPromptInput {
   agentSystemPrompt: string;
@@ -30,17 +32,45 @@ export interface DynamicPromptBudget {
 export interface PromptCacheUsageInput {
   promptTokens?: number;
   cachedPromptTokens?: number;
+  completionTokens?: number;
+}
+
+export interface PromptCacheUsageMeta {
+  agentId?: AgentId | string;
+  source?: 'non_stream' | 'stream' | 'manual';
+  model?: string;
 }
 
 export interface PromptCacheRuntimeStats {
   scope: string;
+  agentId: string;
   calls: number;
   warmCalls: number;
   lastHitRate: number;
   averageHitRate: number;
   averagePromptTokens: number;
   averageCachedTokens: number;
+  averageCompletionTokens: number;
   recommendedBudget: DynamicPromptBudget;
+}
+
+export interface PromptCacheTelemetryRow {
+  id: string;
+  scope: string;
+  agentId: string;
+  promptTokens: number;
+  completionTokens: number;
+  cachedPromptTokens: number;
+  hitRate: number;
+  source: string;
+  model?: string;
+  createdAt: string;
+}
+
+export interface PromptCacheDashboard {
+  overall: PromptCacheRuntimeStats;
+  stats: PromptCacheRuntimeStats[];
+  recent: PromptCacheTelemetryRow[];
 }
 
 const DEFAULT_DYNAMIC_BUDGET: DynamicPromptBudget = {
@@ -60,7 +90,20 @@ const MIN_DYNAMIC_BUDGET: DynamicPromptBudget = {
   nluContextChars: 80,
 };
 
-const telemetry = new Map<string, { promptTokens: number; cachedPromptTokens: number; hitRate: number }[]>();
+type TelemetrySample = {
+  id: string;
+  scope: string;
+  agentId: string;
+  promptTokens: number;
+  completionTokens: number;
+  cachedPromptTokens: number;
+  hitRate: number;
+  source: string;
+  model?: string;
+  createdAt: string;
+};
+
+const telemetry = new Map<string, TelemetrySample[]>();
 
 export function sortToolsForPromptCache(tools: ToolEntry[]): ToolEntry[] {
   return [...tools].sort((a, b) => a.definition.name.localeCompare(b.definition.name));
@@ -127,18 +170,34 @@ export function buildPromptCacheMetrics(
 
 export function recordPromptCacheUsage(
   scope: string,
-  usage: PromptCacheUsageInput
+  usage: PromptCacheUsageInput,
+  meta: PromptCacheUsageMeta = {}
 ): PromptCacheRuntimeStats {
   const promptTokens = usage.promptTokens || 0;
   const cachedPromptTokens = usage.cachedPromptTokens || 0;
+  const completionTokens = usage.completionTokens || 0;
   const hitRate = promptTokens > 0
     ? Math.round((cachedPromptTokens / promptTokens) * 10000) / 100
     : 0;
+  const sample: TelemetrySample = {
+    id: `pc_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+    scope,
+    agentId: meta.agentId || scope.split(':')[0] || 'master',
+    promptTokens,
+    completionTokens,
+    cachedPromptTokens,
+    hitRate,
+    source: meta.source || 'non_stream',
+    model: meta.model,
+    createdAt: new Date().toISOString(),
+  };
 
   const rows = telemetry.get(scope) || [];
-  rows.push({ promptTokens, cachedPromptTokens, hitRate });
+  rows.push(sample);
   while (rows.length > TELEMETRY_WINDOW) rows.shift();
   telemetry.set(scope, rows);
+
+  persistPromptCacheTelemetry(sample).catch(() => {});
 
   return getPromptCacheRuntimeStats(scope);
 }
@@ -151,14 +210,45 @@ export function getPromptCacheRuntimeStats(scope: string): PromptCacheRuntimeSta
 
   return {
     scope,
+    agentId: rows[rows.length - 1]?.agentId || scope.split(':')[0] || 'master',
     calls: rows.length,
     warmCalls: warmRows.length,
     lastHitRate: rows[rows.length - 1]?.hitRate || 0,
     averageHitRate,
     averagePromptTokens: Math.round(average(sourceRows.map((row) => row.promptTokens))),
     averageCachedTokens: Math.round(average(sourceRows.map((row) => row.cachedPromptTokens))),
+    averageCompletionTokens: Math.round(average(sourceRows.map((row) => row.completionTokens))),
     recommendedBudget: getAdaptiveDynamicBudget(scope),
   };
+}
+
+export async function getPromptCacheDashboard(options?: {
+  scope?: string;
+  agentId?: AgentId | string;
+  limit?: number;
+}): Promise<PromptCacheDashboard> {
+  await hydratePromptCacheTelemetry(options);
+  const recent = await loadPromptCacheRecentRows(options);
+  const scopes = new Set<string>([
+    ...Array.from(telemetry.keys()),
+    ...recent.map((row) => row.scope),
+  ]);
+  const stats = Array.from(scopes)
+    .filter((scope) => !options?.scope || scope === options.scope)
+    .map((scope) => getPromptCacheRuntimeStats(scope))
+    .filter((stat) => !options?.agentId || stat.agentId === options.agentId)
+    .sort((a, b) => b.averageHitRate - a.averageHitRate);
+
+  return {
+    overall: buildOverallStats(stats),
+    stats,
+    recent,
+  };
+}
+
+export function buildPromptCacheScope(agentId: AgentId | string, model?: string): string {
+  const normalizedModel = (model || '').trim();
+  return normalizedModel ? `${agentId}:${normalizedModel}` : String(agentId);
 }
 
 export function getAdaptiveDynamicBudget(scope: string): DynamicPromptBudget {
@@ -175,6 +265,28 @@ export function getAdaptiveDynamicBudget(scope: string): DynamicPromptBudget {
 
 export function resetPromptCacheTelemetryForTest(): void {
   telemetry.clear();
+}
+
+export async function hydratePromptCacheTelemetry(options?: {
+  scope?: string;
+  agentId?: AgentId | string;
+  limit?: number;
+}): Promise<void> {
+  const rows = await loadPromptCacheRecentRows({
+    ...options,
+    limit: Math.max(options?.limit || TELEMETRY_WINDOW * 5, TELEMETRY_WINDOW),
+  });
+  const grouped = new Map<string, TelemetrySample[]>();
+  for (const row of rows.reverse()) {
+    const samples = grouped.get(row.scope) || [];
+    samples.push({ ...row });
+    while (samples.length > TELEMETRY_WINDOW) samples.shift();
+    grouped.set(row.scope, samples);
+  }
+
+  for (const [scope, rowsForScope] of grouped) {
+    telemetry.set(scope, rowsForScope);
+  }
 }
 
 export function estimatePromptTokens(text: string): number {
@@ -266,6 +378,106 @@ function scaleBudget(budget: DynamicPromptBudget, factor: number): DynamicPrompt
 function average(values: number[]): number {
   if (values.length === 0) return 0;
   return Math.round((values.reduce((sum, value) => sum + value, 0) / values.length) * 100) / 100;
+}
+
+async function persistPromptCacheTelemetry(sample: TelemetrySample): Promise<void> {
+  const db = await getDatabase();
+  await db.runAsync(
+    `INSERT INTO prompt_cache_telemetry (
+      id, scope, agent_id, prompt_tokens, completion_tokens,
+      cached_prompt_tokens, hit_rate, source, model, created_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      sample.id,
+      sample.scope,
+      sample.agentId,
+      sample.promptTokens,
+      sample.completionTokens,
+      sample.cachedPromptTokens,
+      sample.hitRate,
+      sample.source,
+      sample.model || null,
+      sample.createdAt,
+    ]
+  );
+}
+
+async function loadPromptCacheRecentRows(options?: {
+  scope?: string;
+  agentId?: AgentId | string;
+  limit?: number;
+}): Promise<PromptCacheTelemetryRow[]> {
+  try {
+    const db = await getDatabase();
+    const where: string[] = [];
+    const args: (string | number)[] = [];
+    if (options?.scope) {
+      where.push('scope = ?');
+      args.push(options.scope);
+    }
+    if (options?.agentId) {
+      where.push('agent_id = ?');
+      args.push(String(options.agentId));
+    }
+    args.push(options?.limit || 40);
+    const rows = await db.getAllAsync<{
+      id: string;
+      scope: string;
+      agent_id: string;
+      prompt_tokens: number;
+      completion_tokens: number;
+      cached_prompt_tokens: number;
+      hit_rate: number;
+      source: string;
+      model?: string | null;
+      created_at: string;
+    }>(
+      `SELECT id, scope, agent_id, prompt_tokens, completion_tokens,
+        cached_prompt_tokens, hit_rate, source, model, created_at
+       FROM prompt_cache_telemetry
+       ${where.length > 0 ? `WHERE ${where.join(' AND ')}` : ''}
+       ORDER BY created_at DESC
+       LIMIT ?`,
+      args
+    );
+    return rows.map((row) => ({
+      id: row.id,
+      scope: row.scope,
+      agentId: row.agent_id,
+      promptTokens: row.prompt_tokens || 0,
+      completionTokens: row.completion_tokens || 0,
+      cachedPromptTokens: row.cached_prompt_tokens || 0,
+      hitRate: row.hit_rate || 0,
+      source: row.source || 'non_stream',
+      model: row.model || undefined,
+      createdAt: row.created_at,
+    }));
+  } catch {
+    const rows = Array.from(telemetry.values()).flat();
+    return rows
+      .filter((row) => !options?.scope || row.scope === options.scope)
+      .filter((row) => !options?.agentId || row.agentId === options.agentId)
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+      .slice(0, options?.limit || 40)
+      .map((row) => ({ ...row }));
+  }
+}
+
+function buildOverallStats(stats: PromptCacheRuntimeStats[]): PromptCacheRuntimeStats {
+  const calls = stats.reduce((sum, stat) => sum + stat.calls, 0);
+  const warmCalls = stats.reduce((sum, stat) => sum + stat.warmCalls, 0);
+  return {
+    scope: 'all',
+    agentId: 'all',
+    calls,
+    warmCalls,
+    lastHitRate: stats[0]?.lastHitRate || 0,
+    averageHitRate: average(stats.map((stat) => stat.averageHitRate).filter((value) => value > 0)),
+    averagePromptTokens: Math.round(average(stats.map((stat) => stat.averagePromptTokens).filter((value) => value > 0))),
+    averageCachedTokens: Math.round(average(stats.map((stat) => stat.averageCachedTokens).filter((value) => value > 0))),
+    averageCompletionTokens: Math.round(average(stats.map((stat) => stat.averageCompletionTokens).filter((value) => value > 0))),
+    recommendedBudget: stats[0]?.recommendedBudget || { ...DEFAULT_DYNAMIC_BUDGET },
+  };
 }
 
 function hashForCache(text: string): string {

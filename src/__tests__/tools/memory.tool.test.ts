@@ -21,6 +21,14 @@ jest.mock('../../core/memory/adaptive-context', () => ({
   }),
 }));
 
+jest.mock('../../core/cloud/prompt-cache', () => ({
+  getPromptCacheDashboard: jest.fn().mockResolvedValue({
+    overall: { averageHitRate: 96.5, calls: 3, warmCalls: 2 },
+    stats: [{ scope: 'master:mimo-v2.5-pro', agentId: 'master', averageHitRate: 96.5 }],
+    recent: [],
+  }),
+}));
+
 import {
   deleteAiMemory,
   listAiMemories,
@@ -28,8 +36,10 @@ import {
   updatePersonaSnapshot,
   upsertUserProfileMemory,
 } from '../../core/memory/adaptive-context';
+import { getPromptCacheDashboard } from '../../core/cloud/prompt-cache';
 import {
   delete_ai_memory,
+  get_ai_cache_stats,
   list_ai_memories,
   remember_user_preference,
   set_ai_learning_enabled,
@@ -99,5 +109,16 @@ describe('memory tools', () => {
 
     expect(result.success).toBe(true);
     expect(setNluLearningEnabled).toHaveBeenCalledWith(false);
+  });
+
+  test('returns AI prompt cache stats', async () => {
+    const result = await get_ai_cache_stats({ agentId: 'master', limit: 10 });
+
+    expect(result.success).toBe(true);
+    expect(getPromptCacheDashboard).toHaveBeenCalledWith({
+      agentId: 'master',
+      scope: undefined,
+      limit: 10,
+    });
   });
 });

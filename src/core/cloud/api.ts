@@ -36,6 +36,14 @@ export interface CloudResponse {
   };
 }
 
+export type CloudStreamChunk = {
+  type: 'token' | 'function_call' | 'done' | 'error';
+  content?: string;
+  functionCall?: { name: string; arguments: string };
+  usage?: CloudResponse['usage'];
+  error?: string;
+};
+
 const defaultBudget = {
   monthlyLimit: 50000,
   used: 0,
@@ -230,12 +238,7 @@ function extractCachedPromptTokens(usage: unknown): number {
 export async function* callCloudLLMStream(
   request: CloudRequest,
   apiKey?: string
-): AsyncGenerator<{
-  type: 'token' | 'function_call' | 'done' | 'error';
-  content?: string;
-  functionCall?: { name: string; arguments: string };
-  error?: string;
-}> {
+): AsyncGenerator<CloudStreamChunk> {
   const rateCheck = checkRateLimit('cloud_llm', { maxCallsPerMinute: 10, maxCallsPerHour: 100, windowMs: 60000 });
   if (!rateCheck.allowed) {
     yield { type: 'error', error: rateCheck.reason };
@@ -278,6 +281,7 @@ export async function* callCloudLLMStream(
       messages: sanitizedMessages,
       temperature: request.temperature ?? 0.7,
       stream: true,
+      stream_options: { include_usage: true },
     };
     body[request.tokenParam || 'max_tokens'] = request.maxTokens || 500;
     if (request.thinking) {
@@ -330,6 +334,9 @@ export async function* callCloudLLMStream(
     let functionCallArgs = '';
     let isFunctionCall = false;
     let totalTokens = 0;
+    let promptTokens = 0;
+    let completionTokens = 0;
+    let cachedPromptTokens = 0;
 
     while (true) {
       const { done, value } = await reader.read();
@@ -345,7 +352,6 @@ export async function* callCloudLLMStream(
 
         const jsonStr = trimmed.slice(6);
         if (jsonStr === '[DONE]') {
-          yield { type: 'done' };
           continue;
         }
 
@@ -372,8 +378,11 @@ export async function* callCloudLLMStream(
             yield { type: 'token', content: delta.content };
           }
 
-          if (parsed.usage?.total_tokens) {
-            totalTokens = parsed.usage.total_tokens;
+          if (parsed.usage) {
+            totalTokens = parsed.usage.total_tokens || totalTokens;
+            promptTokens = parsed.usage.prompt_tokens || promptTokens;
+            completionTokens = parsed.usage.completion_tokens || completionTokens;
+            cachedPromptTokens = extractCachedPromptTokens(parsed.usage) || cachedPromptTokens;
           }
         } catch {
           // Skip malformed JSON chunks
@@ -392,7 +401,14 @@ export async function* callCloudLLMStream(
     consumeTokens(tokenBudget, actualTokens);
     recordSuccess(breaker);
 
-    yield { type: 'done' };
+    yield {
+      type: 'done',
+      usage: {
+        promptTokens,
+        completionTokens,
+        cachedPromptTokens,
+      },
+    };
   } catch (e) {
     recordFailure(breaker);
     yield { type: 'error', error: e instanceof Error ? e.message : '网络异常' };

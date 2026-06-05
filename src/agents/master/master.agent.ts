@@ -16,6 +16,7 @@ import { callCloudLLM, callCloudLLMStream } from '../../core/cloud/api';
 import { toolsToOpenAIFunctions, buildSystemPrompt } from '../../core/cloud/function-calling';
 import { getAgentSystemPrompt } from '../../core/cloud/prompts/agent-prompts';
 import {
+  buildPromptCacheScope,
   buildCacheOptimizedMessages,
   getAdaptiveDynamicBudget,
   recordPromptCacheUsage,
@@ -257,6 +258,7 @@ async function routeIntent(intent: IntentResult): Promise<string> {
 
 async function handleMasterControl(intent: IntentResult): Promise<string> {
   const toolMap: Record<string, string> = {
+    get_ai_cache_stats: 'get_ai_cache_stats',
     list_ai_memories: 'list_ai_memories',
     delete_ai_memory: 'delete_ai_memory',
     update_ai_persona: 'update_ai_persona',
@@ -283,6 +285,21 @@ async function handleMasterControl(intent: IntentResult): Promise<string> {
     return `我记住了这些内容：\n${memories.slice(0, 10).map((m) => `- ${m.kind} ${m.id}: ${m.content}`).join('\n')}`;
   }
 
+  if (intent.intent === 'get_ai_cache_stats') {
+    const data = result.data as {
+      overall?: { averageHitRate?: number; calls?: number; warmCalls?: number; averagePromptTokens?: number };
+      stats?: { agentId: string; scope: string; averageHitRate: number; calls: number }[];
+    } | undefined;
+    const overall = data?.overall;
+    const lines = (data?.stats || [])
+      .slice(0, 5)
+      .map((stat) => `- ${stat.scope}: ${stat.averageHitRate.toFixed(1)}%, ${stat.calls} 次`);
+    return [
+      `AI 缓存命中率 ${((overall?.averageHitRate || 0)).toFixed(1)}%，调用 ${overall?.calls || 0} 次，热缓存 ${overall?.warmCalls || 0} 次。`,
+      lines.length > 0 ? lines.join('\n') : '',
+    ].filter(Boolean).join('\n');
+  }
+
   if (intent.intent === 'set_ai_learning_enabled') {
     const data = result.data as { enabled?: boolean } | undefined;
     return data?.enabled === false ? '已关闭自动学习。' : '已开启自动学习。';
@@ -303,14 +320,16 @@ async function processWithLLM(
   userText: string,
   intent: IntentResult
 ): Promise<string> {
-  const context = await recallRecentContext('master', 2);
-  const masterTools = sortToolsForPromptCache(listToolsForAgent('master'));
-  const adaptiveContext = await buildAdaptiveContextPrompt('master');
+  const agentId: AgentId = 'master';
+  const cacheScope = buildPromptCacheScope(agentId, cloudApiConfig.model);
+  const context = await recallRecentContext(agentId, 2);
+  const masterTools = sortToolsForPromptCache(listToolsForAgent(agentId));
+  const adaptiveContext = await buildAdaptiveContextPrompt(agentId);
 
   const functions = toolsToOpenAIFunctions(masterTools);
 
   const { messages } = buildCacheOptimizedMessages({
-    agentSystemPrompt: await getAgentSystemPrompt('master'),
+    agentSystemPrompt: await getAgentSystemPrompt(agentId),
     toolSystemPrompt: buildSystemPrompt('Master', masterTools),
     adaptiveContext,
     personaPrompt: generatePersonaPrompt(),
@@ -319,7 +338,7 @@ async function processWithLLM(
       ? `意图=${intent.intent}, Agent=${intent.agent}, 参数=${JSON.stringify(intent.params)}, 置信度=${intent.confidence.toFixed(2)}`
       : undefined,
     userText,
-    dynamicBudget: getAdaptiveDynamicBudget('master'),
+    dynamicBudget: getAdaptiveDynamicBudget(cacheScope),
   });
 
   const result = await callCloudLLM(
@@ -345,7 +364,11 @@ async function processWithLLM(
   }
 
   const { response } = result;
-  recordPromptCacheUsage('master', response.usage);
+  recordPromptCacheUsage(cacheScope, response.usage, {
+    agentId,
+    source: 'non_stream',
+    model: cloudApiConfig.model,
+  });
 
   if (response.functionCall) {
     const args = parseToolArgs(response.functionCall.arguments);
@@ -466,13 +489,15 @@ export async function* processMessageStream(
   const messageId = `msg_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
   (yield { type: 'thinking' as const, content: '分析中...', messageId }) as void;
 
-  const context = await recallRecentContext('master', 2);
-  const masterTools = sortToolsForPromptCache(listToolsForAgent('master'));
+  const agentId: AgentId = 'master';
+  const cacheScope = buildPromptCacheScope(agentId, cloudApiConfig.model);
+  const context = await recallRecentContext(agentId, 2);
+  const masterTools = sortToolsForPromptCache(listToolsForAgent(agentId));
   const functions = toolsToOpenAIFunctions(masterTools);
-  const adaptiveContext = await buildAdaptiveContextPrompt('master');
+  const adaptiveContext = await buildAdaptiveContextPrompt(agentId);
 
   const { messages } = buildCacheOptimizedMessages({
-    agentSystemPrompt: await getAgentSystemPrompt('master'),
+    agentSystemPrompt: await getAgentSystemPrompt(agentId),
     toolSystemPrompt: buildSystemPrompt('Master', masterTools),
     adaptiveContext,
     personaPrompt: generatePersonaPrompt(),
@@ -481,7 +506,7 @@ export async function* processMessageStream(
       ? `意图=${intent.intent}, Agent=${intent.agent}, 置信度=${intent.confidence.toFixed(2)}`
       : undefined,
     userText: sanitized,
-    dynamicBudget: getAdaptiveDynamicBudget('master'),
+    dynamicBudget: getAdaptiveDynamicBudget(cacheScope),
   });
 
   let textBuffer = '';
@@ -544,6 +569,13 @@ export async function* processMessageStream(
         }
         break;
       case 'done':
+        if (chunk.usage?.promptTokens) {
+          recordPromptCacheUsage(cacheScope, chunk.usage, {
+            agentId,
+            source: 'stream',
+            model: cloudApiConfig.model,
+          });
+        }
         break;
     }
   }

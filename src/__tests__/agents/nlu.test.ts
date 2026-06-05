@@ -111,6 +111,18 @@ describe('NLU Intent Classification', () => {
     });
   });
 
+  describe('AI runtime queries', () => {
+    test.each([
+      '缓存命中率怎么样',
+      '查看AI运行状态',
+      '显示token统计',
+    ])('"%s" → get_ai_cache_stats', (input) => {
+      const result = classifyIntent(input);
+      expect(result.intent).toBe('get_ai_cache_stats');
+      expect(result.agent).toBe('master');
+    });
+  });
+
   describe('safety queries', () => {
     test.each([
       ['安全扫描', 'safety_check', 'guardian'],

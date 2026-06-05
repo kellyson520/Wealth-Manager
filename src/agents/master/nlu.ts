@@ -844,6 +844,17 @@ const intentPatterns: { intent: string; patterns: RegExp[]; agent: string; prior
     extractParams: () => ({}),
   },
   {
+    intent: 'get_ai_cache_stats',
+    agent: 'master',
+    priority: 0.35,
+    patterns: [
+      /.*(?:缓存命中率|prompt cache|提示词缓存).*/,
+      /.*(?:AI|大模型|模型).*(?:运行状态|运行面板|调试|token|成本).*/,
+      /.*(?:查看|显示).*(?:缓存|token).*(?:统计|状态).*/,
+    ],
+    extractParams: () => ({ limit: 20 }),
+  },
+  {
     intent: 'list_ai_memories',
     agent: 'master',
     priority: 0.3,

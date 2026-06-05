@@ -131,13 +131,22 @@ export default function ChatScreen() {
               <Text style={styles.subtitle}>AI 财务助手</Text>
             </View>
           </View>
-          <TouchableOpacity
-            style={styles.logBtn}
-            onPress={() => router.push('/log')}
-            activeOpacity={0.7}
-          >
-            <Text style={styles.logBtnText}>日志</Text>
-          </TouchableOpacity>
+          <View style={styles.headerActions}>
+            <TouchableOpacity
+              style={styles.headerBtn}
+              onPress={() => router.push('/ai-cache')}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.headerBtnText}>运行</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.headerBtn}
+              onPress={() => router.push('/log')}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.headerBtnText}>日志</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       </View>
 
@@ -238,7 +247,11 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: colors.textMuted,
   },
-  logBtn: {
+  headerActions: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+  },
+  headerBtn: {
     minHeight: 36,
     justifyContent: 'center',
     paddingHorizontal: spacing.md,
@@ -248,7 +261,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.borderStrong,
   },
-  logBtnText: {
+  headerBtnText: {
     fontSize: 12,
     color: colors.text,
     fontWeight: '700',

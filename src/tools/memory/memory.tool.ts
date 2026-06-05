@@ -1,4 +1,5 @@
 import type { AgentId, ToolResult } from '../../shared/types';
+import { getPromptCacheDashboard } from '../../core/cloud/prompt-cache';
 import { setPersonaParams } from '../../core/persona/persona-engine';
 import {
   AiMemoryKind,
@@ -135,5 +136,23 @@ export async function refresh_ai_memory_digest(params?: {
   } catch (e) {
     captureError('refresh_ai_memory_digest', e, 'Failed to refresh AI memory digest');
     return { success: false, error: '刷新 AI 记忆摘要失败' };
+  }
+}
+
+export async function get_ai_cache_stats(params?: {
+  agentId?: AgentId;
+  scope?: string;
+  limit?: number;
+}): Promise<ToolResult> {
+  try {
+    const dashboard = await getPromptCacheDashboard({
+      agentId: params?.agentId,
+      scope: params?.scope,
+      limit: params?.limit || 20,
+    });
+    return { success: true, data: dashboard };
+  } catch (e) {
+    captureError('get_ai_cache_stats', e, 'Failed to get AI cache stats');
+    return { success: false, error: '查询 AI 缓存运行状态失败' };
   }
 }

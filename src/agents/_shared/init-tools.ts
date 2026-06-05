@@ -121,6 +121,7 @@ import {
 } from '../../tools/sharing/sharing.tool';
 import {
   delete_ai_memory,
+  get_ai_cache_stats,
   list_ai_memories,
   refresh_ai_memory_digest,
   remember_user_preference,
@@ -1770,6 +1771,25 @@ export function initToolRegistry(): void {
     },
     handler: async (params?: any) => list_sync_files(params),
     allowedAgents: ['guardian', 'analyst'],
+  });
+
+  registerTool({
+    definition: {
+      name: 'get_ai_cache_stats',
+      description: '查看 AI 提示词缓存命中率、token 使用和各 Agent 动态预算',
+      permissionLevel: 0 as PermissionLevel,
+      parameters: [
+        p('agentId', 'string', false, 'Agent ID'),
+        p('scope', 'string', false, '缓存作用域'),
+        p('limit', 'number', false, '最近样本条数'),
+      ],
+      returns: { type: 'ToolResult<PromptCacheDashboard>', description: 'AI 缓存运行统计' },
+      timeout: 3000,
+      retryable: true,
+      idempotent: true,
+    },
+    handler: async (params?: any) => get_ai_cache_stats(params),
+    allowedAgents: ['master', 'guardian'],
   });
 
   registerTool({

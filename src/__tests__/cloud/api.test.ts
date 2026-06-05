@@ -1,4 +1,4 @@
-import { callCloudLLM, resetForTest, setTokenBudget } from '../../core/cloud/api';
+import { callCloudLLM, callCloudLLMStream, resetForTest, setTokenBudget } from '../../core/cloud/api';
 import { _resetAllForTest } from '../../core/safety/guard';
 
 global.fetch = jest.fn();
@@ -345,6 +345,42 @@ describe('Cloud LLM API - Safety Chain', () => {
       expect(body.tools[0].function.name).toBe('get_total');
       expect(body.functions).toBeUndefined();
     });
+
+    test('parses stream usage and cached prompt tokens', async () => {
+      const chunks = [
+        'data: {"choices":[{"delta":{"content":"OK"}}]}\n',
+        'data: {"choices":[],"usage":{"total_tokens":1800,"prompt_tokens":1650,"completion_tokens":150,"prompt_tokens_details":{"cached_tokens":1600}}}\n',
+        'data: [DONE]\n',
+      ];
+      (global.fetch as jest.Mock).mockResolvedValue({
+        ok: true,
+        body: makeStreamBody(chunks),
+      });
+
+      const events = [];
+      for await (const chunk of callCloudLLMStream(
+        {
+          baseUrl: 'https://token-plan-cn.xiaomimimo.com/v1',
+          model: 'mimo-v2.5-pro',
+          messages: [{ role: 'user', content: 'clean text' }],
+        },
+        'test-key'
+      )) {
+        events.push(chunk);
+      }
+
+      expect(events[0]).toEqual({ type: 'token', content: 'OK' });
+      expect(events[events.length - 1]).toEqual({
+        type: 'done',
+        usage: {
+          promptTokens: 1650,
+          completionTokens: 150,
+          cachedPromptTokens: 1600,
+        },
+      });
+      const body = JSON.parse((global.fetch as jest.Mock).mock.calls[0][1].body);
+      expect(body.stream_options).toEqual({ include_usage: true });
+    });
   });
 
   describe('degradation indicator', () => {
@@ -379,3 +415,16 @@ describe('Cloud LLM API - Safety Chain', () => {
     });
   });
 });
+
+function makeStreamBody(chunks: string[]) {
+  const encoder = new TextEncoder();
+  let index = 0;
+  return {
+    getReader: () => ({
+      read: jest.fn().mockImplementation(() => {
+        if (index >= chunks.length) return Promise.resolve({ done: true });
+        return Promise.resolve({ done: false, value: encoder.encode(chunks[index++]) });
+      }),
+    }),
+  };
+}
