@@ -15,7 +15,12 @@ import {
 import { callCloudLLM, callCloudLLMStream } from '../../core/cloud/api';
 import { toolsToOpenAIFunctions, buildSystemPrompt } from '../../core/cloud/function-calling';
 import { getAgentSystemPrompt } from '../../core/cloud/prompts/agent-prompts';
-import { buildCacheOptimizedMessages, sortToolsForPromptCache } from '../../core/cloud/prompt-cache';
+import {
+  buildCacheOptimizedMessages,
+  getAdaptiveDynamicBudget,
+  recordPromptCacheUsage,
+  sortToolsForPromptCache,
+} from '../../core/cloud/prompt-cache';
 import { recallRecentContext } from '../_shared/memory';
 import { generatePersonaPrompt, updateMood, loadPersona } from '../../core/persona/persona-engine';
 import { messageBus } from '../../core/message-bus';
@@ -314,6 +319,7 @@ async function processWithLLM(
       ? `意图=${intent.intent}, Agent=${intent.agent}, 参数=${JSON.stringify(intent.params)}, 置信度=${intent.confidence.toFixed(2)}`
       : undefined,
     userText,
+    dynamicBudget: getAdaptiveDynamicBudget('master'),
   });
 
   const result = await callCloudLLM(
@@ -339,6 +345,7 @@ async function processWithLLM(
   }
 
   const { response } = result;
+  recordPromptCacheUsage('master', response.usage);
 
   if (response.functionCall) {
     const args = parseToolArgs(response.functionCall.arguments);
@@ -474,6 +481,7 @@ export async function* processMessageStream(
       ? `意图=${intent.intent}, Agent=${intent.agent}, 置信度=${intent.confidence.toFixed(2)}`
       : undefined,
     userText: sanitized,
+    dynamicBudget: getAdaptiveDynamicBudget('master'),
   });
 
   let textBuffer = '';

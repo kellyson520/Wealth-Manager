@@ -27,6 +27,22 @@ export interface DynamicPromptBudget {
   nluContextChars: number;
 }
 
+export interface PromptCacheUsageInput {
+  promptTokens?: number;
+  cachedPromptTokens?: number;
+}
+
+export interface PromptCacheRuntimeStats {
+  scope: string;
+  calls: number;
+  warmCalls: number;
+  lastHitRate: number;
+  averageHitRate: number;
+  averagePromptTokens: number;
+  averageCachedTokens: number;
+  recommendedBudget: DynamicPromptBudget;
+}
+
 const DEFAULT_DYNAMIC_BUDGET: DynamicPromptBudget = {
   adaptiveContextChars: 420,
   personaPromptChars: 160,
@@ -35,6 +51,16 @@ const DEFAULT_DYNAMIC_BUDGET: DynamicPromptBudget = {
 };
 
 const CACHEABLE_ADAPTIVE_SECTIONS = new Set(['SOUL', 'TONE_RULES', 'BOUNDARIES']);
+const TARGET_CACHE_HIT_RATE = 90;
+const TELEMETRY_WINDOW = 8;
+const MIN_DYNAMIC_BUDGET: DynamicPromptBudget = {
+  adaptiveContextChars: 180,
+  personaPromptChars: 80,
+  recentContextChars: 90,
+  nluContextChars: 80,
+};
+
+const telemetry = new Map<string, { promptTokens: number; cachedPromptTokens: number; hitRate: number }[]>();
 
 export function sortToolsForPromptCache(tools: ToolEntry[]): ToolEntry[] {
   return [...tools].sort((a, b) => a.definition.name.localeCompare(b.definition.name));
@@ -97,6 +123,58 @@ export function buildPromptCacheMetrics(
     estimatedDynamicTokens,
     cacheableRatio: total > 0 ? Math.round((estimatedStableTokens / total) * 10000) / 100 : 0,
   };
+}
+
+export function recordPromptCacheUsage(
+  scope: string,
+  usage: PromptCacheUsageInput
+): PromptCacheRuntimeStats {
+  const promptTokens = usage.promptTokens || 0;
+  const cachedPromptTokens = usage.cachedPromptTokens || 0;
+  const hitRate = promptTokens > 0
+    ? Math.round((cachedPromptTokens / promptTokens) * 10000) / 100
+    : 0;
+
+  const rows = telemetry.get(scope) || [];
+  rows.push({ promptTokens, cachedPromptTokens, hitRate });
+  while (rows.length > TELEMETRY_WINDOW) rows.shift();
+  telemetry.set(scope, rows);
+
+  return getPromptCacheRuntimeStats(scope);
+}
+
+export function getPromptCacheRuntimeStats(scope: string): PromptCacheRuntimeStats {
+  const rows = telemetry.get(scope) || [];
+  const warmRows = rows.filter((row) => row.cachedPromptTokens > 0);
+  const sourceRows = warmRows.length > 0 ? warmRows : rows;
+  const averageHitRate = average(sourceRows.map((row) => row.hitRate));
+
+  return {
+    scope,
+    calls: rows.length,
+    warmCalls: warmRows.length,
+    lastHitRate: rows[rows.length - 1]?.hitRate || 0,
+    averageHitRate,
+    averagePromptTokens: Math.round(average(sourceRows.map((row) => row.promptTokens))),
+    averageCachedTokens: Math.round(average(sourceRows.map((row) => row.cachedPromptTokens))),
+    recommendedBudget: getAdaptiveDynamicBudget(scope),
+  };
+}
+
+export function getAdaptiveDynamicBudget(scope: string): DynamicPromptBudget {
+  const rows = telemetry.get(scope) || [];
+  const warmRows = rows.filter((row) => row.cachedPromptTokens > 0);
+  if (warmRows.length < 2) return { ...DEFAULT_DYNAMIC_BUDGET };
+
+  const averageHitRate = average(warmRows.map((row) => row.hitRate));
+  if (averageHitRate >= TARGET_CACHE_HIT_RATE) return { ...DEFAULT_DYNAMIC_BUDGET };
+
+  const pressure = averageHitRate < 80 ? 0.45 : 0.65;
+  return scaleBudget(DEFAULT_DYNAMIC_BUDGET, pressure);
+}
+
+export function resetPromptCacheTelemetryForTest(): void {
+  telemetry.clear();
 }
 
 export function estimatePromptTokens(text: string): number {
@@ -174,6 +252,20 @@ function trimToBudget(value: string, maxChars: number): string {
 
   if (kept.length > 0) return `${kept.join('\n')}\n...`;
   return `${value.slice(0, Math.max(0, maxChars - 3)).trim()}...`;
+}
+
+function scaleBudget(budget: DynamicPromptBudget, factor: number): DynamicPromptBudget {
+  return {
+    adaptiveContextChars: Math.max(MIN_DYNAMIC_BUDGET.adaptiveContextChars, Math.round(budget.adaptiveContextChars * factor)),
+    personaPromptChars: Math.max(MIN_DYNAMIC_BUDGET.personaPromptChars, Math.round(budget.personaPromptChars * factor)),
+    recentContextChars: Math.max(MIN_DYNAMIC_BUDGET.recentContextChars, Math.round(budget.recentContextChars * factor)),
+    nluContextChars: Math.max(MIN_DYNAMIC_BUDGET.nluContextChars, Math.round(budget.nluContextChars * factor)),
+  };
+}
+
+function average(values: number[]): number {
+  if (values.length === 0) return 0;
+  return Math.round((values.reduce((sum, value) => sum + value, 0) / values.length) * 100) / 100;
 }
 
 function hashForCache(text: string): string {

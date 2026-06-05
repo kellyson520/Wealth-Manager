@@ -1,11 +1,19 @@
 import {
   buildCacheOptimizedMessages,
   buildPromptCacheMetrics,
+  getAdaptiveDynamicBudget,
+  getPromptCacheRuntimeStats,
+  recordPromptCacheUsage,
+  resetPromptCacheTelemetryForTest,
   splitAdaptiveContextForCache,
   sortToolsForPromptCache,
 } from '../../core/cloud/prompt-cache';
 
 describe('prompt cache planning', () => {
+  beforeEach(() => {
+    resetPromptCacheTelemetryForTest();
+  });
+
   test('puts stable system context before dynamic context', () => {
     const { messages, metrics } = buildCacheOptimizedMessages({
       agentSystemPrompt: 'STATIC_AGENT_PROMPT',
@@ -86,5 +94,28 @@ describe('prompt cache planning', () => {
     expect(first.stablePrefixHash).toBe(second.stablePrefixHash);
     expect(first.estimatedStableTokens).toBeGreaterThan(0);
     expect(first.cacheableRatio).toBeGreaterThan(0);
+  });
+
+  test('tightens dynamic budget when warm cache hit rate is below target', () => {
+    recordPromptCacheUsage('master', { promptTokens: 1300, cachedPromptTokens: 1024 });
+    recordPromptCacheUsage('master', { promptTokens: 1300, cachedPromptTokens: 1024 });
+
+    const budget = getAdaptiveDynamicBudget('master');
+
+    expect(budget.adaptiveContextChars).toBeLessThan(420);
+    expect(budget.recentContextChars).toBeLessThan(220);
+    expect(budget.adaptiveContextChars).toBeGreaterThanOrEqual(180);
+  });
+
+  test('keeps default dynamic budget when warm cache hit rate meets target', () => {
+    recordPromptCacheUsage('master', { promptTokens: 1650, cachedPromptTokens: 1600 });
+    recordPromptCacheUsage('master', { promptTokens: 1650, cachedPromptTokens: 1600 });
+
+    const stats = getPromptCacheRuntimeStats('master');
+    const budget = getAdaptiveDynamicBudget('master');
+
+    expect(stats.averageHitRate).toBeGreaterThan(90);
+    expect(budget.adaptiveContextChars).toBe(420);
+    expect(budget.recentContextChars).toBe(220);
   });
 });
