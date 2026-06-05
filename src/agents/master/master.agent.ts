@@ -18,6 +18,7 @@ import { getAgentSystemPrompt } from '../../core/cloud/prompts/agent-prompts';
 import { recallRecentContext } from '../_shared/memory';
 import { generatePersonaPrompt, updateMood, loadPersona } from '../../core/persona/persona-engine';
 import { messageBus } from '../../core/message-bus';
+import { buildAdaptiveContextPrompt } from '../../core/memory/adaptive-context';
 import {
   inferIntentFromToolCall,
   learnIntentAlias,
@@ -223,6 +224,8 @@ export async function processMessage(
 
 async function routeIntent(intent: IntentResult): Promise<string> {
   switch (intent.agent) {
+    case 'master':
+      return handleMasterControl(intent);
     case 'ledger':
       return handleLedger(intent);
     case 'analyst':
@@ -236,19 +239,59 @@ async function routeIntent(intent: IntentResult): Promise<string> {
   }
 }
 
+async function handleMasterControl(intent: IntentResult): Promise<string> {
+  const toolMap: Record<string, string> = {
+    list_ai_memories: 'list_ai_memories',
+    delete_ai_memory: 'delete_ai_memory',
+    update_ai_persona: 'update_ai_persona',
+    set_ai_learning_enabled: 'set_ai_learning_enabled',
+  };
+  const toolName = toolMap[intent.intent];
+  if (!toolName) return generateFallbackReply();
+  const entry = getTool(toolName);
+  if (!entry) return 'AI 控制工具暂不可用。';
+
+  const result = await executeTool(entry, intent.params, {
+    agentId: 'master',
+    userConfirmed: intent.params.confirmed === true,
+  });
+
+  if (!result.success) {
+    return `${result.error || '操作失败'}。`;
+  }
+
+  if (intent.intent === 'list_ai_memories') {
+    const memories = Array.isArray(result.data) ? result.data as { id: string; kind: string; content: string }[] : [];
+    if (memories.length === 0) return '我目前没有保存可展示的 AI 记忆。';
+    return `我记住了这些内容：\n${memories.slice(0, 10).map((m) => `- ${m.kind} ${m.id}: ${m.content}`).join('\n')}`;
+  }
+
+  if (intent.intent === 'set_ai_learning_enabled') {
+    const data = result.data as { enabled?: boolean } | undefined;
+    return data?.enabled === false ? '已关闭自动学习。' : '已开启自动学习。';
+  }
+
+  if (intent.intent === 'update_ai_persona') {
+    return '已更新 AI 人格设置。';
+  }
+
+  return '已完成。';
+}
+
 async function processWithLLM(
   userText: string,
   intent: IntentResult
 ): Promise<string> {
   const context = await recallRecentContext('master', 5);
   const masterTools = listToolsForAgent('master');
+  const adaptiveContext = await buildAdaptiveContextPrompt('master');
 
   const functions = toolsToOpenAIFunctions(masterTools);
 
   const messages: { role: string; content: string }[] = [
     {
       role: 'system',
-	      content: `${await getAgentSystemPrompt('master')}\n\n${generatePersonaPrompt()}\n${buildSystemPrompt('Master', masterTools)}`,
+      content: `${adaptiveContext}\n\n${await getAgentSystemPrompt('master')}\n\n${generatePersonaPrompt()}\n${buildSystemPrompt('Master', masterTools)}`,
     },
   ];
 
@@ -392,11 +435,12 @@ export async function* processMessageStream(
   const context = await recallRecentContext('master', 5);
   const masterTools = listToolsForAgent('master');
   const functions = toolsToOpenAIFunctions(masterTools);
+  const adaptiveContext = await buildAdaptiveContextPrompt('master');
 
   const messages: { role: string; content: string }[] = [
     {
       role: 'system',
-      content: `${await getAgentSystemPrompt('master')}\n\n${buildSystemPrompt('Master', masterTools)}`,
+      content: `${adaptiveContext}\n\n${await getAgentSystemPrompt('master')}\n\n${generatePersonaPrompt()}\n${buildSystemPrompt('Master', masterTools)}`,
     },
   ];
 

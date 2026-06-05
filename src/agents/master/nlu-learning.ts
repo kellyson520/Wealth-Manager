@@ -1,6 +1,7 @@
 import { v4 as uuidv4 } from 'uuid';
 import { getDatabase } from '../../core/database/database';
 import { captureError } from '../../core/logger/logger';
+import { isNluLearningEnabled } from '../../core/memory/adaptive-context';
 import type { IntentResult } from '../../shared/types';
 
 export type NluLearningSource = 'cloud_function' | 'user_feedback' | 'test';
@@ -119,6 +120,7 @@ export async function loadNluLearningSamples(): Promise<void> {
 }
 
 export async function learnIntentAlias(params: LearnIntentAliasParams): Promise<void> {
+  if (!(await isNluLearningEnabled())) return;
   const normalizedText = normalizeNluText(params.text);
   if (!canLearnAlias(normalizedText, params.intent)) return;
 
@@ -243,6 +245,11 @@ export function inferIntentFromToolCall(
     case 'sync_upload':
     case 'sync_download':
       return { intent: 'sync_webdav', agent: 'guardian', params: args };
+    case 'list_ai_memories':
+    case 'delete_ai_memory':
+    case 'update_ai_persona':
+    case 'set_ai_learning_enabled':
+      return { intent: toolName, agent: 'master', params: args };
     default:
       return null;
   }

@@ -448,6 +448,11 @@ describe('NLU real model regression cases', () => {
     ['检查账本数据是否完整', 'verify_chain', 'guardian'],
     ['看看我有哪些账户', 'list_assets', 'ledger'],
     ['新增一个基金账户', 'add_asset', 'ledger'],
+    ['你记住了我什么', 'list_ai_memories', 'master'],
+    ['查看AI记忆', 'list_ai_memories', 'master'],
+    ['关闭自动学习', 'set_ai_learning_enabled', 'master'],
+    ['开启自学习', 'set_ai_learning_enabled', 'master'],
+    ['严谨一点', 'update_ai_persona', 'master'],
   ])('routes second-pass Mimo fuzz case "%s" to %s/%s', (input, expectedIntent, expectedAgent) => {
     const result = classifyIntent(input);
     expect(result.intent).toBe(expectedIntent);

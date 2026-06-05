@@ -229,10 +229,47 @@ async function initTables(db: SQLite.SQLiteDatabase): Promise<void> {
       updated_at TEXT NOT NULL,
       UNIQUE(normalized_text, intent)
     );
+
+    CREATE TABLE IF NOT EXISTS nlu_learning_settings (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS persona_snapshots (
+      id TEXT PRIMARY KEY,
+      version INTEGER NOT NULL DEFAULT 1,
+      soul TEXT NOT NULL,
+      tone_rules TEXT DEFAULT '[]',
+      boundaries TEXT DEFAULT '[]',
+      source TEXT DEFAULT 'system',
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS user_profile_memory (
+      id TEXT PRIMARY KEY,
+      key TEXT NOT NULL UNIQUE,
+      value TEXT NOT NULL,
+      confidence REAL DEFAULT 0.7,
+      source TEXT DEFAULT 'agent',
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS agent_memory_digest (
+      id TEXT PRIMARY KEY,
+      agent_id TEXT NOT NULL,
+      digest TEXT NOT NULL,
+      token_budget INTEGER DEFAULT 1000,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
   `);
 
   await db.execAsync(`CREATE INDEX IF NOT EXISTS idx_vector_source ON vector_store(source_type, source_id)`);
   await db.execAsync(`CREATE INDEX IF NOT EXISTS idx_nlu_learning_lookup ON nlu_learning_samples(normalized_text, enabled, hits)`);
+  await db.execAsync(`CREATE INDEX IF NOT EXISTS idx_agent_memory_digest_agent ON agent_memory_digest(agent_id, updated_at)`);
   await migrateAuditLog(db);
 
   await initRulesTable();

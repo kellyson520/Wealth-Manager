@@ -844,6 +844,58 @@ const intentPatterns: { intent: string; patterns: RegExp[]; agent: string; prior
     extractParams: () => ({}),
   },
   {
+    intent: 'list_ai_memories',
+    agent: 'master',
+    priority: 0.3,
+    patterns: [
+      /.*(?:你|AI|助手).*(?:记住|记得).*(?:什么|哪些|内容).*/,
+      /.*(?:查看|列出|显示).*(?:AI)?记忆.*/,
+      /.*(?:我的)?(?:记忆|偏好).*(?:列表|清单).*/,
+    ],
+    extractParams: (_match, text) => {
+      let kind: string | undefined;
+      if (/表达|NLU|意图|学习/.test(text)) kind = 'nlu_learning';
+      else if (/偏好|用户/.test(text)) kind = 'user_profile';
+      return { kind, limit: 20 };
+    },
+  },
+  {
+    intent: 'delete_ai_memory',
+    agent: 'master',
+    priority: 0.3,
+    patterns: [
+      /.*(?:删除|忘记|移除).*(?:AI)?(?:记忆|偏好).*/,
+      /.*不要再记住.*/,
+    ],
+    extractParams: () => ({}),
+  },
+  {
+    intent: 'set_ai_learning_enabled',
+    agent: 'master',
+    priority: 0.3,
+    patterns: [
+      /.*(?:关闭|停用|禁用).*(?:自动学习|学习功能|自学习).*/,
+      /.*(?:开启|打开|启用).*(?:自动学习|学习功能|自学习).*/,
+    ],
+    extractParams: (_match, text) => ({
+      enabled: /(?:开启|打开|启用)/.test(text),
+    }),
+  },
+  {
+    intent: 'update_ai_persona',
+    agent: 'master',
+    priority: 0.25,
+    patterns: [
+      /.*(?:严谨|幽默|主动).*(?:一点|一些|调高|提高|降低|少点).*/,
+      /.*(?:人格|人设|风格).*(?:调整|修改|更新|设置).*/,
+    ],
+    extractParams: (_match, text) => ({
+      rigor: /严谨.*(?:一点|一些|调高|提高)|(?:调高|提高).*严谨/.test(text) ? 7 : undefined,
+      humor: /幽默.*(?:一点|一些|调高|提高)|(?:调高|提高).*幽默/.test(text) ? 7 : undefined,
+      proactivity: /主动.*(?:一点|一些|调高|提高)|(?:调高|提高).*主动/.test(text) ? 7 : undefined,
+    }),
+  },
+  {
     intent: 'list_assets',
     agent: 'ledger',
     priority: 0.25,
