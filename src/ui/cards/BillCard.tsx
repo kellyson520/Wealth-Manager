@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { BillCardData } from '../../shared/types';
+import { colors, radius, shadow, spacing } from '../theme';
 
 interface BillCardProps {
   data: BillCardData;
@@ -23,18 +24,20 @@ const CATEGORY_ICONS: Record<string, string> = {
 };
 
 const TYPE_LABELS: Record<string, string> = { income: '收入', expense: '支出', refund: '退款' };
-const TYPE_COLORS: Record<string, string> = { income: '#4ADE80', expense: '#F87171', refund: '#A78BFA' };
+const TYPE_COLORS: Record<string, string> = { income: colors.income, expense: colors.expense, refund: colors.purple };
 
 export default function BillCard({ data }: BillCardProps) {
   const { bill } = data;
   const icon = CATEGORY_ICONS[bill.category] || '📦';
   const typeLabel = TYPE_LABELS[bill.type] || bill.type;
-  const typeColor = TYPE_COLORS[bill.type] || '#888';
+  const typeColor = TYPE_COLORS[bill.type] || colors.textSubtle;
 
   return (
     <View style={styles.card}>
       <View style={styles.header}>
-        <Text style={styles.icon}>{icon}</Text>
+        <View style={styles.iconWrap}>
+          <Text style={styles.icon}>{icon}</Text>
+        </View>
         <View style={styles.headerText}>
           <Text style={styles.merchant} numberOfLines={1}>
             {bill.merchant || '未命名'}
@@ -70,62 +73,74 @@ export default function BillCard({ data }: BillCardProps) {
 const styles = StyleSheet.create({
   card: {
     marginTop: 8,
-    backgroundColor: '#1a1a2e',
-    borderRadius: 12,
+    backgroundColor: colors.surfaceRaised,
+    borderRadius: radius.md,
     borderWidth: 1,
-    borderColor: '#2a2a4e',
+    borderColor: colors.border,
     overflow: 'hidden',
+    ...shadow,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 12,
+    padding: spacing.md,
+  },
+  iconWrap: {
+    width: 38,
+    height: 38,
+    borderRadius: radius.md,
+    backgroundColor: colors.surfaceSoft,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: spacing.md,
   },
   icon: {
-    fontSize: 28,
-    marginRight: 10,
+    fontSize: 22,
   },
   headerText: {
     flex: 1,
+    minWidth: 0,
   },
   merchant: {
     fontSize: 15,
-    fontWeight: '600',
-    color: '#e0e0e0',
+    fontWeight: '700',
+    color: colors.text,
   },
   type: {
     fontSize: 12,
-    color: '#888',
+    color: colors.textMuted,
     marginTop: 2,
   },
   amount: {
     fontSize: 16,
-    fontWeight: '700',
+    fontWeight: '800',
+    marginLeft: spacing.sm,
   },
   noteRow: {
-    paddingHorizontal: 12,
-    paddingBottom: 10,
+    paddingHorizontal: spacing.md,
+    paddingBottom: spacing.md,
   },
   noteText: {
     fontSize: 13,
-    color: '#aaa',
+    color: colors.textMuted,
     lineHeight: 18,
   },
   tagRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    paddingHorizontal: 12,
-    paddingBottom: 10,
+    paddingHorizontal: spacing.md,
+    paddingBottom: spacing.md,
     gap: 6,
   },
   tag: {
-    backgroundColor: '#2a2a4e',
-    borderRadius: 6,
-    paddingHorizontal: 8,
+    backgroundColor: colors.surfaceSoft,
+    borderRadius: radius.sm,
+    paddingHorizontal: spacing.sm,
     paddingVertical: 3,
   },
   tagText: {
     fontSize: 11,
-    color: '#aaa',
+    color: colors.textMuted,
+    fontWeight: '600',
   },
 });

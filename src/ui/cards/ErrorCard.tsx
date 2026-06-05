@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { ErrorCardData } from '../../shared/types';
+import { colors, radius, shadow, spacing } from '../theme';
 
 interface ErrorCardProps {
   data: ErrorCardData;
@@ -59,20 +60,21 @@ export default function ErrorCard({ data, onRetry }: ErrorCardProps) {
 const styles = StyleSheet.create({
   card: {
     marginTop: 8,
-    backgroundColor: '#1a1a2e',
-    borderRadius: 12,
+    backgroundColor: colors.surfaceRaised,
+    borderRadius: radius.md,
     borderWidth: 1,
-    borderColor: '#7F1D1D',
-    padding: 14,
+    borderColor: colors.danger,
+    padding: spacing.lg,
+    ...shadow,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 10,
+    marginBottom: spacing.md,
   },
   icon: {
     fontSize: 24,
-    marginRight: 10,
+    marginRight: spacing.md,
   },
   headerText: {
     flex: 1,
@@ -80,56 +82,56 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 15,
     fontWeight: '700',
-    color: '#F87171',
+    color: colors.expense,
   },
   code: {
     fontSize: 11,
-    color: '#B91C1C',
+    color: colors.danger,
     marginTop: 2,
   },
   message: {
     fontSize: 14,
-    color: '#ddd',
+    color: colors.text,
     lineHeight: 20,
     marginBottom: 6,
   },
   detail: {
     fontSize: 12,
-    color: '#888',
+    color: colors.textSubtle,
     lineHeight: 18,
     marginBottom: 8,
-    backgroundColor: '#12122a',
-    padding: 8,
-    borderRadius: 6,
+    backgroundColor: colors.surface,
+    padding: spacing.sm,
+    borderRadius: radius.sm,
     borderWidth: 1,
-    borderColor: '#2a2a2e',
+    borderColor: colors.border,
   },
   suggestionRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    marginBottom: 10,
+    marginBottom: spacing.md,
   },
   suggestionIcon: {
     fontSize: 14,
-    marginRight: 6,
+    marginRight: spacing.sm,
     marginTop: 1,
   },
   suggestionText: {
     flex: 1,
     fontSize: 13,
-    color: '#aaa',
+    color: colors.textMuted,
     lineHeight: 18,
   },
   retryBtn: {
     alignSelf: 'flex-end',
     paddingHorizontal: 20,
     paddingVertical: 8,
-    borderRadius: 8,
-    backgroundColor: '#DC2626',
+    borderRadius: radius.md,
+    backgroundColor: colors.danger,
   },
   retryText: {
     fontSize: 14,
-    color: '#fff',
+    color: colors.white,
     fontWeight: '700',
   },
 });

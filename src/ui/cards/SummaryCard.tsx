@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { SummaryCardData } from '../../shared/types';
+import { colors, radius, shadow, spacing } from '../theme';
 
 interface SummaryCardProps {
   data: SummaryCardData;
@@ -20,13 +21,13 @@ export default function SummaryCard({ data }: SummaryCardProps) {
   return (
     <View style={styles.card}>
       <View style={styles.titleRow}>
-        <Text style={styles.title}>📊 {data.period}概览</Text>
+        <Text style={styles.title}>{data.period}概览</Text>
         <Text style={styles.billCount}>{data.billCount} 笔</Text>
       </View>
 
       <View style={styles.balanceRow}>
         <Text style={styles.balanceLabel}>结余</Text>
-        <Text style={[styles.balanceAmount, { color: isPositive ? '#4ADE80' : '#F87171' }]}>
+        <Text style={[styles.balanceAmount, { color: isPositive ? colors.income : colors.expense }]}>
           {isPositive ? '+' : ''}¥{balance.toFixed(2)}
         </Text>
       </View>
@@ -38,13 +39,13 @@ export default function SummaryCard({ data }: SummaryCardProps) {
 
       <View style={styles.statsRow}>
         <View style={styles.statItem}>
-          <View style={[styles.statDot, { backgroundColor: '#4ADE80' }]} />
+          <View style={[styles.statDot, { backgroundColor: colors.income }]} />
           <Text style={styles.statLabel}>收入</Text>
           <Text style={styles.statValue}>¥{data.totalIncome.toFixed(2)}</Text>
         </View>
         <View style={styles.divider} />
         <View style={styles.statItem}>
-          <View style={[styles.statDot, { backgroundColor: '#F87171' }]} />
+          <View style={[styles.statDot, { backgroundColor: colors.expense }]} />
           <Text style={styles.statLabel}>支出</Text>
           <Text style={styles.statValue}>¥{data.totalExpense.toFixed(2)}</Text>
         </View>
@@ -56,37 +57,40 @@ export default function SummaryCard({ data }: SummaryCardProps) {
 const styles = StyleSheet.create({
   card: {
     marginTop: 8,
-    backgroundColor: '#1a1a2e',
-    borderRadius: 12,
+    backgroundColor: colors.surfaceRaised,
+    borderRadius: radius.md,
     borderWidth: 1,
-    borderColor: '#2a2a4e',
-    padding: 14,
+    borderColor: colors.border,
+    padding: spacing.lg,
+    ...shadow,
   },
   titleRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: spacing.md,
   },
   title: {
     fontSize: 15,
-    fontWeight: '700',
-    color: '#e0e0e0',
+    fontWeight: '800',
+    color: colors.text,
   },
   billCount: {
     fontSize: 12,
-    color: '#888',
-    backgroundColor: '#2a2a4e',
-    paddingHorizontal: 8,
+    color: colors.accent,
+    backgroundColor: colors.accentSoft,
+    paddingHorizontal: spacing.sm,
     paddingVertical: 3,
-    borderRadius: 6,
+    borderRadius: radius.sm,
+    fontWeight: '700',
   },
   balanceRow: {
-    marginBottom: 12,
+    marginBottom: spacing.md,
   },
   balanceLabel: {
     fontSize: 12,
-    color: '#888',
+    color: colors.textMuted,
+    marginBottom: 2,
   },
   balanceAmount: {
     fontSize: 28,
@@ -97,17 +101,19 @@ const styles = StyleSheet.create({
     height: 8,
     borderRadius: 4,
     overflow: 'hidden',
-    marginBottom: 14,
+    marginBottom: spacing.lg,
+    backgroundColor: colors.surfaceSoft,
   },
   barIncome: {
-    backgroundColor: '#4ADE80',
+    backgroundColor: colors.income,
   },
   barExpense: {
-    backgroundColor: '#F87171',
+    backgroundColor: colors.expense,
   },
   statsRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: spacing.md,
   },
   statItem: {
     flex: 1,
@@ -122,18 +128,18 @@ const styles = StyleSheet.create({
   },
   statLabel: {
     fontSize: 13,
-    color: '#aaa',
-    marginRight: 8,
+    color: colors.textMuted,
+    marginRight: spacing.sm,
   },
   statValue: {
     fontSize: 15,
     fontWeight: '700',
-    color: '#e0e0e0',
+    color: colors.text,
+    flexShrink: 1,
   },
   divider: {
     width: 1,
     height: 20,
-    backgroundColor: '#2a2a4e',
-    marginHorizontal: 12,
+    backgroundColor: colors.border,
   },
 });

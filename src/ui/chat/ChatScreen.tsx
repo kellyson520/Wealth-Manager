@@ -15,11 +15,12 @@ import QuickBar from './QuickBar';
 import { ChatMessage } from '../../shared/types';
 import { processMessage } from '../../agents/master/master.agent';
 import { logger, captureError } from '../../core/logger/logger';
+import { colors, radius, shadow, spacing } from '../theme';
 
 const WELCOME_MESSAGE: ChatMessage = {
   id: 'welcome',
   role: 'assistant',
-  content: 'Hello! I am **Wealth Manager**\n\nYour AI financial assistant. Tell me about your income and expenses in natural language!\n\nExamples:\n- "Spent 35 on lunch"\n- "How much did I spend today?"\n- "Salary 5000 received"',
+  content: '你好，我是 Wealth Manager。直接告诉我一笔收支，或问我预算、趋势、异常消费和订阅扣费。',
   timestamp: new Date().toISOString(),
 };
 
@@ -113,18 +114,22 @@ export default function ChatScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor="#0a0a1a" />
+      <StatusBar barStyle="light-content" backgroundColor={colors.bg} />
       <View style={styles.header}>
         <View style={styles.headerContent}>
           <View style={styles.avatar}>
-            <View style={styles.avatarDot} />
+            <Text style={styles.avatarText}>¥</Text>
           </View>
           <View style={{ flex: 1 }}>
             <View style={styles.titleRow}>
               <View style={styles.statusDot} />
               <Text style={styles.title}>Wealth Manager</Text>
             </View>
-            <Text style={styles.subtitle}>AI 财务助手</Text>
+            <View style={styles.contextRow}>
+              <Text style={styles.contextChip}>本地优先</Text>
+              <Text style={styles.contextDivider}>·</Text>
+              <Text style={styles.subtitle}>AI 财务助手</Text>
+            </View>
           </View>
           <TouchableOpacity
             style={styles.logBtn}
@@ -144,6 +149,14 @@ export default function ChatScreen() {
         style={styles.messageList}
         contentContainerStyle={styles.messageListContent}
         onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
+        ListFooterComponent={
+          isProcessing ? (
+            <View style={styles.processingRow}>
+              <View style={styles.processingDot} />
+              <Text style={styles.processingText}>正在分析</Text>
+            </View>
+          ) : null
+        }
       />
 
       <QuickBar onQuickAction={handleSend} />
@@ -160,33 +173,36 @@ export default function ChatScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0a0a1a',
+    backgroundColor: colors.bg,
   },
   header: {
-    backgroundColor: '#12122a',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    backgroundColor: colors.bgAlt,
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.lg,
     borderBottomWidth: 1,
-    borderBottomColor: '#2a2a3e',
+    borderBottomColor: colors.border,
   },
   headerContent: {
     flexDirection: 'row',
     alignItems: 'center',
   },
   avatar: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: '#1e1e3e',
+    width: 42,
+    height: 42,
+    borderRadius: radius.lg,
+    backgroundColor: colors.accentSoft,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 12,
+    marginRight: spacing.md,
+    borderWidth: 1,
+    borderColor: 'rgba(45,212,191,0.35)',
+    ...shadow,
   },
-  avatarDot: {
-    width: 16,
-    height: 16,
-    borderRadius: 8,
-    backgroundColor: '#4A90D9',
+  avatarText: {
+    color: colors.accent,
+    fontSize: 22,
+    fontWeight: '800',
   },
   titleRow: {
     flexDirection: 'row',
@@ -196,37 +212,79 @@ const styles = StyleSheet.create({
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: '#4ADE80',
+    backgroundColor: colors.income,
     marginRight: 8,
   },
   title: {
-    fontSize: 16,
+    fontSize: 18,
+    fontWeight: '800',
+    color: colors.text,
+  },
+  contextRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 4,
+  },
+  contextChip: {
+    fontSize: 12,
+    color: colors.accent,
     fontWeight: '700',
-    color: '#e0e0e0',
+  },
+  contextDivider: {
+    color: colors.textSubtle,
+    marginHorizontal: 6,
   },
   subtitle: {
     fontSize: 12,
-    color: '#888',
-    marginTop: 2,
+    color: colors.textMuted,
   },
   logBtn: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 6,
-    backgroundColor: '#1e1e3e',
+    minHeight: 36,
+    justifyContent: 'center',
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: radius.md,
+    backgroundColor: colors.surfaceRaised,
     borderWidth: 1,
-    borderColor: '#3a3a5e',
+    borderColor: colors.borderStrong,
   },
   logBtnText: {
     fontSize: 12,
-    color: '#aaa',
-    fontWeight: '500',
+    color: colors.text,
+    fontWeight: '700',
   },
   messageList: {
     flex: 1,
   },
   messageListContent: {
-    paddingVertical: 12,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.sm,
+  },
+  processingRow: {
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginHorizontal: spacing.lg,
+    marginTop: spacing.xs,
+    marginBottom: spacing.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: radius.pill,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  processingDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+    backgroundColor: colors.accent,
+    marginRight: spacing.sm,
+  },
+  processingText: {
+    fontSize: 12,
+    color: colors.textMuted,
+    fontWeight: '600',
   },
 });
 

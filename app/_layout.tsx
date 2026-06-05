@@ -4,6 +4,7 @@ import { useEffect } from 'react';
 import { Platform } from 'react-native';
 import { initializeNotifications, requestNotificationPermissions } from '../src/core/notifications/notification.service';
 import { schedule_default_reminders } from '../src/tools/automation/task-scheduler';
+import { colors } from '../src/ui/theme';
 
 export default function RootLayout() {
   useEffect(() => {
@@ -33,7 +34,7 @@ export default function RootLayout() {
       <Stack
         screenOptions={{
           headerShown: false,
-          contentStyle: { backgroundColor: '#0a0a1a' },
+          contentStyle: { backgroundColor: colors.bg },
         }}
       />
     </>

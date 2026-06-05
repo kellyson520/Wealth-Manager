@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { ConfirmCardData } from '../../shared/types';
+import { colors, radius, shadow, spacing } from '../theme';
 
 interface ConfirmCardProps {
   data: ConfirmCardData;
@@ -9,9 +10,9 @@ interface ConfirmCardProps {
 }
 
 const RISK_STYLES: Record<string, { border: string; badge: string; badgeBg: string; icon: string }> = {
-  low: { border: '#4ADE80', badge: '低风险', badgeBg: '#14532D', icon: '✅' },
-  medium: { border: '#FACC15', badge: '中等风险', badgeBg: '#713F12', icon: '⚠️' },
-  high: { border: '#F87171', badge: '高风险', badgeBg: '#7F1D1D', icon: '🚨' },
+  low: { border: colors.income, badge: '低风险', badgeBg: colors.incomeSoft, icon: '✓' },
+  medium: { border: colors.warning, badge: '中等风险', badgeBg: colors.warningSoft, icon: '!' },
+  high: { border: colors.expense, badge: '高风险', badgeBg: colors.dangerSoft, icon: '!' },
 };
 
 export default function ConfirmCard({ data, onConfirm, onCancel }: ConfirmCardProps) {
@@ -45,7 +46,9 @@ export default function ConfirmCard({ data, onConfirm, onCancel }: ConfirmCardPr
   return (
     <View style={[styles.card, { borderColor: risk.border }]}>
       <View style={styles.header}>
-        <Text style={styles.icon}>{isSecurity ? '🔒' : risk.icon}</Text>
+        <View style={[styles.iconWrap, { borderColor: risk.border }]}>
+          <Text style={[styles.icon, { color: risk.border }]}>{isSecurity ? '⌁' : risk.icon}</Text>
+        </View>
         <View style={styles.headerText}>
           <Text style={styles.title}>{data.title}</Text>
           <View style={[styles.riskBadge, { backgroundColor: risk.badgeBg }]}>
@@ -83,15 +86,15 @@ export default function ConfirmCard({ data, onConfirm, onCancel }: ConfirmCardPr
             {
               backgroundColor:
                 data.riskLevel === 'high'
-                  ? '#DC2626'
+                  ? colors.danger
                   : isSecurity
-                    ? '#4A90D9'
-                    : '#4A90D9',
+                    ? colors.accentStrong
+                    : colors.accentStrong,
             },
             cooldownRemaining > 0 && styles.confirmBtnDisabled,
           ]}
           onPress={handleConfirm}
-          activeOpacity={cooldownRemaining > 0 ? 1 : 0.7}
+          activeOpacity={cooldownRemaining > 0 ? 1 : 0.65}
           disabled={cooldownRemaining > 0}
         >
           <Text style={styles.confirmText}>
@@ -108,55 +111,67 @@ export default function ConfirmCard({ data, onConfirm, onCancel }: ConfirmCardPr
 const styles = StyleSheet.create({
   card: {
     marginTop: 8,
-    backgroundColor: '#1a1a2e',
-    borderRadius: 12,
+    backgroundColor: colors.surfaceRaised,
+    borderRadius: radius.md,
     borderWidth: 2,
-    padding: 14,
+    padding: spacing.lg,
+    ...shadow,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 10,
+    marginBottom: spacing.md,
+  },
+  iconWrap: {
+    width: 34,
+    height: 34,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    backgroundColor: colors.surface,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: spacing.md,
   },
   icon: {
-    fontSize: 24,
-    marginRight: 10,
+    fontSize: 18,
+    fontWeight: '900',
   },
   headerText: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    gap: spacing.sm,
   },
   title: {
     fontSize: 15,
     fontWeight: '700',
-    color: '#e0e0e0',
+    color: colors.text,
     flex: 1,
   },
   riskBadge: {
-    paddingHorizontal: 8,
+    paddingHorizontal: spacing.sm,
     paddingVertical: 3,
-    borderRadius: 6,
+    borderRadius: radius.sm,
   },
   riskText: {
     fontSize: 11,
-    color: '#e0e0e0',
-    fontWeight: '600',
+    color: colors.text,
+    fontWeight: '800',
   },
   message: {
     fontSize: 13,
-    color: '#aaa',
+    color: colors.textMuted,
     lineHeight: 20,
-    marginBottom: 10,
+    marginBottom: spacing.md,
   },
   detailBox: {
-    backgroundColor: '#12122a',
-    borderRadius: 8,
-    padding: 10,
-    marginBottom: 10,
+    backgroundColor: colors.surface,
+    borderRadius: radius.md,
+    padding: spacing.md,
+    marginBottom: spacing.md,
     borderWidth: 1,
-    borderColor: '#2a2a4e',
+    borderColor: colors.border,
   },
   detailRow: {
     flexDirection: 'row',
@@ -165,46 +180,50 @@ const styles = StyleSheet.create({
   },
   detailLabel: {
     fontSize: 12,
-    color: '#888',
+    color: colors.textSubtle,
   },
   detailValue: {
     fontSize: 12,
-    color: '#ddd',
+    color: colors.text,
     fontWeight: '500',
   },
   sensitiveValue: {
-    color: '#FACC15',
+    color: colors.warning,
     letterSpacing: 1,
   },
   actions: {
     flexDirection: 'row',
     justifyContent: 'flex-end',
-    gap: 10,
+    gap: spacing.sm,
   },
   cancelBtn: {
-    paddingHorizontal: 20,
+    minHeight: 40,
+    justifyContent: 'center',
+    paddingHorizontal: spacing.lg,
     paddingVertical: 10,
-    borderRadius: 8,
+    borderRadius: radius.md,
     borderWidth: 1,
-    borderColor: '#3a3a5e',
-    backgroundColor: '#2a2a4e',
+    borderColor: colors.borderStrong,
+    backgroundColor: colors.surfaceSoft,
   },
   cancelText: {
     fontSize: 14,
-    color: '#aaa',
-    fontWeight: '600',
+    color: colors.textMuted,
+    fontWeight: '700',
   },
   confirmBtn: {
-    paddingHorizontal: 20,
+    minHeight: 40,
+    justifyContent: 'center',
+    paddingHorizontal: spacing.lg,
     paddingVertical: 10,
-    borderRadius: 8,
+    borderRadius: radius.md,
   },
   confirmBtnDisabled: {
     opacity: 0.5,
   },
   confirmText: {
     fontSize: 14,
-    color: '#fff',
+    color: colors.white,
     fontWeight: '700',
   },
 });
