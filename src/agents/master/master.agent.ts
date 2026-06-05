@@ -298,7 +298,7 @@ async function processWithLLM(
   userText: string,
   intent: IntentResult
 ): Promise<string> {
-  const context = await recallRecentContext('master', 5);
+  const context = await recallRecentContext('master', 2);
   const masterTools = sortToolsForPromptCache(listToolsForAgent('master'));
   const adaptiveContext = await buildAdaptiveContextPrompt('master');
 
@@ -459,7 +459,7 @@ export async function* processMessageStream(
   const messageId = `msg_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
   (yield { type: 'thinking' as const, content: '分析中...', messageId }) as void;
 
-  const context = await recallRecentContext('master', 5);
+  const context = await recallRecentContext('master', 2);
   const masterTools = sortToolsForPromptCache(listToolsForAgent('master'));
   const functions = toolsToOpenAIFunctions(masterTools);
   const adaptiveContext = await buildAdaptiveContextPrompt('master');
