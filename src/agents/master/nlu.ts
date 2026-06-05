@@ -1,4 +1,5 @@
 import { IntentResult } from '../../shared/types';
+import { applyLearnedIntent } from './nlu-learning';
 
 const BUDGET_PAIR_PATTERN = /([\u4e00-\u9fa5A-Za-z]{1,16})预算(?:设成|设置为|设为|调整为|调到|定为|是|为)?\s*(\d+(?:\.\d{1,2})?)/g;
 const CHINESE_NUMERAL_PATTERN = /[零〇一二两三四五六七八九十百千万]+/;
@@ -1065,7 +1066,7 @@ export function classifyIntent(text: string): IntentResult {
     }
   }
 
-  return bestMatch;
+  return applyLearnedIntent(text, bestMatch);
 }
 
 function calculateConfidence(match: RegExpMatchArray, text: string): number {

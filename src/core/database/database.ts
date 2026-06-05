@@ -213,9 +213,26 @@ async function initTables(db: SQLite.SQLiteDatabase): Promise<void> {
       corrected_category TEXT NOT NULL,
       corrected_at TEXT NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS nlu_learning_samples (
+      id TEXT PRIMARY KEY,
+      phrase TEXT NOT NULL,
+      normalized_text TEXT NOT NULL,
+      intent TEXT NOT NULL,
+      agent TEXT NOT NULL,
+      params TEXT DEFAULT '{}',
+      source TEXT DEFAULT 'cloud_function',
+      confidence REAL DEFAULT 0.82,
+      hits INTEGER DEFAULT 1,
+      enabled INTEGER DEFAULT 1,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      UNIQUE(normalized_text, intent)
+    );
   `);
 
   await db.execAsync(`CREATE INDEX IF NOT EXISTS idx_vector_source ON vector_store(source_type, source_id)`);
+  await db.execAsync(`CREATE INDEX IF NOT EXISTS idx_nlu_learning_lookup ON nlu_learning_samples(normalized_text, enabled, hits)`);
   await migrateAuditLog(db);
 
   await initRulesTable();

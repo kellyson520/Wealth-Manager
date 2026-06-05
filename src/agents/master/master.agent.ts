@@ -18,6 +18,11 @@ import { getAgentSystemPrompt } from '../../core/cloud/prompts/agent-prompts';
 import { recallRecentContext } from '../_shared/memory';
 import { generatePersonaPrompt, updateMood, loadPersona } from '../../core/persona/persona-engine';
 import { messageBus } from '../../core/message-bus';
+import {
+  inferIntentFromToolCall,
+  learnIntentAlias,
+  loadNluLearningSamples,
+} from './nlu-learning';
 
 let toolsInitialized = false;
 let messageBusInitialized = false;
@@ -180,6 +185,7 @@ export async function processMessage(
   updateMood().catch(() => {});
 
   const sanitized = sanitizeText(userMessage);
+  await loadNluLearningSamples();
   const intent = classifyIntent(sanitized);
 
   let replyContent: string;
@@ -284,6 +290,18 @@ async function processWithLLM(
   const { response } = result;
 
   if (response.functionCall) {
+    const args = parseToolArgs(response.functionCall.arguments);
+    const learned = inferIntentFromToolCall(response.functionCall.name, args);
+    if (learned && (intent.intent === 'unknown' || intent.confidence < 0.6)) {
+      learnIntentAlias({
+        text: userText,
+        intent: learned.intent,
+        agent: learned.agent,
+        params: learned.params,
+        source: 'cloud_function',
+        confidence: 0.84,
+      }).catch(() => {});
+    }
     const toolResult = await executeToolCall(
       response.functionCall.name,
       response.functionCall.arguments
@@ -352,6 +370,7 @@ export async function* processMessageStream(
   }
 
   const sanitized = sanitizeText(userMessage);
+  await loadNluLearningSamples();
   const intent = classifyIntent(sanitized);
 
   if (!cloudApiKey) {
