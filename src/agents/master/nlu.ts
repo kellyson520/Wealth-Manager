@@ -1,6 +1,6 @@
 import { IntentResult } from '../../shared/types';
 
-const BUDGET_PAIR_PATTERN = /([\u4e00-\u9fa5A-Za-z]{1,16})预算(?:设成|设置为|设为|调整为|定为|是|为)?\s*(\d+(?:\.\d{1,2})?)/g;
+const BUDGET_PAIR_PATTERN = /([\u4e00-\u9fa5A-Za-z]{1,16})预算(?:设成|设置为|设为|调整为|调到|定为|是|为)?\s*(\d+(?:\.\d{1,2})?)/g;
 
 function cleanupCategory(raw: string): string {
   return raw
@@ -22,8 +22,10 @@ function extractBudgets(text: string): { category: string; limit: number }[] {
 }
 
 function extractAmount(text: string): number {
-  const match = text.match(/(\d+(?:\.\d{1,2})?)/);
-  return match ? parseFloat(match[1]) : 0;
+  const match = text.match(/(\d+(?:\.\d{1,2})?)\s*万/);
+  if (match) return parseFloat(match[1]) * 10000;
+  const numMatch = text.match(/(\d+(?:\.\d{1,2})?)/);
+  return numMatch ? parseFloat(numMatch[1]) : 0;
 }
 
 function normalizeDate(date: Date): string {
@@ -87,7 +89,32 @@ function inferAssetType(text: string): string {
   return '其他';
 }
 
+function extractAssetList(text: string): { name: string; amount: number; type: string }[] {
+  const assets: { name: string; amount: number; type: string }[] = [];
+  const segments = text.split(/[；;]/).map((s) => s.trim()).filter(Boolean);
+  for (const segment of segments) {
+    const match = segment.match(/([^，。,.！？\s]+?)(?:余额|存款|市值|资产)(?:还有|还剩|是|为)?\s*(\d+(?:\.\d{1,2})?\s*万?)/);
+    if (!match) continue;
+    const name = match[1].trim();
+    const amount = extractAmount(match[2]);
+    if (name && amount > 0) {
+      assets.push({ name, amount, type: inferAssetType(segment) });
+    }
+  }
+  return assets;
+}
+
 function extractAssetParams(text: string): Record<string, unknown> {
+  const assets = extractAssetList(text);
+  if (assets.length > 0) {
+    return {
+      name: assets[0].name,
+      amount: assets[0].amount,
+      type: assets[0].type,
+      assets,
+    };
+  }
+
   const amount = extractAmount(text);
   let name = '';
 
@@ -114,6 +141,46 @@ function extractAssetParams(text: string): Record<string, unknown> {
     name: name || '资产',
     amount,
     type: inferAssetType(text),
+  };
+}
+
+function extractCreditCardParams(text: string): Record<string, unknown> {
+  const amount = extractAmount(text);
+  const cardText = text.match(/信用卡\s*([^额度，。,.！？\s]+)额度/)?.[1] || '';
+  const knownBanks = ['招商', '招行', '工商', '建设', '农业', '中国', '交通', '浦发', '民生', '兴业', '中信', '广发', '平安', '光大', '华夏'];
+  const matchedBank = knownBanks.find((bank) => cardText.startsWith(bank));
+  const bankMatch = text.match(/(?:信用卡)?\s*([\u4e00-\u9fa5A-Za-z]{2,8})(?:银行)?([\u4e00-\u9fa5A-Za-z0-9]{0,12}?卡)?(?:额度|信用额度)/);
+  const compactMatch = text.match(/信用卡\s*([\u4e00-\u9fa5A-Za-z]{2,8})([\u4e00-\u9fa5A-Za-z0-9]{1,12})?额度/);
+  const addMatch = text.match(/(?:添加|绑定|录入)?\s*信用卡\s*([\u4e00-\u9fa5A-Za-z]{2,8})\s*\d/);
+  const billDay = text.match(/账单日\s*(\d{1,2})[号日]?/)?.[1];
+  const paymentDay = text.match(/(?:还款日|还款)\s*(\d{1,2})[号日]?/)?.[1];
+
+  const bank = matchedBank ? (matchedBank === '招行' ? '招商' : matchedBank) : bankMatch?.[1] || compactMatch?.[1] || addMatch?.[1] || '';
+  const name = matchedBank
+    ? cardText.slice(matchedBank.length) || '信用卡'
+    : (bankMatch?.[2] || compactMatch?.[2] || '信用卡').replace(/^银行/, '') || '信用卡';
+
+  return {
+    bank,
+    name,
+    creditLimit: amount,
+    amount,
+    billDay: billDay ? parseInt(billDay, 10) : undefined,
+    paymentDay: paymentDay ? parseInt(paymentDay, 10) : undefined,
+  };
+}
+
+function extractModifyBillParams(text: string): Record<string, unknown> {
+  const billId = text.match(/(?:账单|记录|id|ID)\s*([0-9a-f-]{8,36})/i)?.[1];
+  const category = text.match(/(?:改成|改为|调整为|分类为|设为)\s*(餐饮|交通|购物|娱乐|住房|医疗|教育|水电|其他|工资|奖金|投资)/)?.[1];
+  const keyword = text.match(/(?:刚才|上次|最近|今天|昨天)?\s*([^，。,.！？\s]{2,20})(?:那笔|这笔|账单|记录)?.*(?:改成|改为|调整为|分类为|设为)/)?.[1]
+    ?.replace(/^(?:那笔|这笔|那条|这条)/, '');
+  return {
+    billId,
+    keyword,
+    category,
+    date: extractRelativeDate(text),
+    confirmed: /确认/.test(text),
   };
 }
 
@@ -375,7 +442,7 @@ const intentPatterns: { intent: string; patterns: RegExp[]; agent: string; prior
     agent: 'coach',
     priority: 0.1,
     patterns: [
-      /.*预算(?:设成|设置为|设为|调整为|定为|是|为)?\s*\d+(?:\.\d{1,2})?.*/,
+      /.*预算(?:设成|设置为|设为|调整为|调到|定为|是|为)?\s*\d+(?:\.\d{1,2})?.*/,
       /(?:设置|设定|设定一个).*预算\s*.+\s*(\d+(?:\.\d{1,2})?)/,
       /(.+).*预算.*(\d+(?:\.\d{1,2})?)/,
       /预算\s*(?:是|为|设为).*(\d+(?:\.\d{1,2})?)/,
@@ -514,6 +581,8 @@ const intentPatterns: { intent: string; patterns: RegExp[]; agent: string; prior
     agent: 'guardian',
     patterns: [
       /(?:创建|添加|设置).*(?:提醒|通知)/,
+      /(?:每个工作日|工作日|每周一到周五|周一到周五).*(?:提醒|通知)/,
+      /提醒.*(?:预算|看预算|检查预算)/,
       /提醒.*记账/,
       /每天.*提醒/,
     ],
@@ -528,6 +597,10 @@ const intentPatterns: { intent: string; patterns: RegExp[]; agent: string; prior
         const hour = parseInt(timeMatch[1]);
         const minute = timeMatch[2] ? parseInt(timeMatch[2]) : 0;
         cron = `${minute} ${hour} * * *`;
+      }
+      if (/(每个工作日|工作日|每周一到周五|周一到周五)/.test(text)) {
+        const parts = cron.split(/\s+/);
+        cron = `${parts[0]} ${parts[1]} * * 1-5`;
       }
       return { name, type, cron };
     },
@@ -637,6 +710,7 @@ const intentPatterns: { intent: string; patterns: RegExp[]; agent: string; prior
     priority: 0.15,
     patterns: [
       /.*(?:余额|存款|市值)\s*\d+(?:\.\d{1,2})?.*(?:加到|添加到|记到|录入到)?资产.*/,
+      /.*(?:余额|存款|市值)(?:还有|还剩|是|为)?\s*\d+(?:\.\d{1,2})?\s*万?.*/,
       /(?:添加|增加|新增|记录).*(?:资产)/,
       /(?:资产|存款|房产|股票|基金).*(?:添加|记录)/,
       /我(?:有|的).*?(?:存款|房产|股票|基金)\s*(\d+(?:\.\d{1,2})?)/,
@@ -691,12 +765,15 @@ const intentPatterns: { intent: string; patterns: RegExp[]; agent: string; prior
     priority: 0.1,
     patterns: [
       /(?:导入|上传|批量导入).*(?:这段|以下|这些).*/,
+      /.*(?:这些|这几笔).*(?:批量)?导入.*/,
       /(?:导入|上传|批量导入).*(?:账单|数据)/,
       /(?:微信|支付宝|CSV).*(?:账单|导入)/,
       /(?:导入).*(?:微信|支付宝)账单/,
     ],
     extractParams: (_match, text) => {
-      const rawText = text.split(/[：:]/).slice(1).join(':').trim();
+      const rawText = text.includes('：') || text.includes(':')
+        ? text.split(/[：:]/).slice(1).join(':').trim()
+        : text.replace(/(?:这些|这几笔)?帮我(?:批量)?导入(?:账单|数据)?/g, '').trim();
       return rawText ? { rawText } : {};
     },
   },
@@ -735,12 +812,23 @@ const intentPatterns: { intent: string; patterns: RegExp[]; agent: string; prior
   {
     intent: 'credit_card',
     agent: 'ledger',
+    priority: 0.12,
     patterns: [
       /(?:添加|绑定|录入).*(?:信用卡)/,
       /(?:信用卡).*(?:添加|绑定|管理)/,
       /(?:信用卡).*(?:额度|账单日|还款日)/,
     ],
-    extractParams: () => ({}),
+    extractParams: (_match, text) => extractCreditCardParams(text),
+  },
+  {
+    intent: 'modify_bill',
+    agent: 'ledger',
+    priority: 0.18,
+    patterns: [
+      /.*(?:那笔|这笔|账单|记录).*(?:改成|改为|调整为|分类为|设为).*/,
+      /.*(?:改成|改为|调整为|分类为|设为).*(?:餐饮|交通|购物|娱乐|住房|医疗|教育|水电|其他|工资|奖金|投资).*/,
+    ],
+    extractParams: (_match, text) => extractModifyBillParams(text),
   },
   {
     intent: 'transfer_asset',

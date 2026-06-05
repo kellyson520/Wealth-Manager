@@ -301,4 +301,62 @@ describe('NLU real model regression cases', () => {
     expect(result.agent).toBe('ledger');
     expect(result.params.rawText).toBe('2026-06-01 滴滴 28.5；2026-06-02 全家 19.8');
   });
+
+  test('extracts multiple budget verbs from model fuzzing', () => {
+    const result = classifyIntent('把餐饮预算调到1600，娱乐预算设为400，咖啡预算300');
+    expect(result.intent).toBe('set_budget');
+    expect(result.params.budgets).toEqual([
+      { category: '餐饮', limit: 1600 },
+      { category: '娱乐', limit: 400 },
+      { category: '咖啡', limit: 300 },
+    ]);
+  });
+
+  test('extracts multiple assets from semicolon-separated balances', () => {
+    const result = classifyIntent('招商银行活期余额23000，加到资产里；支付宝余额还有860');
+    expect(result.intent).toBe('add_asset');
+    expect(result.params.assets).toEqual([
+      { name: '招商银行活期', amount: 23000, type: '银行账户' },
+      { name: '支付宝', amount: 860, type: '银行账户' },
+    ]);
+  });
+
+  test('routes weekday budget reminder with cron weekday field', () => {
+    const result = classifyIntent('每个工作日早上8:30提醒我看预算');
+    expect(result.intent).toBe('create_reminder');
+    expect(result.agent).toBe('guardian');
+    expect(result.params.cron).toBe('30 8 * * 1-5');
+  });
+
+  test('extracts credit card details with wan amount', () => {
+    const result = classifyIntent('信用卡招商金卡额度5万，账单日10号还款日28号');
+    expect(result.intent).toBe('credit_card');
+    expect(result.agent).toBe('ledger');
+    expect(result.params.bank).toBe('招商');
+    expect(result.params.name).toBe('金卡');
+    expect(result.params.creditLimit).toBe(50000);
+    expect(result.params.billDay).toBe(10);
+    expect(result.params.paymentDay).toBe(28);
+  });
+
+  test('keeps legacy credit card add format working', () => {
+    const result = classifyIntent('添加信用卡 招行 50000');
+    expect(result.intent).toBe('credit_card');
+    expect(result.params.bank).toBe('招行');
+    expect(result.params.creditLimit).toBe(50000);
+  });
+
+  test('routes bill category modification to ledger', () => {
+    const result = classifyIntent('刚才那笔奶茶改成餐饮');
+    expect(result.intent).toBe('modify_bill');
+    expect(result.agent).toBe('ledger');
+    expect(result.params.keyword).toBe('奶茶');
+    expect(result.params.category).toBe('餐饮');
+  });
+
+  test('keeps no-date compact import text from batch import request', () => {
+    const result = classifyIntent('全家19.8；滴滴28.5；麦当劳32.1 这些帮我批量导入');
+    expect(result.intent).toBe('import_bills');
+    expect(result.params.rawText).toBe('全家19.8；滴滴28.5；麦当劳32.1');
+  });
 });

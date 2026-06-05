@@ -49,46 +49,73 @@ export async function run_all_scheduled_tasks(): Promise<ToolResult> {
   }
 }
 
-function shouldExecuteNow(task: RecurringTask, now: Date): boolean {
+export function shouldExecuteNow(task: RecurringTask, now: Date): boolean {
   if (!task.enabled) return false;
 
-  if (!task.lastTriggered) return true;
-
-  const lastTrigger = new Date(task.lastTriggered);
   const cronParts = task.cron.split(/\s+/);
 
   if (cronParts.length !== 5) {
+    if (!task.lastTriggered) return true;
+    const lastTrigger = new Date(task.lastTriggered);
     const minutesDiff = (now.getTime() - lastTrigger.getTime()) / 60000;
     return minutesDiff >= 60;
   }
 
-  const [minute, hour] = cronParts;
+  const [minute, hour, dayOfMonth, month, dayOfWeek] = cronParts;
 
   const nowMinute = now.getMinutes();
   const nowHour = now.getHours();
-  let minuteMatch = false;
-  if (minute === '*') {
-    minuteMatch = true;
-  } else if (minute.includes('/')) {
-    const interval = parseInt(minute.split('/')[1]);
-    minuteMatch = nowMinute % interval === 0;
-  } else {
-    minuteMatch = parseInt(minute) === nowMinute;
+  const nowDate = now.getDate();
+  const nowMonth = now.getMonth() + 1;
+  const nowDay = now.getDay();
+
+  if (
+    !cronFieldMatches(minute, nowMinute, 'minute') ||
+    !cronFieldMatches(hour, nowHour, 'hour') ||
+    !cronFieldMatches(dayOfMonth, nowDate, 'dayOfMonth') ||
+    !cronFieldMatches(month, nowMonth, 'month') ||
+    !cronFieldMatches(dayOfWeek, nowDay, 'dayOfWeek')
+  ) {
+    return false;
   }
 
-  let hourMatch = false;
-  if (hour === '*') {
-    hourMatch = true;
-  } else {
-    hourMatch = parseInt(hour) === nowHour;
-  }
+  if (!task.lastTriggered) return true;
 
-  if (!minuteMatch || !hourMatch) return false;
+  const lastTrigger = new Date(task.lastTriggered);
 
   const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const lastTriggerDate = new Date(lastTrigger.getFullYear(), lastTrigger.getMonth(), lastTrigger.getDate());
 
   return lastTriggerDate.getTime() < todayStart.getTime();
+}
+
+function cronFieldMatches(
+  field: string,
+  value: number,
+  type: 'minute' | 'hour' | 'dayOfMonth' | 'month' | 'dayOfWeek'
+): boolean {
+  if (field === '*') return true;
+  if (field.includes(',')) {
+    return field.split(',').some((part) => cronFieldMatches(part.trim(), value, type));
+  }
+  if (field.includes('/')) {
+    const [base, rawInterval] = field.split('/');
+    const interval = parseInt(rawInterval, 10);
+    if (!interval || interval <= 0) return false;
+    return (base === '*' || cronFieldMatches(base, value, type)) && value % interval === 0;
+  }
+  if (field.includes('-')) {
+    const [rawStart, rawEnd] = field.split('-');
+    const start = normalizeCronValue(parseInt(rawStart, 10), type);
+    const end = normalizeCronValue(parseInt(rawEnd, 10), type);
+    return value >= start && value <= end;
+  }
+  return normalizeCronValue(parseInt(field, 10), type) === value;
+}
+
+function normalizeCronValue(value: number, type: 'minute' | 'hour' | 'dayOfMonth' | 'month' | 'dayOfWeek'): number {
+  if (type === 'dayOfWeek' && value === 7) return 0;
+  return value;
 }
 
 async function executeTask(task: RecurringTask): Promise<void> {

@@ -31,6 +31,8 @@ export async function handleIntent(intent: IntentResult): Promise<string> {
       return handleAddAsset(intent.params);
     case 'add_debt':
       return handleAddDebt(intent.params);
+    case 'modify_bill':
+      return handleModifyBill(intent.params);
     case 'import_bills':
       return handleImportBills(intent.params);
     case 'reimbursement':
@@ -268,6 +270,26 @@ async function handleAddTag(params: Record<string, unknown>): Promise<string> {
 async function handleAddAsset(params: Record<string, unknown>): Promise<string> {
   const tool = getTool('add_asset');
   if (!tool) return '资产功能暂不可用。';
+  const assets = Array.isArray(params.assets)
+    ? params.assets as { name?: string; amount?: number; type?: string }[]
+    : [];
+
+  if (assets.length > 0) {
+    const successes: { name: string; amount: number }[] = [];
+    const failures: string[] = [];
+    for (const asset of assets) {
+      if (!asset.name || !asset.amount || asset.amount <= 0) continue;
+      const result = await tool.handler({ name: asset.name, amount: asset.amount, type: asset.type });
+      if (result.success) successes.push({ name: asset.name, amount: asset.amount });
+      else failures.push(`${asset.name}: ${result.error}`);
+    }
+    if (successes.length > 0) {
+      const preview = successes.map((asset) => `${asset.name} ${asset.amount}`).join('，');
+      return `已添加 ${successes.length} 项资产：${preview}${failures.length > 0 ? `\n部分失败：${failures.join('；')}` : ''}`;
+    }
+    return failures.length > 0 ? `添加资产失败: ${failures.join('；')}` : '请告诉我资产名称和金额，例如"添加资产 银行存款 50000"。';
+  }
+
   if (!params.name) return '请告诉我资产名称和金额，例如"添加资产 银行存款 50000"。';
   const result = await tool.handler({ name: params.name, amount: params.amount || 0, type: params.type });
   if (result.success) return `已添加资产 "${params.name}" ${params.amount || ''}`;
@@ -329,11 +351,56 @@ function normalizeInlineBillText(rawText: string): string {
     .filter(Boolean)
     .map((entry) => {
       const match = entry.match(/^(\d{4}[-/]\d{1,2}[-/]\d{1,2})\s+(.+?)\s+(\d+(?:\.\d{1,2})?)$/);
-      if (!match) return entry;
+      if (!match) {
+        const compactMatch = entry.match(/^(.+?)\s*(\d+(?:\.\d{1,2})?)$/);
+        if (!compactMatch) return entry;
+        const [, merchant, amount] = compactMatch;
+        return `${merchant.trim()} - ${amount}`;
+      }
       const [, date, merchant, amount] = match;
       return `${merchant.trim()} - ${amount} ${date.replace(/\//g, '-')}`;
     })
     .join('\n');
+}
+
+async function handleModifyBill(params: Record<string, unknown>): Promise<string> {
+  const category = params.category as string | undefined;
+  if (!category) return '请告诉我要改成哪个分类，例如"把这笔改成餐饮"。';
+
+  const billId = params.billId as string | undefined;
+  if (billId) {
+    const toolCheck = canCallTool(AGENT_ID, 'modify_bill');
+    if (!toolCheck.allowed) {
+      return `操作被拒绝：${toolCheck.reason}`;
+    }
+    const tool = getTool('modify_bill');
+    if (!tool) return '账单修改功能暂不可用。';
+    const result = await tool.handler({ billId, category });
+    if (result.success) return `已将账单 ${billId} 分类改为 ${category}。`;
+    return `修改账单失败: ${result.error}`;
+  }
+
+  const searchParams: Record<string, unknown> = { limit: 5 };
+  if (params.keyword) searchParams.keyword = params.keyword;
+  if (params.date) {
+    searchParams.startDate = params.date;
+    searchParams.endDate = params.date;
+  }
+  const result = await search_bills(searchParams);
+  if (!result.success || !Array.isArray(result.data)) {
+    return '定位账单失败，请提供账单商户、金额或日期。';
+  }
+  const bills = result.data as { id: string; merchant: string; amount: number; type: string; date: string }[];
+  if (bills.length === 0) {
+    return '没有找到要修改的账单。请提供更明确的商户、金额或日期。';
+  }
+
+  let reply = `找到以下可能要改为 ${category} 的账单：\n`;
+  for (const bill of bills) {
+    reply += `${bill.id} | ${bill.date} | ${bill.merchant} ¥${bill.amount.toFixed(2)}\n`;
+  }
+  reply += `\n请回复“确认修改账单 <账单ID> 改成 ${category}”执行修改。`;
+  return reply;
 }
 
 async function handleReimbursement(params: Record<string, unknown>): Promise<string> {
