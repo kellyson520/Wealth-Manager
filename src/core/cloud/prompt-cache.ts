@@ -71,6 +71,17 @@ export interface PromptCacheDashboard {
   overall: PromptCacheRuntimeStats;
   stats: PromptCacheRuntimeStats[];
   recent: PromptCacheTelemetryRow[];
+  cost: PromptCacheCostSummary;
+}
+
+export interface PromptCacheCostSummary {
+  promptTokens: number;
+  cachedPromptTokens: number;
+  completionTokens: number;
+  savedPromptTokens: number;
+  cacheSavingsRate: number;
+  estimatedCostUnits: number;
+  pressure: 'low' | 'medium' | 'high';
 }
 
 const DEFAULT_DYNAMIC_BUDGET: DynamicPromptBudget = {
@@ -243,6 +254,7 @@ export async function getPromptCacheDashboard(options?: {
     overall: buildOverallStats(stats),
     stats,
     recent,
+    cost: buildCostSummary(recent),
   };
 }
 
@@ -477,6 +489,30 @@ function buildOverallStats(stats: PromptCacheRuntimeStats[]): PromptCacheRuntime
     averageCachedTokens: Math.round(average(stats.map((stat) => stat.averageCachedTokens).filter((value) => value > 0))),
     averageCompletionTokens: Math.round(average(stats.map((stat) => stat.averageCompletionTokens).filter((value) => value > 0))),
     recommendedBudget: stats[0]?.recommendedBudget || { ...DEFAULT_DYNAMIC_BUDGET },
+  };
+}
+
+function buildCostSummary(rows: PromptCacheTelemetryRow[]): PromptCacheCostSummary {
+  const promptTokens = rows.reduce((sum, row) => sum + row.promptTokens, 0);
+  const cachedPromptTokens = rows.reduce((sum, row) => sum + row.cachedPromptTokens, 0);
+  const completionTokens = rows.reduce((sum, row) => sum + row.completionTokens, 0);
+  const savedPromptTokens = cachedPromptTokens;
+  const cacheSavingsRate = promptTokens > 0
+    ? Math.round((cachedPromptTokens / promptTokens) * 10000) / 100
+    : 0;
+  const estimatedCostUnits = Math.round((
+    Math.max(0, promptTokens - cachedPromptTokens) +
+    cachedPromptTokens * 0.1 +
+    completionTokens
+  ) * 100) / 100;
+  return {
+    promptTokens,
+    cachedPromptTokens,
+    completionTokens,
+    savedPromptTokens,
+    cacheSavingsRate,
+    estimatedCostUnits,
+    pressure: estimatedCostUnits > 12000 ? 'high' : estimatedCostUnits > 5000 ? 'medium' : 'low',
   };
 }
 

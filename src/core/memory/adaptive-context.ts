@@ -1,6 +1,7 @@
 import { v4 as uuidv4 } from 'uuid';
 import { getDatabase } from '../database/database';
 import { captureError } from '../logger/logger';
+import { detectPII } from '../cloud/sanitizer';
 import type { AgentId } from '../../shared/types';
 
 export interface PersonaSnapshot {
@@ -91,6 +92,7 @@ export async function updatePersonaSnapshot(params: {
     createdAt: now,
     updatedAt: now,
   };
+  validatePersonaSnapshotSafety(snapshot);
 
   await db.runAsync(
     `INSERT INTO persona_snapshots (id, version, soul, tone_rules, boundaries, source, created_at, updated_at)
@@ -425,6 +427,14 @@ function sanitizeList(value: string[] | undefined, fallback: string[]): string[]
 
 function normalizeTextBlock(value?: string): string {
   return (value || '').replace(/\s+/g, ' ').trim().slice(0, 1600);
+}
+
+function validatePersonaSnapshotSafety(snapshot: PersonaSnapshot): void {
+  const text = [snapshot.soul, ...snapshot.toneRules, ...snapshot.boundaries].join('\n');
+  const pii = detectPII(text);
+  if (pii.hasPII) {
+    throw new Error(`人格设置包含敏感信息: ${pii.types.join(', ')}`);
+  }
 }
 
 function formatList(items: string[]): string {

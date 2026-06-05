@@ -3,6 +3,23 @@ import { v4 as uuidv4 } from 'uuid';
 import { initRulesTable } from '../rules';
 
 let db: SQLite.SQLiteDatabase | null = null;
+const DEVELOPMENT_DB_KEY = 'development-only-wealth-manager-db-key';
+
+export interface DatabaseSecurityStatus {
+  keyConfigured: boolean;
+  sqlCipherAvailable: boolean;
+  encryptionActive: boolean;
+  mode: 'sqlcipher' | 'plain-sqlite';
+  warning?: string;
+}
+
+let databaseSecurityStatus: DatabaseSecurityStatus = {
+  keyConfigured: false,
+  sqlCipherAvailable: false,
+  encryptionActive: false,
+  mode: 'plain-sqlite',
+  warning: '数据库尚未初始化',
+};
 
 export async function getDatabase(): Promise<SQLite.SQLiteDatabase> {
   if (db) return db;
@@ -16,13 +33,50 @@ async function configureDatabaseSecurity(db: SQLite.SQLiteDatabase): Promise<voi
   const key = getDatabaseKey();
   await db.execAsync(`PRAGMA key = '${key.replace(/'/g, "''")}'`);
   await db.execAsync('PRAGMA foreign_keys = ON');
+  databaseSecurityStatus = await detectDatabaseSecurity(db, key);
 }
 
 function getDatabaseKey(): string {
   const env = (globalThis as unknown as {
     process?: { env?: Record<string, string | undefined> };
   }).process?.env;
-  return env?.EXPO_PUBLIC_WEALTH_MANAGER_DB_KEY || 'development-only-wealth-manager-db-key';
+  return env?.EXPO_PUBLIC_WEALTH_MANAGER_DB_KEY || DEVELOPMENT_DB_KEY;
+}
+
+async function detectDatabaseSecurity(
+  db: SQLite.SQLiteDatabase,
+  key: string
+): Promise<DatabaseSecurityStatus> {
+  const keyConfigured = Boolean(key && key !== DEVELOPMENT_DB_KEY);
+  let cipherVersion = '';
+  try {
+    const row = await db.getFirstAsync<Record<string, unknown>>('PRAGMA cipher_version');
+    const value = row ? Object.values(row)[0] : '';
+    cipherVersion = typeof value === 'string' ? value : '';
+  } catch {
+    cipherVersion = '';
+  }
+
+  const sqlCipherAvailable = cipherVersion.trim().length > 0;
+  const encryptionActive = keyConfigured && sqlCipherAvailable;
+  return {
+    keyConfigured,
+    sqlCipherAvailable,
+    encryptionActive,
+    mode: encryptionActive ? 'sqlcipher' : 'plain-sqlite',
+    warning: encryptionActive
+      ? undefined
+      : sqlCipherAvailable
+        ? 'SQLCipher 可用，但未配置生产数据库密钥'
+        : '当前运行端未检测到 SQLCipher，SQLite 数据不是文件级加密',
+  };
+}
+
+export async function getDatabaseSecurityStatus(): Promise<DatabaseSecurityStatus> {
+  if (!db) {
+    await getDatabase();
+  }
+  return { ...databaseSecurityStatus };
 }
 
 async function initTables(db: SQLite.SQLiteDatabase): Promise<void> {

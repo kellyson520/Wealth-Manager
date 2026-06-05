@@ -24,6 +24,12 @@ function formatNumber(value: number): string {
   return Number.isFinite(value) ? String(Math.round(value)) : '0';
 }
 
+function formatPressure(value?: 'low' | 'medium' | 'high'): string {
+  if (value === 'high') return '高';
+  if (value === 'medium') return '中';
+  return '低';
+}
+
 function StatTile({
   label,
   value,
@@ -115,6 +121,13 @@ export default function AiCacheScreen() {
         <StatTile label="调用" value={formatNumber(overall?.calls || 0)} />
         <StatTile label="热缓存" value={formatNumber(overall?.warmCalls || 0)} tone={(overall?.warmCalls || 0) > 0 ? 'good' : 'warn'} />
         <StatTile label="均值 Token" value={formatNumber(overall?.averagePromptTokens || 0)} />
+        <StatTile label="节省 Token" value={formatNumber(dashboard?.cost.savedPromptTokens || 0)} tone={(dashboard?.cost.savedPromptTokens || 0) > 0 ? 'good' : 'warn'} />
+        <StatTile label="成本单位" value={formatNumber(dashboard?.cost.estimatedCostUnits || 0)} />
+        <StatTile
+          label="成本压力"
+          value={formatPressure(dashboard?.cost.pressure)}
+          tone={dashboard?.cost.pressure === 'high' ? 'warn' : 'good'}
+        />
       </View>
 
       <View style={styles.section}>

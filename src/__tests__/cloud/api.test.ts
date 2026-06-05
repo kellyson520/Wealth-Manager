@@ -381,6 +381,31 @@ describe('Cloud LLM API - Safety Chain', () => {
       const body = JSON.parse((global.fetch as jest.Mock).mock.calls[0][1].body);
       expect(body.stream_options).toEqual({ include_usage: true });
     });
+
+    test('retries stream without usage option when provider rejects stream_options', async () => {
+      (global.fetch as jest.Mock)
+        .mockResolvedValueOnce({ ok: false, status: 400 })
+        .mockResolvedValueOnce({
+          ok: true,
+          body: makeStreamBody([
+            'data: {"choices":[{"delta":{"content":"OK"}}]}\n',
+            'data: [DONE]\n',
+          ]),
+        });
+
+      const events = [];
+      for await (const chunk of callCloudLLMStream(
+        { messages: [{ role: 'user', content: 'clean text' }] },
+        'test-key'
+      )) {
+        events.push(chunk);
+      }
+
+      expect(global.fetch).toHaveBeenCalledTimes(2);
+      expect(JSON.parse((global.fetch as jest.Mock).mock.calls[0][1].body).stream_options).toEqual({ include_usage: true });
+      expect(JSON.parse((global.fetch as jest.Mock).mock.calls[1][1].body).stream_options).toBeUndefined();
+      expect(events[0]).toEqual({ type: 'token', content: 'OK' });
+    });
   });
 
   describe('degradation indicator', () => {

@@ -189,5 +189,7 @@ describe('prompt cache planning', () => {
     expect(dashboard.stats[0].warmCalls).toBe(1);
     expect(dashboard.stats[0].averageHitRate).toBe(96.97);
     expect(dashboard.recent).toHaveLength(2);
+    expect(dashboard.cost.savedPromptTokens).toBe(1600);
+    expect(dashboard.cost.cacheSavingsRate).toBe(48.48);
   });
 });

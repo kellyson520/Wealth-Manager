@@ -307,14 +307,20 @@ export async function* callCloudLLMStream(
       }
     }
 
-    const fetchResponse = await fetch(resolveChatCompletionsUrl(request.baseUrl), {
-	      method: 'POST',
-	      headers: {
-	        'Content-Type': 'application/json',
-	        Authorization: `Bearer ${apiKey}`,
-	      },
-	      body: JSON.stringify(body),
-	    });
+    const sendStreamRequest = () => fetch(resolveChatCompletionsUrl(request.baseUrl), {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify(body),
+    });
+
+    let fetchResponse = await sendStreamRequest();
+    if (!fetchResponse.ok && body.stream_options) {
+      delete body.stream_options;
+      fetchResponse = await sendStreamRequest();
+    }
 
     if (!fetchResponse.ok) {
       recordFailure(breaker);

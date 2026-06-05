@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   RefreshControl,
   ScrollView,
   StyleSheet,
@@ -20,6 +21,7 @@ import {
   updatePersonaSnapshot,
 } from '../../core/memory/adaptive-context';
 import { getPromptCacheDashboard } from '../../core/cloud/prompt-cache';
+import { DatabaseSecurityStatus, getDatabaseSecurityStatus } from '../../core/database/database';
 import { loadPersona, setPersonaParams, setPreferences } from '../../core/persona/persona-engine';
 import { colors, radius, shadow, spacing } from '../theme';
 import AppShell from '../layout/AppShell';
@@ -34,6 +36,7 @@ type SettingsState = {
   boundariesText: string;
   memoryCount: number;
   cacheHitRate: number;
+  databaseSecurity: DatabaseSecurityStatus | null;
 };
 
 const DEFAULT_STATE: SettingsState = {
@@ -46,6 +49,7 @@ const DEFAULT_STATE: SettingsState = {
   boundariesText: '',
   memoryCount: 0,
   cacheHitRate: 0,
+  databaseSecurity: null,
 };
 
 const PERSONA_CONTROLS: { key: keyof PersonaParams; label: string; hint: string }[] = [
@@ -64,12 +68,13 @@ export default function SettingsScreen() {
     if (silent) setRefreshing(true);
     else setLoading(true);
     try {
-      const [persona, snapshot, learningEnabled, memories, cache] = await Promise.all([
+      const [persona, snapshot, learningEnabled, memories, cache, databaseSecurity] = await Promise.all([
         loadPersona(),
         getPersonaSnapshot(),
         isNluLearningEnabled(),
         listAiMemories({ limit: 80 }),
         getPromptCacheDashboard({ limit: 40 }),
+        getDatabaseSecurityStatus(),
       ]);
       setState({
         personaParams: persona.personaParams,
@@ -81,6 +86,7 @@ export default function SettingsScreen() {
         boundariesText: snapshot.boundaries.join('\n'),
         memoryCount: memories.length,
         cacheHitRate: cache.overall.averageHitRate,
+        databaseSecurity,
       });
     } finally {
       setLoading(false);
@@ -145,6 +151,8 @@ export default function SettingsScreen() {
         toneRulesText: snapshot.toneRules.join('\n'),
         boundariesText: snapshot.boundaries.join('\n'),
       }));
+    } catch (e) {
+      Alert.alert('保存失败', e instanceof Error ? e.message : '人格设置保存失败');
     } finally {
       setSavingKey(null);
     }
@@ -179,6 +187,11 @@ export default function SettingsScreen() {
           <SummaryItem label="人格版本" value={`v${state.personaVersion}`} />
           <SummaryItem label="AI记忆" value={`${state.memoryCount}`} />
           <SummaryItem label="缓存命中" value={`${Math.round(state.cacheHitRate * 10) / 10}%`} valueColor={cacheTone} />
+          <SummaryItem
+            label="数据库"
+            value={state.databaseSecurity?.encryptionActive ? '加密' : '明文'}
+            valueColor={state.databaseSecurity?.encryptionActive ? colors.income : colors.warning}
+          />
         </View>
 
         <Section title="人格颗粒">
@@ -295,6 +308,25 @@ export default function SettingsScreen() {
           </View>
         </Section>
 
+        <Section title="安全">
+          <View style={styles.securityRow}>
+            <View style={styles.controlText}>
+              <Text style={styles.controlLabel}>SQLite 文件加密</Text>
+              <Text style={styles.controlHint}>
+                {state.databaseSecurity?.warning || '数据库安全状态正常'}
+              </Text>
+            </View>
+            <View style={[
+              styles.securityBadge,
+              state.databaseSecurity?.encryptionActive ? styles.securityBadgeOk : styles.securityBadgeWarn,
+            ]}>
+              <Text style={styles.securityBadgeText}>
+                {state.databaseSecurity?.mode || 'unknown'}
+              </Text>
+            </View>
+          </View>
+        </Section>
+
       </ScrollView>
     </AppShell>
   );
@@ -400,11 +432,13 @@ const styles = StyleSheet.create({
   },
   summaryGrid: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: spacing.sm,
     marginBottom: spacing.lg,
   },
   summaryItem: {
     flex: 1,
+    minWidth: 118,
     minHeight: 72,
     borderRadius: radius.md,
     padding: spacing.md,
@@ -531,6 +565,34 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     padding: spacing.md,
     gap: spacing.md,
+  },
+  securityRow: {
+    minHeight: 76,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: spacing.md,
+    gap: spacing.md,
+  },
+  securityBadge: {
+    minHeight: 32,
+    justifyContent: 'center',
+    paddingHorizontal: spacing.md,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+  },
+  securityBadgeOk: {
+    backgroundColor: colors.incomeSoft,
+    borderColor: colors.income,
+  },
+  securityBadgeWarn: {
+    backgroundColor: colors.warningSoft,
+    borderColor: colors.warning,
+  },
+  securityBadgeText: {
+    color: colors.text,
+    fontSize: 12,
+    fontWeight: '800',
   },
   editorBlock: {
     padding: spacing.md,

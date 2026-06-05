@@ -14,6 +14,7 @@ import {
   isNluLearningEnabled,
   listAiMemories,
   setNluLearningEnabled,
+  updatePersonaSnapshot,
   upsertUserProfileMemory,
 } from '../../../core/memory/adaptive-context';
 
@@ -117,5 +118,12 @@ describe('adaptive context', () => {
       expect.stringContaining('hits = COALESCE'),
       expect.any(Array)
     );
+  });
+
+  test('blocks sensitive content in persona snapshots', async () => {
+    await expect(updatePersonaSnapshot({
+      soul: '联系我 13812345678',
+      source: 'settings',
+    })).rejects.toThrow('敏感信息');
   });
 });
