@@ -266,7 +266,12 @@ describe('Cloud LLM API - Safety Chain', () => {
           Promise.resolve({
             choices: [{ message: { content: 'AI_CONNECTIVITY_OK' } }],
             model: 'mimo-v2.5-pro',
-            usage: { total_tokens: 12, prompt_tokens: 7, completion_tokens: 5 },
+            usage: {
+              total_tokens: 12,
+              prompt_tokens: 7,
+              completion_tokens: 5,
+              prompt_tokens_details: { cached_tokens: 4 },
+            },
           }),
       });
 
@@ -276,6 +281,8 @@ describe('Cloud LLM API - Safety Chain', () => {
           model: 'mimo-v2.5-pro',
           tokenParam: 'max_completion_tokens',
           thinking: { type: 'disabled' },
+          promptCacheKey: 'wealth-manager-master',
+          promptCacheRetention: '24h',
           messages: [{ role: 'user', content: 'clean text' }],
           maxTokens: 100,
         },
@@ -292,7 +299,10 @@ describe('Cloud LLM API - Safety Chain', () => {
       const body = JSON.parse((global.fetch as jest.Mock).mock.calls[0][1].body);
       expect(body.model).toBe('mimo-v2.5-pro');
       expect(body.thinking).toEqual({ type: 'disabled' });
+      expect(body.prompt_cache_key).toBe('wealth-manager-master');
+      expect(body.prompt_cache_retention).toBe('24h');
       expect(body.max_tokens).toBeUndefined();
+      expect(result.response?.usage.cachedPromptTokens).toBe(4);
     });
 
     test('sends tools format and parses tool_calls response', async () => {

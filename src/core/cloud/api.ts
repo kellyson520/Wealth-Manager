@@ -22,12 +22,14 @@ export interface CloudRequest {
   }[];
   functionCall?: 'auto' | 'none' | { name: string };
   temperature?: number;
+  promptCacheKey?: string;
+  promptCacheRetention?: string;
 }
 
 export interface CloudResponse {
   content: string;
   model: string;
-  usage: { promptTokens: number; completionTokens: number };
+  usage: { promptTokens: number; completionTokens: number; cachedPromptTokens?: number };
   functionCall?: {
     name: string;
     arguments: string;
@@ -110,6 +112,12 @@ export async function callCloudLLM(
     if (request.thinking) {
       body.thinking = request.thinking;
     }
+    if (request.promptCacheKey) {
+      body.prompt_cache_key = request.promptCacheKey;
+    }
+    if (request.promptCacheRetention) {
+      body.prompt_cache_retention = request.promptCacheRetention;
+    }
 
     if (request.functions && request.functions.length > 0) {
       if (request.toolMode === 'tools') {
@@ -149,6 +157,7 @@ export async function callCloudLLM(
       usage: {
         promptTokens: data.usage?.prompt_tokens || 0,
         completionTokens: data.usage?.completion_tokens || 0,
+        cachedPromptTokens: extractCachedPromptTokens(data.usage),
       },
     };
 
@@ -199,6 +208,23 @@ function normalizeToolCall(toolCall: unknown): { name: string; arguments: string
     name: call.function.name,
     arguments: call.function.arguments || '{}',
   };
+}
+
+function extractCachedPromptTokens(usage: unknown): number {
+  const u = usage as {
+    prompt_tokens_details?: { cached_tokens?: number };
+    input_token_details?: { cached_tokens?: number; cache_read?: number };
+    cache_read_input_tokens?: number;
+    cached_tokens?: number;
+  } | undefined;
+  return (
+    u?.prompt_tokens_details?.cached_tokens ||
+    u?.input_token_details?.cached_tokens ||
+    u?.input_token_details?.cache_read ||
+    u?.cache_read_input_tokens ||
+    u?.cached_tokens ||
+    0
+  );
 }
 
 export async function* callCloudLLMStream(
@@ -256,6 +282,12 @@ export async function* callCloudLLMStream(
     body[request.tokenParam || 'max_tokens'] = request.maxTokens || 500;
     if (request.thinking) {
       body.thinking = request.thinking;
+    }
+    if (request.promptCacheKey) {
+      body.prompt_cache_key = request.promptCacheKey;
+    }
+    if (request.promptCacheRetention) {
+      body.prompt_cache_retention = request.promptCacheRetention;
     }
 
     if (request.functions && request.functions.length > 0) {

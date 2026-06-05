@@ -15,6 +15,7 @@ import {
 import { callCloudLLM, callCloudLLMStream } from '../../core/cloud/api';
 import { toolsToOpenAIFunctions, buildSystemPrompt } from '../../core/cloud/function-calling';
 import { getAgentSystemPrompt } from '../../core/cloud/prompts/agent-prompts';
+import { buildCacheOptimizedMessages, sortToolsForPromptCache } from '../../core/cloud/prompt-cache';
 import { recallRecentContext } from '../_shared/memory';
 import { generatePersonaPrompt, updateMood, loadPersona } from '../../core/persona/persona-engine';
 import { messageBus } from '../../core/message-bus';
@@ -298,30 +299,22 @@ async function processWithLLM(
   intent: IntentResult
 ): Promise<string> {
   const context = await recallRecentContext('master', 5);
-  const masterTools = listToolsForAgent('master');
+  const masterTools = sortToolsForPromptCache(listToolsForAgent('master'));
   const adaptiveContext = await buildAdaptiveContextPrompt('master');
 
   const functions = toolsToOpenAIFunctions(masterTools);
 
-  const messages: { role: string; content: string }[] = [
-    {
-      role: 'system',
-      content: `${adaptiveContext}\n\n${await getAgentSystemPrompt('master')}\n\n${generatePersonaPrompt()}\n${buildSystemPrompt('Master', masterTools)}`,
-    },
-  ];
-
-  if (context) {
-    messages.push({ role: 'system', content: `最近的对话上下文:\n${context}` });
-  }
-
-  if (intent.intent !== 'unknown') {
-    messages.push({
-      role: 'system',
-      content: `本地NLU分析结果: 意图=${intent.intent}, Agent=${intent.agent}, 参数=${JSON.stringify(intent.params)}, 置信度=${intent.confidence.toFixed(2)}`,
-    });
-  }
-
-  messages.push({ role: 'user', content: userText });
+  const { messages } = buildCacheOptimizedMessages({
+    agentSystemPrompt: await getAgentSystemPrompt('master'),
+    toolSystemPrompt: buildSystemPrompt('Master', masterTools),
+    adaptiveContext,
+    personaPrompt: generatePersonaPrompt(),
+    recentContext: context || undefined,
+    nluContext: intent.intent !== 'unknown'
+      ? `意图=${intent.intent}, Agent=${intent.agent}, 参数=${JSON.stringify(intent.params)}, 置信度=${intent.confidence.toFixed(2)}`
+      : undefined,
+    userText,
+  });
 
   const result = await callCloudLLM(
     {
@@ -467,29 +460,21 @@ export async function* processMessageStream(
   (yield { type: 'thinking' as const, content: '分析中...', messageId }) as void;
 
   const context = await recallRecentContext('master', 5);
-  const masterTools = listToolsForAgent('master');
+  const masterTools = sortToolsForPromptCache(listToolsForAgent('master'));
   const functions = toolsToOpenAIFunctions(masterTools);
   const adaptiveContext = await buildAdaptiveContextPrompt('master');
 
-  const messages: { role: string; content: string }[] = [
-    {
-      role: 'system',
-      content: `${adaptiveContext}\n\n${await getAgentSystemPrompt('master')}\n\n${generatePersonaPrompt()}\n${buildSystemPrompt('Master', masterTools)}`,
-    },
-  ];
-
-  if (context) {
-    messages.push({ role: 'system', content: `最近上下文:\n${context}` });
-  }
-
-  if (intent.intent !== 'unknown') {
-    messages.push({
-      role: 'system',
-      content: `本地NLU分析: 意图=${intent.intent}, Agent=${intent.agent}, 置信度=${intent.confidence.toFixed(2)}`,
-    });
-  }
-
-  messages.push({ role: 'user', content: sanitized });
+  const { messages } = buildCacheOptimizedMessages({
+    agentSystemPrompt: await getAgentSystemPrompt('master'),
+    toolSystemPrompt: buildSystemPrompt('Master', masterTools),
+    adaptiveContext,
+    personaPrompt: generatePersonaPrompt(),
+    recentContext: context || undefined,
+    nluContext: intent.intent !== 'unknown'
+      ? `意图=${intent.intent}, Agent=${intent.agent}, 置信度=${intent.confidence.toFixed(2)}`
+      : undefined,
+    userText: sanitized,
+  });
 
   let textBuffer = '';
 
