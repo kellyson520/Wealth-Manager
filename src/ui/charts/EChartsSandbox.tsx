@@ -3,6 +3,7 @@ import { View, StyleSheet, ActivityIndicator, Text } from 'react-native';
 import { WebView, WebViewMessageEvent } from 'react-native-webview';
 import { Asset } from 'expo-asset';
 import { sanitizeChartConfig, SanitizeResult } from './sanitizer';
+import { colors } from '../theme';
 
 interface EChartsSandboxProps {
   config: Record<string, unknown>;
@@ -45,7 +46,7 @@ function buildHTMLTemplate(echartsJS: string): string {
 * { margin: 0; padding: 0; box-sizing: border-box; }
 html, body { width: 100%; height: 100%; background: transparent; overflow: hidden; }
 #chart { width: 100%; height: 100%; }
-.error-box { display: flex; align-items: center; justify-content: center; height: 100%; color: #aaa; font-family: sans-serif; font-size: 13px; }
+.error-box { display: flex; align-items: center; justify-content: center; height: 100%; color: ${colors.textMuted}; font-family: sans-serif; font-size: 13px; }
 </style>
 </head>
 <body>
@@ -181,7 +182,7 @@ export default function EChartsSandbox({ config, height = 200, onError }: EChart
   if (!html) {
     return (
       <View style={[styles.container, { height }]}>
-        <ActivityIndicator color="#4A90D9" />
+        <ActivityIndicator color={colors.accent} />
       </View>
     );
   }
@@ -243,7 +244,7 @@ const styles = StyleSheet.create({
   },
   errorText: {
     fontSize: 12,
-    color: '#aaa',
+    color: colors.textMuted,
     textAlign: 'center',
     marginTop: 6,
   },

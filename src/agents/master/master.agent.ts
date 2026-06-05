@@ -5,23 +5,36 @@ import { handleIntent as handleAnalyst } from '../analyst/analyst.agent';
 import { handleIntent as handleCoach } from '../coach/coach.agent';
 import { handleIntent as handleGuardian, sanitizeText } from '../guardian/guardian.agent';
 import {
-  getDelegationTargets,
-  rememberMoment,
-  initToolRegistry,
-  getAllTools,
-  getTool,
-  listToolsForAgent,
-} from '../_shared';
+	  getDelegationTargets,
+	  rememberMoment,
+	  initToolRegistry,
+	  getTool,
+	  listToolsForAgent,
+	  executeTool,
+	} from '../_shared';
 import { callCloudLLM, callCloudLLMStream } from '../../core/cloud/api';
 import { toolsToOpenAIFunctions, buildSystemPrompt } from '../../core/cloud/function-calling';
 import { getAgentSystemPrompt } from '../../core/cloud/prompts/agent-prompts';
 import { recallRecentContext } from '../_shared/memory';
 import { generatePersonaPrompt, updateMood, loadPersona } from '../../core/persona/persona-engine';
 import { messageBus } from '../../core/message-bus';
+import { buildAdaptiveContextPrompt } from '../../core/memory/adaptive-context';
+import {
+  inferIntentFromToolCall,
+  learnIntentAlias,
+  loadNluLearningSamples,
+} from './nlu-learning';
 
 let toolsInitialized = false;
 let messageBusInitialized = false;
 let cloudApiKey: string | undefined;
+let cloudApiConfig: {
+  baseUrl?: string;
+  model?: string;
+  tokenParam?: 'max_tokens' | 'max_completion_tokens';
+  thinking?: Record<string, unknown>;
+  toolMode?: 'functions' | 'tools';
+} = {};
 
 export function setCloudApiKey(key: string | undefined): void {
   cloudApiKey = key;
@@ -29,6 +42,10 @@ export function setCloudApiKey(key: string | undefined): void {
 
 export function getCloudApiKey(): string | undefined {
   return cloudApiKey;
+}
+
+export function setCloudApiConfig(config: typeof cloudApiConfig): void {
+  cloudApiConfig = { ...config };
 }
 
 export function initMessageBus(): void {
@@ -169,6 +186,7 @@ export async function processMessage(
   updateMood().catch(() => {});
 
   const sanitized = sanitizeText(userMessage);
+  await loadNluLearningSamples();
   const intent = classifyIntent(sanitized);
 
   let replyContent: string;
@@ -206,6 +224,8 @@ export async function processMessage(
 
 async function routeIntent(intent: IntentResult): Promise<string> {
   switch (intent.agent) {
+    case 'master':
+      return handleMasterControl(intent);
     case 'ledger':
       return handleLedger(intent);
     case 'analyst':
@@ -219,19 +239,59 @@ async function routeIntent(intent: IntentResult): Promise<string> {
   }
 }
 
+async function handleMasterControl(intent: IntentResult): Promise<string> {
+  const toolMap: Record<string, string> = {
+    list_ai_memories: 'list_ai_memories',
+    delete_ai_memory: 'delete_ai_memory',
+    update_ai_persona: 'update_ai_persona',
+    set_ai_learning_enabled: 'set_ai_learning_enabled',
+  };
+  const toolName = toolMap[intent.intent];
+  if (!toolName) return generateFallbackReply();
+  const entry = getTool(toolName);
+  if (!entry) return 'AI 控制工具暂不可用。';
+
+  const result = await executeTool(entry, intent.params, {
+    agentId: 'master',
+    userConfirmed: intent.params.confirmed === true,
+  });
+
+  if (!result.success) {
+    return `${result.error || '操作失败'}。`;
+  }
+
+  if (intent.intent === 'list_ai_memories') {
+    const memories = Array.isArray(result.data) ? result.data as { id: string; kind: string; content: string }[] : [];
+    if (memories.length === 0) return '我目前没有保存可展示的 AI 记忆。';
+    return `我记住了这些内容：\n${memories.slice(0, 10).map((m) => `- ${m.kind} ${m.id}: ${m.content}`).join('\n')}`;
+  }
+
+  if (intent.intent === 'set_ai_learning_enabled') {
+    const data = result.data as { enabled?: boolean } | undefined;
+    return data?.enabled === false ? '已关闭自动学习。' : '已开启自动学习。';
+  }
+
+  if (intent.intent === 'update_ai_persona') {
+    return '已更新 AI 人格设置。';
+  }
+
+  return '已完成。';
+}
+
 async function processWithLLM(
   userText: string,
   intent: IntentResult
 ): Promise<string> {
   const context = await recallRecentContext('master', 5);
   const masterTools = listToolsForAgent('master');
+  const adaptiveContext = await buildAdaptiveContextPrompt('master');
 
-  const functions = toolsToOpenAIFunctions([...getAllTools().values()]);
+  const functions = toolsToOpenAIFunctions(masterTools);
 
   const messages: { role: string; content: string }[] = [
     {
       role: 'system',
-      content: `${await getAgentSystemPrompt('master')}\n\n${generatePersonaPrompt()}\n${buildSystemPrompt('Master', [...getAllTools().values()])}`,
+      content: `${adaptiveContext}\n\n${await getAgentSystemPrompt('master')}\n\n${generatePersonaPrompt()}\n${buildSystemPrompt('Master', masterTools)}`,
     },
   ];
 
@@ -251,6 +311,11 @@ async function processWithLLM(
   const result = await callCloudLLM(
     {
       messages,
+      baseUrl: cloudApiConfig.baseUrl,
+      model: cloudApiConfig.model,
+      tokenParam: cloudApiConfig.tokenParam,
+      thinking: cloudApiConfig.thinking,
+      toolMode: cloudApiConfig.toolMode,
       temperature: 0.5,
       functions: functions.length > 0 ? functions : undefined,
       functionCall: functions.length > 0 ? 'auto' : undefined,
@@ -268,6 +333,18 @@ async function processWithLLM(
   const { response } = result;
 
   if (response.functionCall) {
+    const args = parseToolArgs(response.functionCall.arguments);
+    const learned = inferIntentFromToolCall(response.functionCall.name, args);
+    if (learned && (intent.intent === 'unknown' || intent.confidence < 0.6)) {
+      learnIntentAlias({
+        text: userText,
+        intent: learned.intent,
+        agent: learned.agent,
+        params: learned.params,
+        source: 'cloud_function',
+        confidence: 0.84,
+      }).catch(() => {});
+    }
     const toolResult = await executeToolCall(
       response.functionCall.name,
       response.functionCall.arguments
@@ -293,7 +370,10 @@ async function executeToolCall(
   }
 
   try {
-    const result = await entry.handler(args);
+    const result = await executeTool(entry, args, {
+      agentId: 'master',
+      userConfirmed: args.confirmed === true,
+    });
     if (result && result.success) {
       if (result.data) {
         return typeof result.data === 'string'
@@ -332,8 +412,8 @@ export async function* processMessageStream(
     toolsInitialized = true;
   }
 
-  const agentId: AgentId = 'master';
   const sanitized = sanitizeText(userMessage);
+  await loadNluLearningSamples();
   const intent = classifyIntent(sanitized);
 
   if (!cloudApiKey) {
@@ -353,13 +433,14 @@ export async function* processMessageStream(
   (yield { type: 'thinking' as const, content: '分析中...', messageId }) as void;
 
   const context = await recallRecentContext('master', 5);
-  const allTools = [...getAllTools().values()];
-  const functions = toolsToOpenAIFunctions(allTools);
+  const masterTools = listToolsForAgent('master');
+  const functions = toolsToOpenAIFunctions(masterTools);
+  const adaptiveContext = await buildAdaptiveContextPrompt('master');
 
   const messages: { role: string; content: string }[] = [
     {
       role: 'system',
-      content: `${await getAgentSystemPrompt('master')}\n\n${buildSystemPrompt('Master', allTools)}`,
+      content: `${adaptiveContext}\n\n${await getAgentSystemPrompt('master')}\n\n${generatePersonaPrompt()}\n${buildSystemPrompt('Master', masterTools)}`,
     },
   ];
 
@@ -381,6 +462,11 @@ export async function* processMessageStream(
   const stream = callCloudLLMStream(
     {
       messages,
+      baseUrl: cloudApiConfig.baseUrl,
+      model: cloudApiConfig.model,
+      tokenParam: cloudApiConfig.tokenParam,
+      thinking: cloudApiConfig.thinking,
+      toolMode: cloudApiConfig.toolMode,
       temperature: 0.5,
       functions: functions.length > 0 ? functions : undefined,
       functionCall: functions.length > 0 ? 'auto' : undefined,

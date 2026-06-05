@@ -114,7 +114,6 @@ export async function searchSimilar(params: {
     await ensureVectorTable(db);
 
     const queryEmbedding = simpleEmbed(params.query, params.dim || 128);
-    const dim = params.dim || 128;
     const minSim = params.minSimilarity || 0.3;
     const limit = Math.min(params.limit || 10, 50);
 

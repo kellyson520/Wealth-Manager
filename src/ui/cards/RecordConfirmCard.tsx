@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { RecordConfirmCardData } from '../../shared/types';
+import { colors, radius, shadow, spacing } from '../theme';
 
 interface RecordConfirmCardProps {
   data: RecordConfirmCardData;
@@ -15,13 +16,13 @@ const CATEGORY_ICONS: Record<string, string> = {
 };
 
 const TYPE_LABELS: Record<string, string> = { income: '收入', expense: '支出', refund: '退款' };
-const TYPE_COLORS: Record<string, string> = { income: '#4ADE80', expense: '#F87171', refund: '#A78BFA' };
+const TYPE_COLORS: Record<string, string> = { income: colors.income, expense: colors.expense, refund: colors.purple };
 
 export default function RecordConfirmCard({ data, onConfirm, onCancel }: RecordConfirmCardProps) {
   const { bill } = data;
   const icon = CATEGORY_ICONS[bill.category] || '📦';
   const typeLabel = TYPE_LABELS[bill.type] || bill.type;
-  const typeColor = TYPE_COLORS[bill.type] || '#888';
+  const typeColor = TYPE_COLORS[bill.type] || colors.textSubtle;
 
   return (
     <View style={styles.card}>
@@ -99,37 +100,40 @@ export default function RecordConfirmCard({ data, onConfirm, onCancel }: RecordC
 const styles = StyleSheet.create({
   card: {
     marginTop: 8,
-    backgroundColor: '#1a1a2e',
-    borderRadius: 12,
+    backgroundColor: colors.surfaceRaised,
+    borderRadius: radius.md,
     borderWidth: 1,
-    borderColor: '#2a2a4e',
-    padding: 14,
+    borderColor: colors.border,
+    padding: spacing.lg,
+    ...shadow,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: spacing.md,
   },
   headerIcon: {
     fontSize: 20,
-    marginRight: 8,
+    marginRight: spacing.sm,
   },
   headerTitle: {
     fontSize: 15,
     fontWeight: '700',
-    color: '#e0e0e0',
+    color: colors.text,
   },
   billPreview: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#12122a',
-    borderRadius: 10,
-    padding: 12,
-    marginBottom: 10,
+    backgroundColor: colors.surface,
+    borderRadius: radius.md,
+    padding: spacing.md,
+    marginBottom: spacing.md,
+    borderWidth: 1,
+    borderColor: colors.border,
   },
   previewIcon: {
     fontSize: 30,
-    marginRight: 10,
+    marginRight: spacing.md,
   },
   previewInfo: {
     flex: 1,
@@ -137,11 +141,11 @@ const styles = StyleSheet.create({
   previewMerchant: {
     fontSize: 15,
     fontWeight: '600',
-    color: '#e0e0e0',
+    color: colors.text,
   },
   previewMeta: {
     fontSize: 12,
-    color: '#888',
+    color: colors.textMuted,
     marginTop: 2,
   },
   previewAmount: {
@@ -160,34 +164,34 @@ const styles = StyleSheet.create({
   noteText: {
     flex: 1,
     fontSize: 13,
-    color: '#aaa',
+    color: colors.textMuted,
     lineHeight: 18,
   },
   tagRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 6,
-    marginBottom: 10,
+    marginBottom: spacing.md,
   },
   tag: {
-    backgroundColor: '#2a2a4e',
-    borderRadius: 6,
-    paddingHorizontal: 8,
+    backgroundColor: colors.surfaceSoft,
+    borderRadius: radius.sm,
+    paddingHorizontal: spacing.sm,
     paddingVertical: 3,
   },
   tagText: {
     fontSize: 11,
-    color: '#aaa',
+    color: colors.textMuted,
   },
   warningBox: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    backgroundColor: '#422006',
-    borderRadius: 8,
-    padding: 10,
-    marginBottom: 8,
+    backgroundColor: colors.warningSoft,
+    borderRadius: radius.md,
+    padding: spacing.md,
+    marginBottom: spacing.sm,
     borderWidth: 1,
-    borderColor: '#78350F',
+    borderColor: colors.warning,
   },
   warningIcon: {
     fontSize: 14,
@@ -196,18 +200,18 @@ const styles = StyleSheet.create({
   warningText: {
     flex: 1,
     fontSize: 12,
-    color: '#FBBF24',
+    color: colors.warning,
     lineHeight: 17,
   },
   dupBox: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    backgroundColor: '#311B92',
-    borderRadius: 8,
-    padding: 10,
-    marginBottom: 8,
+    backgroundColor: colors.purpleSoft,
+    borderRadius: radius.md,
+    padding: spacing.md,
+    marginBottom: spacing.sm,
     borderWidth: 1,
-    borderColor: '#4C1D95',
+    borderColor: colors.purple,
   },
   dupIcon: {
     fontSize: 14,
@@ -217,37 +221,37 @@ const styles = StyleSheet.create({
   dupText: {
     flex: 1,
     fontSize: 12,
-    color: '#A78BFA',
+    color: colors.purple,
     lineHeight: 17,
   },
   actions: {
     flexDirection: 'row',
     justifyContent: 'flex-end',
-    gap: 10,
+    gap: spacing.sm,
     marginTop: 4,
   },
   cancelBtn: {
     paddingHorizontal: 20,
     paddingVertical: 10,
-    borderRadius: 8,
+    borderRadius: radius.md,
     borderWidth: 1,
-    borderColor: '#3a3a5e',
-    backgroundColor: '#2a2a4e',
+    borderColor: colors.borderStrong,
+    backgroundColor: colors.surfaceSoft,
   },
   cancelText: {
     fontSize: 14,
-    color: '#aaa',
+    color: colors.textMuted,
     fontWeight: '600',
   },
   confirmBtn: {
     paddingHorizontal: 20,
     paddingVertical: 10,
-    borderRadius: 8,
-    backgroundColor: '#4A90D9',
+    borderRadius: radius.md,
+    backgroundColor: colors.accentStrong,
   },
   confirmText: {
     fontSize: 14,
-    color: '#fff',
+    color: colors.white,
     fontWeight: '700',
   },
 });

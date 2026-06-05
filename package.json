@@ -8,9 +8,9 @@
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web",
-    "lint": "eslint .",
-    "typecheck": "tsc --noEmit",
-    "test": "jest --passWithNoTests"
+    "lint": "node node_modules/eslint/bin/eslint.js .",
+    "typecheck": "node node_modules/typescript/bin/tsc --noEmit",
+    "test": "node node_modules/jest/bin/jest.js --passWithNoTests"
   },
   "dependencies": {
     "expo": "~52.0.0",
@@ -26,8 +26,9 @@
     "react-native-reanimated": "~3.16.0",
     "react-native-safe-area-context": "~4.12.0",
     "react-native-screens": "~4.4.0",
+    "react-native-web": "~0.19.13",
     "react-native-webview": "13.12.5",
-    "uuid": "^9.0.0"
+    "uuid": "^11.1.1"
   },
   "devDependencies": {
     "@types/react": "~18.3.0",
@@ -37,6 +38,12 @@
     "jest": "^29.7.0",
     "jest-expo": "~52.0.0",
     "typescript": "~5.3.0"
+  },
+  "overrides": {
+    "@xmldom/xmldom": "^0.8.13",
+    "postcss": "^8.5.10",
+    "tar": "^7.5.8",
+    "uuid": "^11.1.1"
   },
   "jest": {
     "preset": "jest-expo",

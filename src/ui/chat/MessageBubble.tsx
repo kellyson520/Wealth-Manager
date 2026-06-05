@@ -2,6 +2,7 @@ import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { ChatMessage } from '../../shared/types';
 import { CardRenderer } from '../cards';
+import { colors, radius, shadow, spacing } from '../theme';
 
 interface MessageBubbleProps {
   message: ChatMessage;
@@ -51,7 +52,9 @@ export default function MessageBubble({
         <Text style={[styles.text, isUser ? styles.userText : styles.assistantText]}>
           {message.content}
         </Text>
-        {hasCard && (
+      </View>
+      {hasCard && (
+        <View style={styles.cardHost}>
           <CardRenderer
             data={message.data!}
             onConfirm={onConfirm}
@@ -61,17 +64,17 @@ export default function MessageBubble({
             onEdit={onEdit}
             onDelete={onDelete}
           />
-        )}
-      </View>
+        </View>
+      )}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
-    paddingHorizontal: 16,
-    paddingVertical: 6,
-    maxWidth: '85%',
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.xs,
+    maxWidth: '88%',
   },
   userContainer: {
     alignSelf: 'flex-end',
@@ -81,37 +84,41 @@ const styles = StyleSheet.create({
   },
   systemContainer: {
     alignSelf: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 4,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.xs,
   },
   bubble: {
-    borderRadius: 16,
-    paddingHorizontal: 14,
+    borderRadius: radius.lg,
+    paddingHorizontal: spacing.md,
     paddingVertical: 10,
   },
   userBubble: {
-    backgroundColor: '#4A90D9',
-    borderBottomRightRadius: 4,
+    backgroundColor: colors.accentStrong,
+    borderBottomRightRadius: radius.xs,
+    ...shadow,
   },
   assistantBubble: {
-    backgroundColor: '#2a2a3e',
-    borderBottomLeftRadius: 4,
+    backgroundColor: colors.surfaceRaised,
+    borderBottomLeftRadius: radius.xs,
     borderWidth: 1,
-    borderColor: '#3a3a5e',
+    borderColor: colors.border,
   },
   text: {
     fontSize: 15,
     lineHeight: 22,
   },
   userText: {
-    color: '#ffffff',
+    color: colors.white,
   },
   assistantText: {
-    color: '#e0e0e0',
+    color: colors.text,
   },
   systemText: {
     fontSize: 13,
-    color: '#888',
+    color: colors.textSubtle,
     textAlign: 'center',
+  },
+  cardHost: {
+    marginTop: spacing.xs,
   },
 });

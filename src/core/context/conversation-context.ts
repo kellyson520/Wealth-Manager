@@ -1,5 +1,4 @@
 import { ChatMessage } from '../../shared/types';
-import { recallMemory, saveMemory } from '../../agents/_shared/memory';
 
 export interface ConversationTurn {
   role: 'user' | 'assistant';
@@ -47,7 +46,6 @@ function buildSummary(turns: ConversationTurn[]): string {
   let totalExpense = 0;
   let totalIncome = 0;
   const merchants: string[] = [];
-  const categories: string[] = [];
 
   for (const turn of turns) {
     if (turn.role === 'user') {

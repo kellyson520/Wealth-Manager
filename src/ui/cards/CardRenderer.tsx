@@ -1,5 +1,5 @@
 import React from 'react';
-import { View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import {
   BillCardData,
   SummaryCardData,
@@ -17,6 +17,7 @@ import ErrorCard from './ErrorCard';
 import TipCard from './TipCard';
 import BillDetailCard from './BillDetailCard';
 import RecordConfirmCard from './RecordConfirmCard';
+import { colors, radius, spacing } from '../theme';
 
 interface CardRendererProps {
   data:
@@ -47,8 +48,8 @@ class ChartErrorBoundary extends React.Component<{ children: React.ReactNode }, 
   override render() {
     if (this.state.hasError) {
       return (
-        <View style={{ marginTop: 8, backgroundColor: '#1a1a2e', borderRadius: 12, padding: 14, borderWidth: 1, borderColor: '#2a2a4e' }}>
-          <View style={{ alignItems: 'center', padding: 20 }}>
+        <View style={styles.chartFallback}>
+          <View style={styles.chartFallbackInner}>
           </View>
         </View>
       );
@@ -123,3 +124,18 @@ export default function CardRenderer({
       return <View />;
   }
 }
+
+const styles = StyleSheet.create({
+  chartFallback: {
+    marginTop: spacing.sm,
+    backgroundColor: colors.surfaceRaised,
+    borderRadius: radius.md,
+    padding: spacing.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  chartFallbackInner: {
+    alignItems: 'center',
+    padding: spacing.xl,
+  },
+});

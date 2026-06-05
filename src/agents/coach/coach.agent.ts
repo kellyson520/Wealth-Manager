@@ -1,10 +1,9 @@
 import { IntentResult, AgentId } from '../../shared/types';
-import { set_budget, create_savings_goal, get_savings_progress, update_savings_progress } from '../../tools/budget/budget.tool';
+import { set_budget, create_savings_goal, get_savings_progress } from '../../tools/budget/budget.tool';
 import { get_streak_info, get_achievement } from '../../tools/gamification/gamification.tool';
 import { get_budget_status } from '../../tools/stats/stats.tool';
 import { run_proactive_check, get_proactive_insights, get_today_summary } from '../../tools/proactive/proactive.tool';
 import { schedule_daily_reminder } from '../../tools/automation/automation.tool';
-import { evaluate_all_scenarios } from '../../tools/automation/scenario-triggers';
 import {
   canCallTool,
   rememberThis,
@@ -50,6 +49,55 @@ export async function handleIntent(intent: IntentResult): Promise<string> {
 }
 
 async function handleSetBudget(params: Record<string, unknown>): Promise<string> {
+  const budgets = Array.isArray(params.budgets)
+    ? params.budgets as { category?: string; limit?: number }[]
+    : [];
+
+  if (budgets.length > 0) {
+    const validBudgets = budgets.filter(
+      (budget): budget is { category: string; limit: number } =>
+        typeof budget.category === 'string' &&
+        budget.category.trim().length > 0 &&
+        typeof budget.limit === 'number' &&
+        budget.limit > 0
+    );
+
+    if (validBudgets.length === 0) {
+      return '请告诉我预算金额，比如"设置餐饮预算 3000"。';
+    }
+
+    const toolCheck = canCallTool(AGENT_ID, 'set_budget');
+    if (!toolCheck.allowed) {
+      return `操作被拒绝：${toolCheck.reason}`;
+    }
+
+    const successes: { category: string; limit: number }[] = [];
+    const failures: string[] = [];
+    for (const budget of validBudgets) {
+      const result = await set_budget({ category: budget.category, limit: budget.limit });
+      if (result.success) {
+        successes.push(budget);
+        await rememberThis(AGENT_ID, `预算:${budget.category}=¥${budget.limit.toFixed(0)}/月`);
+      } else {
+        failures.push(`${budget.category}: ${result.error}`);
+      }
+    }
+
+    if (successes.length > 0) {
+      await rememberMoment(AGENT_ID, `批量预算:${successes.map(b => `${b.category}=¥${b.limit}`).join('|')}`);
+      let reply = `✅ 已设定 ${successes.length} 个预算：\n`;
+      for (const budget of successes) {
+        reply += `${budget.category}：¥${budget.limit.toFixed(2)}/月\n`;
+      }
+      if (failures.length > 0) {
+        reply += `\n部分预算设置失败：${failures.join('；')}`;
+      }
+      return reply.trim();
+    }
+
+    return `设置预算失败：${failures.join('；')}`;
+  }
+
   const category = (params.category as string) || '餐饮';
   const limit = params.limit as number;
 

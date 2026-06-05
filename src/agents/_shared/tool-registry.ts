@@ -171,5 +171,10 @@ function extractNamespace(toolName: string): string {
       toolName === 'create_link' || toolName === 'leave_shared' ||
       toolName === 'delete_link') return 'sharing';
 
+  if (toolName.includes('_memory') || toolName.includes('_memories') ||
+      toolName.includes('_persona') || toolName.includes('_learning') ||
+      toolName === 'remember_user_preference')
+    return 'memory';
+
   return 'other';
 }

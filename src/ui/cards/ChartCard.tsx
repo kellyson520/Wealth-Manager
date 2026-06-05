@@ -2,6 +2,7 @@ import React, { useMemo } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { ChartCardData } from '../../shared/types';
 import { EChartsSandbox } from '../charts';
+import { colors, radius, shadow, spacing } from '../theme';
 
 interface ChartCardProps {
   data: ChartCardData;
@@ -29,6 +30,8 @@ const CHART_LABELS: Record<string, string> = {
   heatmap: '热力图',
 };
 
+const CHART_COLORS = [colors.accent, colors.income, colors.expense, colors.purple, colors.warning];
+
 function buildEChartsConfig(data: ChartCardData): Record<string, unknown> {
   const { config, chartType, title } = data;
   const series = config.series as Record<string, unknown> | undefined;
@@ -37,7 +40,7 @@ function buildEChartsConfig(data: ChartCardData): Record<string, unknown> {
     backgroundColor: 'transparent',
     title: {
       text: title || CHART_LABELS[chartType],
-      textStyle: { color: '#ccc', fontSize: 12 },
+      textStyle: { color: colors.textMuted, fontSize: 12 },
       left: 'center',
       top: 4,
     },
@@ -45,7 +48,7 @@ function buildEChartsConfig(data: ChartCardData): Record<string, unknown> {
     grid: { top: 40, bottom: 30, left: 50, right: 20 },
     legend: {
       bottom: 0,
-      textStyle: { color: '#aaa', fontSize: 10 },
+      textStyle: { color: colors.textMuted, fontSize: 10 },
       itemWidth: 10,
       itemHeight: 10,
     },
@@ -88,14 +91,14 @@ function buildEChartsConfig(data: ChartCardData): Record<string, unknown> {
         xAxis: {
           type: 'category',
           data: lineData?.xAxis || [],
-          axisLine: { lineStyle: { color: '#3a3a5e' } },
-          axisLabel: { color: '#888', fontSize: 10, rotate: 30 },
+          axisLine: { lineStyle: { color: colors.borderStrong } },
+          axisLabel: { color: colors.textSubtle, fontSize: 10, rotate: 30 },
         },
         yAxis: {
           type: 'value',
           axisLine: { show: false },
-          axisLabel: { color: '#888', fontSize: 10 },
-          splitLine: { lineStyle: { color: '#1a1a2e' } },
+          axisLabel: { color: colors.textSubtle, fontSize: 10 },
+          splitLine: { lineStyle: { color: colors.border } },
         },
         series: (lineData?.data || []).map((s, i) => ({
           type: 'line',
@@ -104,7 +107,7 @@ function buildEChartsConfig(data: ChartCardData): Record<string, unknown> {
           smooth: true,
           symbol: 'none',
           lineStyle: { width: 2 },
-          color: ['#4A90D9', '#4ADE80', '#F87171', '#A78BFA', '#FACC15'][i % 5],
+          color: CHART_COLORS[i % CHART_COLORS.length],
         })),
       };
     }
@@ -117,21 +120,21 @@ function buildEChartsConfig(data: ChartCardData): Record<string, unknown> {
         xAxis: {
           type: 'category',
           data: barData?.xAxis || [],
-          axisLine: { lineStyle: { color: '#3a3a5e' } },
-          axisLabel: { color: '#888', fontSize: 10, rotate: 30 },
+          axisLine: { lineStyle: { color: colors.borderStrong } },
+          axisLabel: { color: colors.textSubtle, fontSize: 10, rotate: 30 },
         },
         yAxis: {
           type: 'value',
           axisLine: { show: false },
-          axisLabel: { color: '#888', fontSize: 10 },
-          splitLine: { lineStyle: { color: '#1a1a2e' } },
+          axisLabel: { color: colors.textSubtle, fontSize: 10 },
+          splitLine: { lineStyle: { color: colors.border } },
         },
         series: (barData?.data || []).map((s, i) => ({
           type: 'bar',
           name: s.name,
           data: s.data,
           stack: chartType === 'stacked_bar' ? 'total' : undefined,
-          color: ['#4A90D9', '#4ADE80', '#F87171', '#A78BFA', '#FACC15'][i % 5],
+          color: CHART_COLORS[i % CHART_COLORS.length],
           barMaxWidth: 30,
         })),
       };
@@ -160,9 +163,9 @@ function buildEChartsConfig(data: ChartCardData): Record<string, unknown> {
             lineStyle: {
               width: 18,
               color: [
-                [0.5, '#4ADE80'],
-                [0.8, '#FACC15'],
-                [1, '#F87171'],
+                [0.5, colors.income],
+                [0.8, colors.warning],
+                [1, colors.expense],
               ],
             },
           },
@@ -172,13 +175,13 @@ function buildEChartsConfig(data: ChartCardData): Record<string, unknown> {
             width: 6,
             itemStyle: { color: 'auto' },
           },
-          axisTick: { distance: -18, length: 6, lineStyle: { color: '#fff', width: 1 } },
-          splitLine: { distance: -22, length: 16, lineStyle: { color: '#fff', width: 2 } },
-          axisLabel: { color: '#888', distance: 30, fontSize: 10 },
+          axisTick: { distance: -18, length: 6, lineStyle: { color: colors.white, width: 1 } },
+          splitLine: { distance: -22, length: 16, lineStyle: { color: colors.white, width: 2 } },
+          axisLabel: { color: colors.textSubtle, distance: 30, fontSize: 10 },
           detail: {
             valueAnimation: true,
             formatter: `¥{value}\n${pct}%已用`,
-            color: '#e0e0e0',
+            color: colors.text,
             fontSize: 16,
             offsetCenter: [0, '70%'],
           },
@@ -198,10 +201,10 @@ function buildEChartsConfig(data: ChartCardData): Record<string, unknown> {
           center: ['50%', '55%'],
           radius: '65%',
           indicator: radarData?.indicators || [],
-          axisName: { color: '#aaa', fontSize: 10 },
+          axisName: { color: colors.textMuted, fontSize: 10 },
           splitArea: { areaStyle: { color: ['transparent'] } },
-          splitLine: { lineStyle: { color: '#2a2a4e' } },
-          axisLine: { lineStyle: { color: '#3a3a5e' } },
+          splitLine: { lineStyle: { color: colors.border } },
+          axisLine: { lineStyle: { color: colors.borderStrong } },
         },
         series: [{
           type: 'radar',
@@ -211,7 +214,7 @@ function buildEChartsConfig(data: ChartCardData): Record<string, unknown> {
             areaStyle: { opacity: 0.15 },
             lineStyle: { width: 2 },
             itemStyle: { borderWidth: 2 },
-            color: ['#4A90D9', '#4ADE80', '#F87171'][i % 3],
+            color: CHART_COLORS[i % 3],
           })),
         }],
       };
@@ -228,7 +231,7 @@ function buildEChartsConfig(data: ChartCardData): Record<string, unknown> {
           layout: 'none',
           emphasis: { focus: 'adjacency' },
           nodeAlign: 'left',
-          label: { color: '#aaa', fontSize: 10 },
+          label: { color: colors.textMuted, fontSize: 10 },
           lineStyle: { color: 'gradient', curveness: 0.5, opacity: 0.3 },
           data: sankeyData?.nodes || [],
           links: sankeyData?.links || [],
@@ -247,15 +250,15 @@ function buildEChartsConfig(data: ChartCardData): Record<string, unknown> {
           type: 'category',
           data: heatData?.xAxis || [],
           splitArea: { show: true },
-          axisLabel: { color: '#888', fontSize: 10, rotate: 30 },
-          axisLine: { lineStyle: { color: '#3a3a5e' } },
+          axisLabel: { color: colors.textSubtle, fontSize: 10, rotate: 30 },
+          axisLine: { lineStyle: { color: colors.borderStrong } },
         },
         yAxis: {
           type: 'category',
           data: heatData?.yAxis || [],
           splitArea: { show: true },
-          axisLabel: { color: '#888', fontSize: 10 },
-          axisLine: { lineStyle: { color: '#3a3a5e' } },
+          axisLabel: { color: colors.textSubtle, fontSize: 10 },
+          axisLine: { lineStyle: { color: colors.borderStrong } },
         },
         visualMap: {
           min: 0,
@@ -264,8 +267,8 @@ function buildEChartsConfig(data: ChartCardData): Record<string, unknown> {
           orient: 'horizontal',
           left: 'center',
           bottom: 0,
-          textStyle: { color: '#888', fontSize: 10 },
-          inRange: { color: ['#12122a', '#4A90D9', '#4ADE80', '#FACC15', '#F87171'] },
+          textStyle: { color: colors.textSubtle, fontSize: 10 },
+          inRange: { color: [colors.surface, colors.accent, colors.income, colors.warning, colors.expense] },
         },
         series: [{
           type: 'heatmap',
@@ -319,21 +322,22 @@ export default function ChartCard({ data }: ChartCardProps) {
 const styles = StyleSheet.create({
   card: {
     marginTop: 8,
-    backgroundColor: '#1a1a2e',
-    borderRadius: 12,
+    backgroundColor: colors.surfaceRaised,
+    borderRadius: radius.md,
     borderWidth: 1,
-    borderColor: '#2a2a4e',
+    borderColor: colors.border,
     overflow: 'hidden',
+    ...shadow,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 14,
+    padding: spacing.lg,
     paddingBottom: 0,
   },
   icon: {
     fontSize: 24,
-    marginRight: 10,
+    marginRight: spacing.md,
   },
   headerText: {
     flex: 1,
@@ -341,34 +345,36 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 15,
     fontWeight: '700',
-    color: '#e0e0e0',
+    color: colors.text,
   },
   subtitle: {
     fontSize: 12,
-    color: '#888',
+    color: colors.textMuted,
     marginTop: 2,
   },
   chartArea: {
-    margin: 10,
-    borderRadius: 8,
+    margin: spacing.md,
+    borderRadius: radius.md,
     overflow: 'hidden',
-    backgroundColor: '#12122a',
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
   },
   insightRow: {
     flexDirection: 'row',
-    padding: 14,
+    padding: spacing.lg,
     paddingTop: 0,
     alignItems: 'flex-start',
   },
   insightIcon: {
     fontSize: 14,
-    marginRight: 6,
+    marginRight: spacing.sm,
     marginTop: 1,
   },
   insightText: {
     flex: 1,
     fontSize: 13,
-    color: '#bbb',
+    color: colors.textMuted,
     lineHeight: 18,
   },
 });

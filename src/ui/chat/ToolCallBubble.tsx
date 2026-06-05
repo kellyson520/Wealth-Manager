@@ -1,5 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet, ActivityIndicator } from 'react-native';
+import { colors, radius, spacing } from '../theme';
 
 interface ToolCallBubbleProps {
   toolName: string;
@@ -10,7 +11,7 @@ interface ToolCallBubbleProps {
 }
 
 export default function ToolCallBubble({ toolName, toolArgs, status, result, error }: ToolCallBubbleProps) {
-  const statusColor = status === 'success' ? '#4ADE80' : status === 'error' ? '#EF4444' : status === 'running' ? '#FACC15' : '#888';
+  const statusColor = status === 'success' ? colors.income : status === 'error' ? colors.danger : status === 'running' ? colors.warning : colors.textSubtle;
   const statusLabel = status === 'pending' ? '等待' : status === 'running' ? '执行中' : status === 'success' ? '完成' : '失败';
 
   const argPreview = toolArgs ? Object.entries(toolArgs).slice(0, 3).map(([k, v]) => `${String(k)}=${String(v).slice(0, 20)}`).join(', ') : '';
@@ -20,7 +21,7 @@ export default function ToolCallBubble({ toolName, toolArgs, status, result, err
       <View style={styles.header}>
         <View style={[styles.dot, { backgroundColor: statusColor }]} />
         <Text style={styles.toolName}>{toolName}</Text>
-        {status === 'running' && <ActivityIndicator size="small" color="#FACC15" style={styles.spinner} />}
+        {status === 'running' && <ActivityIndicator size="small" color={colors.warning} style={styles.spinner} />}
         <View style={[styles.badge, { backgroundColor: statusColor + '22' }]}>
           <Text style={[styles.badgeText, { color: statusColor }]}>{statusLabel}</Text>
         </View>
@@ -34,12 +35,14 @@ export default function ToolCallBubble({ toolName, toolArgs, status, result, err
 
 const styles = StyleSheet.create({
   container: {
-    backgroundColor: '#1a1a3e',
-    borderRadius: 8,
-    padding: 10,
+    backgroundColor: colors.surface,
+    borderRadius: radius.md,
+    padding: spacing.md,
     marginVertical: 4,
     borderLeftWidth: 3,
-    borderLeftColor: '#4A90D9',
+    borderLeftColor: colors.accent,
+    borderWidth: 1,
+    borderColor: colors.border,
   },
   header: {
     flexDirection: 'row',
@@ -49,12 +52,12 @@ const styles = StyleSheet.create({
     width: 8,
     height: 8,
     borderRadius: 4,
-    marginRight: 8,
+    marginRight: spacing.sm,
   },
   toolName: {
-    color: '#e0e0e0',
+    color: colors.text,
     fontSize: 13,
-    fontWeight: '600',
+    fontWeight: '700',
     flex: 1,
   },
   spinner: {
@@ -63,26 +66,26 @@ const styles = StyleSheet.create({
   badge: {
     paddingHorizontal: 6,
     paddingVertical: 2,
-    borderRadius: 4,
+    borderRadius: radius.xs,
   },
   badgeText: {
     fontSize: 10,
     fontWeight: '500',
   },
   args: {
-    color: '#888',
+    color: colors.textSubtle,
     fontSize: 11,
     marginTop: 4,
     marginLeft: 16,
   },
   result: {
-    color: '#aaa',
+    color: colors.textMuted,
     fontSize: 11,
     marginTop: 6,
     marginLeft: 16,
   },
   error: {
-    color: '#EF4444',
+    color: colors.danger,
     fontSize: 11,
     marginTop: 4,
     marginLeft: 16,

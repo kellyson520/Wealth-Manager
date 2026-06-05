@@ -106,7 +106,7 @@ describe('get_aggregation Tool', () => {
       expect(startDate.toISOString().split('T')[0]).toBe(weekAgo.toISOString().split('T')[0]);
     });
 
-    test('month period produces a valid past date', async () => {
+    test('month period uses the first day of current month', async () => {
       const mockDb = await getMockDb();
       mockDb.getFirstAsync
         .mockResolvedValueOnce({ total: 0 })
@@ -118,10 +118,10 @@ describe('get_aggregation Tool', () => {
       const callArgs = mockDb.getFirstAsync.mock.calls[0][1];
       const startDate = new Date(callArgs[0]);
       const now = new Date();
-      expect(startDate.getTime()).toBeLessThan(now.getTime());
-      const daysAgo = (now.getTime() - startDate.getTime()) / (24 * 60 * 60 * 1000);
-      expect(daysAgo).toBeGreaterThan(20);
-      expect(daysAgo).toBeLessThan(60);
+      const monthStart = new Date(now.getFullYear(), now.getMonth(), 1)
+        .toISOString()
+        .split('T')[0];
+      expect(startDate.toISOString().split('T')[0]).toBe(monthStart);
     });
   });
 

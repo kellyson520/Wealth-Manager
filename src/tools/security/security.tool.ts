@@ -187,7 +187,14 @@ export async function verify_hash_chain(): Promise<ToolResult> {
   }
 }
 
-export async function repair_hash_chain(): Promise<ToolResult> {
+export async function repair_hash_chain(params?: { confirmed?: boolean }): Promise<ToolResult> {
+  if (!params?.confirmed) {
+    return {
+      success: false,
+      error: '哈希链修复需要用户显式确认',
+      errorCode: 'CONFIRMATION_REQUIRED',
+    };
+  }
   try {
     const result = await rebuildHashChain();
 
@@ -232,7 +239,8 @@ export async function export_audit_package(params: {
 
     const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
     const entries = await db.getAllAsync(
-      `SELECT * FROM audit_log ${where} ORDER BY timestamp DESC LIMIT 1000`,
+      `SELECT id, timestamp, agent, tool, action, params_hash, result_status, user_confirmed, error_code, permission_level, duration_ms
+       FROM audit_log ${where} ORDER BY timestamp DESC LIMIT 1000`,
       values
     );
 

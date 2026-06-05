@@ -1,6 +1,3 @@
-import { v4 as uuidv4 } from 'uuid';
-import { captureError } from '../logger/logger';
-
 export interface SkillDefinition {
   name: string;
   version: string;

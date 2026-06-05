@@ -107,6 +107,15 @@ export async function generateHashForBill(billId: string, prevBillId?: string): 
         'SELECT hash FROM bills WHERE id = ?', [prevBillId]
       );
       if (prev) prevHash = prev.hash;
+    } else {
+      const prev = await db.getFirstAsync<{ hash: string }>(
+        `SELECT hash FROM bills
+         WHERE created_at < ? OR (created_at = ? AND id < ?)
+         ORDER BY created_at DESC, id DESC
+         LIMIT 1`,
+        [bill.created_at, bill.created_at, bill.id]
+      );
+      if (prev) prevHash = prev.hash || '';
     }
 
     const hash = computeBillHash(bill, prevHash);

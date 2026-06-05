@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { TipCardData } from '../../shared/types';
+import { colors, radius, shadow, spacing } from '../theme';
 
 interface TipCardProps {
   data: TipCardData;
@@ -16,11 +17,11 @@ const TIP_ICONS: Record<string, string> = {
 };
 
 const TIP_COLORS: Record<string, string> = {
-  budget: '#4ADE80',
-  saving: '#A78BFA',
-  habit: '#4A90D9',
-  security: '#FACC15',
-  general: '#F87171',
+  budget: colors.income,
+  saving: colors.purple,
+  habit: colors.accent,
+  security: colors.warning,
+  general: colors.info,
 };
 
 export default function TipCard({ data, onAction }: TipCardProps) {
@@ -52,20 +53,21 @@ export default function TipCard({ data, onAction }: TipCardProps) {
 const styles = StyleSheet.create({
   card: {
     marginTop: 8,
-    backgroundColor: '#1a1a2e',
-    borderRadius: 12,
+    backgroundColor: colors.surfaceRaised,
+    borderRadius: radius.md,
     borderWidth: 1.5,
     borderLeftWidth: 4,
-    padding: 14,
+    padding: spacing.lg,
+    ...shadow,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 8,
+    marginBottom: spacing.sm,
   },
   icon: {
     fontSize: 20,
-    marginRight: 8,
+    marginRight: spacing.sm,
   },
   title: {
     fontSize: 15,
@@ -73,7 +75,7 @@ const styles = StyleSheet.create({
   },
   message: {
     fontSize: 13,
-    color: '#bbb',
+    color: colors.textMuted,
     lineHeight: 20,
     marginBottom: 10,
   },
@@ -81,11 +83,11 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
     paddingHorizontal: 16,
     paddingVertical: 8,
-    borderRadius: 8,
+    borderRadius: radius.md,
   },
   actionText: {
     fontSize: 13,
-    color: '#fff',
+    color: colors.white,
     fontWeight: '700',
   },
 });

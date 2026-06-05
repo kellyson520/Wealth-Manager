@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { BillDetailCardData } from '../../shared/types';
+import { colors, radius, shadow, spacing } from '../theme';
 
 interface BillDetailCardProps {
   data: BillDetailCardData;
@@ -15,14 +16,14 @@ const CATEGORY_ICONS: Record<string, string> = {
 };
 
 const TYPE_LABELS: Record<string, string> = { income: '收入', expense: '支出', refund: '退款' };
-const TYPE_COLORS: Record<string, string> = { income: '#4ADE80', expense: '#F87171', refund: '#A78BFA' };
+const TYPE_COLORS: Record<string, string> = { income: colors.income, expense: colors.expense, refund: colors.purple };
 const SOURCE_LABELS: Record<string, string> = { manual: '手动', import: '导入', auto: '自动', ocr: 'OCR' };
 
 export default function BillDetailCard({ data, onEdit, onDelete }: BillDetailCardProps) {
   const { bill } = data;
   const icon = CATEGORY_ICONS[bill.category] || '📦';
   const typeLabel = TYPE_LABELS[bill.type] || bill.type;
-  const typeColor = TYPE_COLORS[bill.type] || '#888';
+  const typeColor = TYPE_COLORS[bill.type] || colors.textSubtle;
 
   return (
     <View style={styles.card}>
@@ -89,18 +90,19 @@ function DetailRow({ label, value }: { label: string; value: string }) {
 const styles = StyleSheet.create({
   card: {
     marginTop: 8,
-    backgroundColor: '#1a1a2e',
-    borderRadius: 12,
+    backgroundColor: colors.surfaceRaised,
+    borderRadius: radius.md,
     borderWidth: 1,
-    borderColor: '#2a2a4e',
+    borderColor: colors.border,
     overflow: 'hidden',
+    ...shadow,
   },
   hero: {
     alignItems: 'center',
     padding: 16,
     paddingBottom: 12,
     borderBottomWidth: 1,
-    borderBottomColor: '#2a2a4e',
+    borderBottomColor: colors.border,
   },
   heroIcon: {
     fontSize: 36,
@@ -111,7 +113,7 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
   details: {
-    padding: 14,
+    padding: spacing.lg,
   },
   detailRow: {
     flexDirection: 'row',
@@ -119,16 +121,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 7,
     borderBottomWidth: 1,
-    borderBottomColor: '#1e1e32',
+    borderBottomColor: colors.border,
   },
   detailLabel: {
     fontSize: 13,
-    color: '#888',
+    color: colors.textMuted,
     flex: 1,
   },
   detailValue: {
     fontSize: 13,
-    color: '#ddd',
+    color: colors.text,
     fontWeight: '500',
     flex: 2,
     textAlign: 'right',
@@ -136,50 +138,52 @@ const styles = StyleSheet.create({
   tagRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    paddingHorizontal: 14,
-    paddingBottom: 10,
+    paddingHorizontal: spacing.lg,
+    paddingBottom: spacing.md,
     gap: 6,
   },
   tag: {
-    backgroundColor: '#2a2a4e',
-    borderRadius: 6,
-    paddingHorizontal: 8,
+    backgroundColor: colors.surfaceSoft,
+    borderRadius: radius.sm,
+    paddingHorizontal: spacing.sm,
     paddingVertical: 3,
   },
   tagText: {
     fontSize: 11,
-    color: '#aaa',
+    color: colors.textMuted,
   },
   actions: {
     flexDirection: 'row',
     justifyContent: 'flex-end',
-    padding: 12,
-    gap: 10,
+    padding: spacing.md,
+    gap: spacing.sm,
     borderTopWidth: 1,
-    borderTopColor: '#2a2a4e',
+    borderTopColor: colors.border,
   },
   editBtn: {
     paddingHorizontal: 16,
     paddingVertical: 8,
-    borderRadius: 8,
-    backgroundColor: '#2a2a4e',
+    borderRadius: radius.md,
+    backgroundColor: colors.surfaceSoft,
     borderWidth: 1,
-    borderColor: '#3a3a5e',
+    borderColor: colors.borderStrong,
   },
   editText: {
     fontSize: 13,
-    color: '#aaa',
+    color: colors.textMuted,
     fontWeight: '600',
   },
   deleteBtn: {
     paddingHorizontal: 16,
     paddingVertical: 8,
-    borderRadius: 8,
-    backgroundColor: '#7F1D1D',
+    borderRadius: radius.md,
+    backgroundColor: colors.dangerSoft,
+    borderWidth: 1,
+    borderColor: colors.danger,
   },
   deleteText: {
     fontSize: 13,
-    color: '#F87171',
+    color: colors.expense,
     fontWeight: '600',
   },
 });

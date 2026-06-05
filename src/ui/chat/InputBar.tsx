@@ -8,6 +8,7 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
+import { colors, radius, spacing } from '../theme';
 
 interface InputBarProps {
   onSend: (text: string) => void;
@@ -33,31 +34,47 @@ export default function InputBar({ onSend, onVoice, onAttachment, onOCR, disable
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       style={styles.container}
     >
+      {(onVoice || onAttachment || onOCR) && (
       <View style={styles.actionRow}>
         {onVoice && (
-          <TouchableOpacity style={styles.actionBtn} onPress={onVoice} disabled={disabled}>
-            <Text style={styles.actionIcon}>{'\uD83C\uDF99'}</Text>
+          <TouchableOpacity
+            style={[styles.actionBtn, disabled && styles.actionDisabled]}
+            onPress={onVoice}
+            disabled={disabled}
+            activeOpacity={0.65}
+          >
+            <Text style={styles.actionIcon}>🎙</Text>
           </TouchableOpacity>
         )}
         {onAttachment && (
-          <TouchableOpacity style={styles.actionBtn} onPress={onAttachment} disabled={disabled}>
-            <Text style={styles.actionIcon}>{'\uD83D\uDCCE'}</Text>
+          <TouchableOpacity
+            style={[styles.actionBtn, disabled && styles.actionDisabled]}
+            onPress={onAttachment}
+            disabled={disabled}
+            activeOpacity={0.65}
+          >
+            <Text style={styles.actionIcon}>⌁</Text>
           </TouchableOpacity>
         )}
         {onOCR && (
-          <TouchableOpacity style={styles.actionBtn} onPress={onOCR} disabled={disabled}>
-            <Text style={styles.actionIcon}>{'\uD83D\uDCF7'}</Text>
+          <TouchableOpacity
+            style={[styles.actionBtn, disabled && styles.actionDisabled]}
+            onPress={onOCR}
+            disabled={disabled}
+            activeOpacity={0.65}
+          >
+            <Text style={styles.actionIcon}>▣</Text>
           </TouchableOpacity>
         )}
-        <View style={{ flex: 1 }} />
       </View>
+      )}
       <View style={styles.inputRow}>
         <TextInput
           style={styles.input}
           value={text}
           onChangeText={setText}
           placeholder="输入记账内容，如「午饭花了35块」"
-          placeholderTextColor="#666"
+          placeholderTextColor={colors.textSubtle}
           multiline
           maxLength={200}
           returnKeyType="send"
@@ -68,8 +85,9 @@ export default function InputBar({ onSend, onVoice, onAttachment, onOCR, disable
           style={[styles.sendButton, (!text.trim() || disabled) && styles.sendDisabled]}
           onPress={handleSend}
           disabled={!text.trim() || disabled}
+          activeOpacity={0.7}
         >
-          <Text style={styles.sendText}>发送</Text>
+          <Text style={styles.sendText}>↑</Text>
         </TouchableOpacity>
       </View>
     </KeyboardAvoidingView>
@@ -79,57 +97,70 @@ export default function InputBar({ onSend, onVoice, onAttachment, onOCR, disable
 const styles = StyleSheet.create({
   container: {
     borderTopWidth: 1,
-    borderTopColor: '#2a2a3e',
-    backgroundColor: '#12122a',
-    paddingBottom: 8,
+    borderTopColor: colors.border,
+    backgroundColor: colors.bgAlt,
+    paddingBottom: spacing.sm,
   },
   actionRow: {
     flexDirection: 'row',
-    paddingHorizontal: 16,
-    paddingTop: 4,
-    paddingBottom: 2,
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.xs,
+    gap: spacing.sm,
   },
   actionBtn: {
     width: 36,
     height: 36,
-    borderRadius: 18,
-    backgroundColor: '#1e1e36',
+    borderRadius: radius.md,
+    backgroundColor: colors.surfaceRaised,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 8,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  actionDisabled: {
+    opacity: 0.45,
   },
   actionIcon: {
     fontSize: 16,
+    color: colors.text,
+    fontWeight: '800',
   },
   inputRow: {
     flexDirection: 'row',
     alignItems: 'flex-end',
-    paddingHorizontal: 12,
-    paddingTop: 4,
+    paddingHorizontal: spacing.md,
+    paddingTop: spacing.xs,
   },
   input: {
     flex: 1,
-    backgroundColor: '#1e1e36',
-    borderRadius: 20,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: Platform.OS === 'ios' ? 12 : 10,
     fontSize: 15,
-    color: '#e0e0e0',
+    color: colors.text,
     maxHeight: 100,
   },
   sendButton: {
-    marginLeft: 8,
-    backgroundColor: '#4A90D9',
-    borderRadius: 20,
-    paddingHorizontal: 20,
-    paddingVertical: 10,
+    marginLeft: spacing.sm,
+    width: 44,
+    height: 44,
+    borderRadius: radius.lg,
+    backgroundColor: colors.accentStrong,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   sendDisabled: {
-    backgroundColor: '#2a2a4e',
+    backgroundColor: colors.surfaceSoft,
+    opacity: 0.7,
   },
   sendText: {
-    color: '#fff',
-    fontSize: 15,
-    fontWeight: '600',
+    color: colors.white,
+    fontSize: 24,
+    lineHeight: 24,
+    fontWeight: '800',
   },
 });

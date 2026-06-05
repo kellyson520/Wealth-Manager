@@ -30,7 +30,7 @@ export interface BudgetLimit {
 export class BudgetPlan extends AggregateRoot {
   private readonly _limits: BudgetLimit[] = [];
 
-  get limits(): ReadonlyArray<BudgetLimit> { return this._limits; }
+  get limits(): readonly BudgetLimit[] { return this._limits; }
 
   setLimit(category: string, amount: number, period: 'monthly' | 'weekly' = 'monthly'): void {
     const idx = this._limits.findIndex(l => l.category === category);

@@ -2,7 +2,7 @@ import { NotificationScenario, NotificationScenarioType, ToolResult } from '../.
 import { getDatabase } from '../../core/database/database';
 import { captureError } from '../../core/logger/logger';
 import { check_budget_overrun } from '../budget/budget.tool';
-import { get_streak_info, get_achievement } from '../gamification/gamification.tool';
+import { get_achievement } from '../gamification/gamification.tool';
 import { schedule_local_notification } from './automation.tool';
 
 export async function evaluate_all_scenarios(): Promise<ToolResult> {

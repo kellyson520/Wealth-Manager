@@ -16,7 +16,7 @@ export async function run_proactive_check(): Promise<ToolResult> {
   const now = new Date().toISOString();
 
   try {
-    const [budgetAlerts, inactivityAlert, upcomingAchievements, savingsUpdates, insights, _scenarios] =
+      const [budgetAlerts, inactivityAlert, upcomingAchievements, savingsUpdates, insights] =
       await Promise.all([
         checkBudgetHealth(),
         checkRecordingInactivity(),

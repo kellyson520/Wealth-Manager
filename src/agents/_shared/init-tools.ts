@@ -119,6 +119,14 @@ import {
   leave_shared,
   delete_link,
 } from '../../tools/sharing/sharing.tool';
+import {
+  delete_ai_memory,
+  list_ai_memories,
+  refresh_ai_memory_digest,
+  remember_user_preference,
+  set_ai_learning_enabled,
+  update_ai_persona,
+} from '../../tools/memory/memory.tool';
 
 let initialized = false;
 
@@ -177,7 +185,7 @@ export function initToolRegistry(): void {
       idempotent: true,
     },
     handler: search_bills,
-    allowedAgents: ['ledger', 'analyst'],
+    allowedAgents: ['ledger', 'analyst', 'guardian'],
   });
 
   registerTool({
@@ -233,7 +241,7 @@ export function initToolRegistry(): void {
       retryable: false,
       idempotent: false,
     },
-    handler: async (params: { billId: string }) => delete_bill(params),
+    handler: async (params: { billId: string; confirmed?: boolean }) => delete_bill(params),
     allowedAgents: ['ledger', 'guardian'],
   });
 
@@ -610,7 +618,7 @@ export function initToolRegistry(): void {
       retryable: false,
       idempotent: false,
     },
-    handler: repair_hash_chain,
+    handler: async (params?: { confirmed?: boolean }) => repair_hash_chain(params),
     allowedAgents: ['guardian'],
   });
 
@@ -1762,5 +1770,117 @@ export function initToolRegistry(): void {
     },
     handler: async (params?: any) => list_sync_files(params),
     allowedAgents: ['guardian', 'analyst'],
+  });
+
+  registerTool({
+    definition: {
+      name: 'list_ai_memories',
+      description: '查看 AI 已保存的人格/用户偏好/工具学习记忆',
+      permissionLevel: 0 as PermissionLevel,
+      parameters: [
+        p('kind', 'string', false, '记忆类型 user_profile/memory_engine/nlu_learning'),
+        p('limit', 'number', false, '返回条数'),
+      ],
+      returns: { type: 'ToolResult<AiMemoryView[]>', description: 'AI 记忆列表' },
+      timeout: 3000,
+      retryable: true,
+      idempotent: true,
+    },
+    handler: async (params?: any) => list_ai_memories(params),
+    allowedAgents: ['master', 'guardian'],
+  });
+
+  registerTool({
+    definition: {
+      name: 'delete_ai_memory',
+      description: '删除或停用一条 AI 记忆',
+      permissionLevel: 1 as PermissionLevel,
+      parameters: [
+        p('id', 'string', true, '记忆ID'),
+        p('kind', 'string', true, '记忆类型 user_profile/memory_engine/nlu_learning'),
+      ],
+      returns: { type: 'ToolResult', description: '删除结果' },
+      timeout: 3000,
+      retryable: false,
+      idempotent: false,
+    },
+    handler: async (params: any) => delete_ai_memory(params),
+    allowedAgents: ['master', 'guardian'],
+  });
+
+  registerTool({
+    definition: {
+      name: 'update_ai_persona',
+      description: '更新 AI 人格参数或 SOUL/TONE/BOUNDARIES 快照',
+      permissionLevel: 1 as PermissionLevel,
+      parameters: [
+        p('rigor', 'number', false, '严谨度 0-10'),
+        p('humor', 'number', false, '幽默度 0-10'),
+        p('proactivity', 'number', false, '主动性 0-10'),
+        p('soul', 'string', false, '稳定身份描述'),
+        p('toneRules', 'array', false, '语气规则列表'),
+        p('boundaries', 'array', false, '边界规则列表'),
+      ],
+      returns: { type: 'ToolResult', description: '更新后的人格快照' },
+      timeout: 3000,
+      retryable: true,
+      idempotent: false,
+    },
+    handler: async (params: any) => update_ai_persona(params),
+    allowedAgents: ['master', 'guardian'],
+  });
+
+  registerTool({
+    definition: {
+      name: 'remember_user_preference',
+      description: '保存用户明确表达的长期偏好',
+      permissionLevel: 1 as PermissionLevel,
+      parameters: [
+        p('key', 'string', true, '偏好键'),
+        p('value', 'string', true, '偏好内容'),
+        p('confidence', 'number', false, '置信度 0-1'),
+      ],
+      returns: { type: 'ToolResult<UserProfileMemory>', description: '保存的用户偏好记忆' },
+      timeout: 3000,
+      retryable: true,
+      idempotent: false,
+    },
+    handler: async (params: any) => remember_user_preference(params),
+    allowedAgents: ['master', 'coach', 'guardian'],
+  });
+
+  registerTool({
+    definition: {
+      name: 'set_ai_learning_enabled',
+      description: '开启或关闭 AI 自动学习 NLU 表达',
+      permissionLevel: 1 as PermissionLevel,
+      parameters: [
+        p('enabled', 'boolean', true, '是否启用自动学习'),
+      ],
+      returns: { type: 'ToolResult<{enabled:boolean}>', description: '学习开关状态' },
+      timeout: 2000,
+      retryable: true,
+      idempotent: false,
+    },
+    handler: async (params: any) => set_ai_learning_enabled(params),
+    allowedAgents: ['master', 'guardian'],
+  });
+
+  registerTool({
+    definition: {
+      name: 'refresh_ai_memory_digest',
+      description: '刷新 AI 记忆摘要快照',
+      permissionLevel: 0 as PermissionLevel,
+      parameters: [
+        p('agentId', 'string', false, 'Agent ID'),
+        p('tokenBudget', 'number', false, '摘要预算'),
+      ],
+      returns: { type: 'ToolResult<{digest:string}>', description: '最新记忆摘要' },
+      timeout: 5000,
+      retryable: true,
+      idempotent: true,
+    },
+    handler: async (params?: any) => refresh_ai_memory_digest(params),
+    allowedAgents: ['master', 'guardian'],
   });
 }
