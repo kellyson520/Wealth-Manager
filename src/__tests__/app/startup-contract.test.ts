@@ -52,6 +52,20 @@ describe('native startup contract', () => {
     expect(rootLayout).toContain('SafeAreaProvider');
   });
 
+  test('guards optional React Native error globals before installing the chat handler', () => {
+    const chatScreen = readText('src/ui/chat/ChatScreen.tsx');
+
+    expect(chatScreen).toContain("typeof ErrorUtils !== 'undefined'");
+    expect(chatScreen).toContain('const errorUtils');
+  });
+
+  test('restores the previous global error handler when chat unmounts', () => {
+    const chatScreen = readText('src/ui/chat/ChatScreen.tsx');
+
+    expect(chatScreen).toContain('return () => {');
+    expect(chatScreen).toContain('setGlobalHandler(originalHandler)');
+  });
+
   test('uses production-sized app icon assets instead of placeholder pixels', () => {
     const appConfig = readJson('app.json').expo;
     const icon = appConfig.icon.replace('./', '');

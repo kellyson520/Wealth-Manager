@@ -28,15 +28,21 @@ export default function ChatScreen() {
   const flatListRef = useRef<FlatList>(null);
 
   useEffect(() => {
-    const originalHandler = ErrorUtils.getGlobalHandler?.();
-    if (originalHandler) {
-      ErrorUtils.setGlobalHandler((error: Error, isFatal?: boolean) => {
+    const errorUtils = typeof ErrorUtils !== 'undefined' ? ErrorUtils : undefined;
+    const originalHandler = errorUtils?.getGlobalHandler?.();
+    if (originalHandler && errorUtils?.setGlobalHandler) {
+      errorUtils.setGlobalHandler((error: Error, isFatal?: boolean) => {
         captureError('Global', error, isFatal ? 'Fatal unhandled error' : 'Unhandled error');
         logger.fatal('Global', `App ${isFatal ? 'crash' : 'error'}: ${error.message}`, error.stack);
         originalHandler(error, isFatal);
       });
     }
     logger.info('App', 'Application started');
+    return () => {
+      if (originalHandler && errorUtils?.setGlobalHandler) {
+        errorUtils.setGlobalHandler(originalHandler);
+      }
+    };
   }, []);
 
   const addMessage = useCallback((msg: ChatMessage) => {
@@ -56,7 +62,7 @@ export default function ChatScreen() {
       setIsProcessing(true);
 
       try {
-	        logger.info('Chat', `User message received (${text.length} chars, hash ${hashForLog(text)})`);
+        logger.info('Chat', `User message received (${text.length} chars, hash ${hashForLog(text)})`);
         const result = await processMessage(text);
         addMessage(result.reply);
         logger.info('Chat', `Reply generated, length: ${result.reply.content.length}`);
