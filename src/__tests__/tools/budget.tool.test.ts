@@ -14,12 +14,33 @@ jest.mock('../../core/logger/logger', () => ({
   captureError: jest.fn(),
 }));
 
-import { check_budget_overrun, update_savings_progress } from '../../tools/budget/budget.tool';
+import { check_budget_overrun, set_budget, update_savings_progress } from '../../tools/budget/budget.tool';
 import * as db from '../../core/database/database';
 
 function getMockDb() {
   return db.getDatabase() as any;
 }
+
+describe('set_budget', () => {
+  beforeEach(async () => {
+    jest.clearAllMocks();
+  });
+
+  test('normalizes natural category aliases before saving', async () => {
+    const mockDb = await getMockDb();
+    mockDb.getFirstAsync.mockResolvedValueOnce({ budget_limits: '[]' });
+    mockDb.runAsync.mockResolvedValueOnce({ changes: 1 });
+
+    const result = await set_budget({ category: '奶茶', limit: 300 });
+
+    expect(result.success).toBe(true);
+    expect(result.data).toMatchObject({ category: '餐饮', limit: 300 });
+    expect(mockDb.runAsync).toHaveBeenCalledWith(
+      expect.stringContaining('UPDATE user_profile'),
+      [JSON.stringify([{ category: '餐饮', limit: 300, period: 'monthly' }])]
+    );
+  });
+});
 
 describe('check_budget_overrun', () => {
   beforeEach(async () => {
@@ -75,6 +96,19 @@ describe('check_budget_overrun', () => {
     expect(result.success).toBe(true);
     const data = result.data as any;
     expect(data.alerts.length).toBe(0);
+  });
+
+  test('normalizes category aliases for budget checks', async () => {
+    const mockDb = await getMockDb();
+    mockDb.getFirstAsync
+      .mockResolvedValueOnce({ budget_limits: '[{"category":"餐饮","limit":100,"period":"monthly"}]' })
+      .mockResolvedValueOnce({ total: 90 });
+
+    const result = await check_budget_overrun({ category: '奶茶' });
+
+    expect(result.success).toBe(true);
+    const data = result.data as any;
+    expect(data.alerts[0].category).toBe('餐饮');
   });
 
   test('handles database errors gracefully', async () => {

@@ -2,6 +2,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { captureError } from '../../core/logger/logger';
 import { getDatabase } from '../../core/database/database';
 import { SavingsGoal, ToolResult, BudgetOverrunAlert } from '../../shared/types';
+import { normalizeBillCategory } from '../bills/bills.tool';
 
 export async function set_budget(params: {
   category: string;
@@ -14,6 +15,7 @@ export async function set_budget(params: {
 
   const db = await getDatabase();
   const period = params.period || 'monthly';
+  const category = normalizeBillCategory(params.category, 'expense');
 
   try {
     const profileRow = await db.getFirstAsync<{ budget_limits: string }>(
@@ -21,10 +23,10 @@ export async function set_budget(params: {
     );
     const limits = JSON.parse(profileRow?.budget_limits || '[]');
     const existing = limits.findIndex(
-      (l: { category: string }) => l.category === params.category
+      (l: { category: string }) => l.category === category
     );
 
-    const newLimit = { category: params.category, limit: params.limit, period };
+    const newLimit = { category, limit: params.limit, period };
 
     if (existing >= 0) {
       limits[existing] = newLimit;
@@ -122,9 +124,12 @@ export async function check_budget_overrun(params: {
       .split('T')[0];
 
     const alerts: BudgetOverrunAlert[] = [];
+    const filterCategory = params.category
+      ? normalizeBillCategory(params.category, 'expense')
+      : undefined;
 
     for (const limit of limits) {
-      if (params.category && limit.category !== params.category) continue;
+      if (filterCategory && limit.category !== filterCategory) continue;
 
       const expenseRow = await db.getFirstAsync<{ total: number }>(
         `SELECT COALESCE(SUM(amount), 0) as total FROM bills WHERE type = 'expense' AND category = ? AND date >= ?`,
