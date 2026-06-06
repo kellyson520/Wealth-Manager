@@ -461,6 +461,45 @@ describe('Cloud LLM API - Safety Chain', () => {
       });
     });
 
+    test('buffers streamed content when a later tool call arrives', async () => {
+      const chunks = [
+        'data: {"choices":[{"delta":{"content":"好的，正在记录"}}]}\n',
+        'data: {"choices":[{"delta":{"tool_calls":[{"function":{"name":"add_bill","arguments":""}}]}}]}\n',
+        'data: {"choices":[{"delta":{"tool_calls":[{"function":{"arguments":"{\\"amount\\":32"}}]}}]}\n',
+        'data: {"choices":[{"delta":{"tool_calls":[{"function":{"arguments":",\\"type\\":\\"expense\\"}"}}]}}]}\n',
+        'data: {"choices":[],"usage":{"total_tokens":100,"prompt_tokens":80,"completion_tokens":20}}\n',
+        'data: [DONE]\n',
+      ];
+      (global.fetch as jest.Mock).mockResolvedValue({
+        ok: true,
+        body: makeStreamBody(chunks),
+      });
+
+      const events = [];
+      for await (const chunk of callCloudLLMStream(
+        {
+          messages: [{ role: 'user', content: 'clean text' }],
+          functions: [{
+            name: 'add_bill',
+            description: '新增账单',
+            parameters: { type: 'object' },
+          }],
+        },
+        'test-key'
+      )) {
+        events.push(chunk);
+      }
+
+      expect(events.find((event) => event.type === 'token')).toBeUndefined();
+      expect(events.find((event) => event.type === 'function_call')).toEqual({
+        type: 'function_call',
+        functionCall: {
+          name: 'add_bill',
+          arguments: '{"amount":32,"type":"expense"}',
+        },
+      });
+    });
+
     test('retries stream without usage option when provider rejects stream_options', async () => {
       (global.fetch as jest.Mock)
         .mockResolvedValueOnce({ ok: false, status: 400 })

@@ -120,6 +120,27 @@ describe('Live Mimo provider smoke', () => {
     expect(done?.usage?.promptTokens).toBeGreaterThan(0);
   }, 30000);
 
+  maybeTest('streams tool calls without leaking pre-tool assistant text', async () => {
+    const chunks = [];
+    for await (const chunk of callCloudLLMStream(
+      {
+        baseUrl,
+        model,
+        messages: [{ role: 'user', content: '流式测试：记一笔午饭支出 32 元' }],
+        functions: financeTools,
+        temperature: 0,
+        maxTokens: 120,
+      },
+      apiKey
+    )) {
+      chunks.push(chunk);
+    }
+
+    expect(chunks.find((chunk) => chunk.type === 'token')).toBeUndefined();
+    expect(chunks.find((chunk) => chunk.type === 'function_call')?.functionCall?.name).toBe('add_bill');
+    expect(chunks.find((chunk) => chunk.type === 'done')?.usage?.promptTokens).toBeGreaterThan(0);
+  }, 30000);
+
   maybeTest('handles multi-turn finance dialogue with stable tool selection', async () => {
     const system = {
       role: 'system',

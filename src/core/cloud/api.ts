@@ -369,6 +369,8 @@ export async function* callCloudLLMStream(
     let functionCallName = '';
     let functionCallArgs = '';
     let isFunctionCall = false;
+    let contentBuffer = '';
+    const bufferContentUntilToolDecision = Boolean(request.functions?.length && request.functionCall !== 'none');
     let totalTokens = 0;
     let promptTokens = 0;
     let completionTokens = 0;
@@ -411,7 +413,11 @@ export async function* callCloudLLMStream(
 	              functionCallArgs += streamedToolCall.arguments;
 	            }
 	          } else if (delta?.content) {
-            yield { type: 'token', content: delta.content };
+            if (bufferContentUntilToolDecision) {
+              contentBuffer += delta.content;
+            } else {
+              yield { type: 'token', content: delta.content };
+            }
           }
 
           if (parsed.usage) {
@@ -433,6 +439,8 @@ export async function* callCloudLLMStream(
         type: 'function_call',
         functionCall: { name: functionCallName, arguments: functionCallArgs },
       };
+    } else if (contentBuffer) {
+      yield { type: 'token', content: contentBuffer };
     }
 
     const actualTokens = totalTokens || estimatedTokens;
