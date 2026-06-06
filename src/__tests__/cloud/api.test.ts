@@ -346,6 +346,80 @@ describe('Cloud LLM API - Safety Chain', () => {
       expect(body.functions).toBeUndefined();
     });
 
+    test('defaults Mimo requests to disabled thinking and tools mode', async () => {
+      (global.fetch as jest.Mock).mockResolvedValue({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            choices: [{
+              message: {
+                content: '',
+                tool_calls: [{
+                  type: 'function',
+                  function: { name: 'get_total', arguments: '{"period":"today"}' },
+                }],
+              },
+            }],
+            model: 'mimo-v2.5-pro',
+            usage: { total_tokens: 20 },
+          }),
+      });
+
+      await callCloudLLM(
+        {
+          baseUrl: 'https://token-plan-cn.xiaomimimo.com/v1',
+          model: 'mimo-v2.5-pro',
+          messages: [{ role: 'user', content: 'clean text' }],
+          functions: [{
+            name: 'get_total',
+            description: '获取统计',
+            parameters: { type: 'object' },
+          }],
+        },
+        'test-key'
+      );
+
+      const body = JSON.parse((global.fetch as jest.Mock).mock.calls[0][1].body);
+      expect(body.thinking).toEqual({ type: 'disabled' });
+      expect(body.tools[0].function.name).toBe('get_total');
+      expect(body.functions).toBeUndefined();
+      expect(getCloudProviderCompatibility()[0]).toMatchObject({
+        preferredToolMode: 'tools',
+        defaultThinkingDisabled: true,
+      });
+    });
+
+    test('allows explicit legacy functions mode override', async () => {
+      (global.fetch as jest.Mock).mockResolvedValue({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            choices: [{ message: { function_call: { name: 'get_total', arguments: '{}' } } }],
+            model: 'gpt-4o',
+            usage: { total_tokens: 20 },
+          }),
+      });
+
+      await callCloudLLM(
+        {
+          messages: [{ role: 'user', content: 'clean text' }],
+          toolMode: 'functions',
+          functions: [{
+            name: 'get_total',
+            description: '获取统计',
+            parameters: { type: 'object' },
+          }],
+        },
+        'test-key'
+      );
+
+      const body = JSON.parse((global.fetch as jest.Mock).mock.calls[0][1].body);
+      expect(body.functions[0].name).toBe('get_total');
+      expect(body.function_call).toBe('auto');
+      expect(body.tools).toBeUndefined();
+      expect(body.thinking).toBeUndefined();
+    });
+
     test('parses stream usage and cached prompt tokens', async () => {
       const chunks = [
         'data: {"choices":[{"delta":{"content":"OK"}}]}\n',

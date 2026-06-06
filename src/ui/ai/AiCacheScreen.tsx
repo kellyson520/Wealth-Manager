@@ -193,6 +193,7 @@ export default function AiCacheScreen() {
             <View style={{ flex: 1 }}>
               <Text style={styles.sampleScope}>{item.key}</Text>
               <Text style={styles.sampleMeta}>usage: {item.usageFormat || 'unknown'} · cached: {item.returnsCachedTokens ? 'yes' : 'no'}</Text>
+              <Text style={styles.sampleMeta}>tool: {item.preferredToolMode || 'unknown'} · thinking: {item.defaultThinkingDisabled ? 'disabled' : 'default'}</Text>
             </View>
             <View style={styles.hitBadge}>
               <Text style={styles.hitText}>{item.supportsStreamUsage === false ? 'fallback' : 'stream'}</Text>

@@ -48,6 +48,8 @@ export interface CloudProviderCompatibility {
   key: string;
   supportsStreamUsage?: boolean;
   returnsCachedTokens?: boolean;
+  preferredToolMode?: 'functions' | 'tools';
+  defaultThinkingDisabled?: boolean;
   usageFormat?: 'prompt_tokens_details' | 'input_token_details' | 'cache_read_input_tokens' | 'cached_tokens' | 'none';
   lastCheckedAt: string;
 }
@@ -131,8 +133,9 @@ export async function callCloudLLM(
       temperature: request.temperature ?? 0.7,
     };
     body[request.tokenParam || 'max_tokens'] = request.maxTokens || 500;
-    if (request.thinking) {
-      body.thinking = request.thinking;
+    const providerDefaults = getProviderDefaults(request);
+    if (request.thinking || providerDefaults.thinking) {
+      body.thinking = request.thinking || providerDefaults.thinking;
     }
     if (request.promptCacheKey) {
       body.prompt_cache_key = request.promptCacheKey;
@@ -142,7 +145,12 @@ export async function callCloudLLM(
     }
 
     if (request.functions && request.functions.length > 0) {
-      if (request.toolMode === 'tools') {
+      const toolMode = request.toolMode || providerDefaults.toolMode;
+      recordProviderCompatibility(request, {
+        preferredToolMode: toolMode,
+        defaultThinkingDisabled: Boolean(providerDefaults.thinking),
+      });
+      if (toolMode === 'tools') {
         body.tools = request.functions.map((fn) => ({
           type: 'function',
           function: fn,
@@ -299,8 +307,9 @@ export async function* callCloudLLMStream(
       stream_options: { include_usage: true },
     };
     body[request.tokenParam || 'max_tokens'] = request.maxTokens || 500;
-    if (request.thinking) {
-      body.thinking = request.thinking;
+    const providerDefaults = getProviderDefaults(request);
+    if (request.thinking || providerDefaults.thinking) {
+      body.thinking = request.thinking || providerDefaults.thinking;
     }
     if (request.promptCacheKey) {
       body.prompt_cache_key = request.promptCacheKey;
@@ -310,7 +319,12 @@ export async function* callCloudLLMStream(
     }
 
     if (request.functions && request.functions.length > 0) {
-      if (request.toolMode === 'tools') {
+      const toolMode = request.toolMode || providerDefaults.toolMode;
+      recordProviderCompatibility(request, {
+        preferredToolMode: toolMode,
+        defaultThinkingDisabled: Boolean(providerDefaults.thinking),
+      });
+      if (toolMode === 'tools') {
         body.tools = request.functions.map((fn) => ({
           type: 'function',
           function: fn,
@@ -437,6 +451,23 @@ export async function* callCloudLLMStream(
     recordFailure(breaker);
     yield { type: 'error', error: e instanceof Error ? e.message : '网络异常' };
   }
+}
+
+function getProviderDefaults(request: CloudRequest): {
+  toolMode: 'functions' | 'tools';
+  thinking?: Record<string, unknown>;
+} {
+  const isMimo = isMimoProvider(request);
+  return {
+    toolMode: 'tools',
+    thinking: isMimo ? { type: 'disabled' } : undefined,
+  };
+}
+
+function isMimoProvider(request: CloudRequest): boolean {
+  const baseUrl = (request.baseUrl || '').toLowerCase();
+  const model = (request.model || '').toLowerCase();
+  return baseUrl.includes('xiaomimimo.com') || model.includes('mimo');
 }
 
 function providerKey(request: CloudRequest): string {
