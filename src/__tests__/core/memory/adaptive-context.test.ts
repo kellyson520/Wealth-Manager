@@ -120,6 +120,18 @@ describe('adaptive context', () => {
     );
   });
 
+  test('rejects sensitive user profile memory before writing', async () => {
+    const memory = await upsertUserProfileMemory({
+      key: '登录偏好',
+      value: 'my password is admin123',
+      confidence: 0.9,
+      source: 'user',
+    });
+
+    expect(memory).toBeNull();
+    expect(mockDb.runAsync).not.toHaveBeenCalled();
+  });
+
   test('blocks sensitive content in persona snapshots', async () => {
     await expect(updatePersonaSnapshot({
       soul: '联系我 13812345678',

@@ -112,6 +112,12 @@ describe('Cloud Data Sanitizer', () => {
       expect(result.types).toContain('credential_keyword');
     });
 
+    test('detects Chinese credential keywords', () => {
+      const result = detectPII('请记住我的登录密码是123456');
+      expect(result.hasPII).toBe(true);
+      expect(result.types).toContain('credential_keyword');
+    });
+
     test('clean text has no PII', () => {
       const result = detectPII('今天午饭花了35块');
       expect(result.hasPII).toBe(false);

@@ -105,6 +105,16 @@ describe('memory tools', () => {
     expect(upsertUserProfileMemory).not.toHaveBeenCalled();
   });
 
+  test('rejects sensitive user preference payload', async () => {
+    const result = await remember_user_preference({
+      key: '登录偏好',
+      value: 'my password is admin123',
+    });
+
+    expect(result.success).toBe(false);
+    expect(upsertUserProfileMemory).not.toHaveBeenCalled();
+  });
+
   test('updates AI persona snapshot', async () => {
     const result = await update_ai_persona({
       rigor: 8,

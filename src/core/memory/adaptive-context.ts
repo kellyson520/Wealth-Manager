@@ -154,6 +154,7 @@ export async function upsertUserProfileMemory(params: {
   const key = params.key.trim();
   const value = params.value.trim();
   if (!key || !value || key.length > 80 || value.length > 500) return null;
+  if (detectPII(`${key} ${value}`).hasPII) return null;
 
   const db = await getDatabase();
   const now = new Date().toISOString();

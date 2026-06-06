@@ -12,6 +12,7 @@ import {
   upsertUserProfileMemory,
 } from '../../core/memory/adaptive-context';
 import { captureError } from '../../core/logger/logger';
+import { detectPII } from '../../core/cloud/sanitizer';
 
 const AI_MEMORY_KINDS = new Set<AiMemoryKind>(['user_profile', 'memory_engine', 'nlu_learning']);
 
@@ -117,6 +118,9 @@ export async function remember_user_preference(params: {
       (params.confidence !== undefined && (typeof params.confidence !== 'number' || !Number.isFinite(params.confidence)))
     ) {
       return { success: false, error: '偏好键、偏好内容或置信度格式不正确' };
+    }
+    if (detectPII(`${params.key} ${params.value}`).hasPII) {
+      return { success: false, error: '偏好内容包含敏感信息，不能写入长期记忆' };
     }
     const memory = await upsertUserProfileMemory({
       key: params.key,

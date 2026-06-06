@@ -45,6 +45,11 @@ export function detectPII(text: string): { hasPII: boolean; types: string[] } {
   if (/\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/.test(text)) types.push('email');
   if (/\b\d{6}(?:19|20)\d{2}(?:0[1-9]|1[0-2])(?:0[1-9]|[12]\d|3[01])\d{3}[\dXx]\b/.test(text))
     types.push('id_card');
-  if (types.length === 0 && /\b(?:password|secret|token|key)\b/i.test(text)) types.push('credential_keyword');
+  if (
+    types.length === 0 &&
+    (/\b(?:password|secret|token|key)\b/i.test(text) || /(密码|密钥|验证码|私钥|助记词|令牌)/i.test(text))
+  ) {
+    types.push('credential_keyword');
+  }
   return { hasPII: types.length > 0, types };
 }
