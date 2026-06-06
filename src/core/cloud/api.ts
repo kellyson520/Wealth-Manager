@@ -60,6 +60,8 @@ const defaultBudget = {
   resetDay: new Date().getDate(),
   warningThreshold: 0.8,
 };
+const MIMO_CONTEXT_WINDOW_TOKENS = 1_048_576;
+const MIN_COMPLETION_HEADROOM_TOKENS = 1024;
 
 let tokenBudget: TokenBudget = { ...defaultBudget };
 const breaker = createCircuitBreaker(5, 30000);
@@ -103,11 +105,14 @@ export async function callCloudLLM(
     content: sanitizeContent(m.content),
   }));
 
-  const promptText = sanitizedMessages.map((m) => m.content).join(' ');
-  const estimatedTokens = Math.ceil(promptText.length / 3);
+  const estimatedTokens = estimateUploadPromptTokens(sanitizedMessages);
   const budgetCheck = checkTokenBudget(tokenBudget, estimatedTokens);
   if (!budgetCheck.allowed) {
     return { success: false, error: budgetCheck.reason, degraded: true };
+  }
+  const contextCheck = checkContextWindow(request, estimatedTokens);
+  if (!contextCheck.allowed) {
+    return { success: false, error: contextCheck.reason, degraded: true };
   }
 
   if (!canCall(breaker)) {
@@ -280,11 +285,15 @@ export async function* callCloudLLMStream(
     content: sanitizeContent(m.content),
   }));
 
-  const promptText = sanitizedMessages.map((m) => m.content).join(' ');
-  const estimatedTokens = Math.ceil(promptText.length / 3);
+  const estimatedTokens = estimateUploadPromptTokens(sanitizedMessages);
   const budgetCheck = checkTokenBudget(tokenBudget, estimatedTokens);
   if (!budgetCheck.allowed) {
     yield { type: 'error', error: budgetCheck.reason };
+    return;
+  }
+  const contextCheck = checkContextWindow(request, estimatedTokens);
+  if (!contextCheck.allowed) {
+    yield { type: 'error', error: contextCheck.reason };
     return;
   }
 
@@ -476,6 +485,36 @@ function isMimoProvider(request: CloudRequest): boolean {
   const baseUrl = (request.baseUrl || '').toLowerCase();
   const model = (request.model || '').toLowerCase();
   return baseUrl.includes('xiaomimimo.com') || model.includes('mimo');
+}
+
+function estimateUploadPromptTokens(messages: { content: string }[]): number {
+  const contentChars = messages.reduce((sum, message) => sum + message.content.length, 0);
+  const messageOverheadTokens = messages.length * 4;
+  return Math.max(1, Math.ceil(contentChars / 2) + messageOverheadTokens);
+}
+
+function checkContextWindow(
+  request: CloudRequest,
+  estimatedPromptTokens: number
+): { allowed: boolean; reason?: string } {
+  const contextWindow = getProviderContextWindow(request);
+  if (!contextWindow) return { allowed: true };
+
+  const requestedCompletion = request.maxTokens || 500;
+  const reservedCompletion = Math.max(requestedCompletion, MIN_COMPLETION_HEADROOM_TOKENS);
+  const promptLimit = contextWindow - reservedCompletion;
+  if (estimatedPromptTokens >= promptLimit) {
+    return {
+      allowed: false,
+      reason: `上下文过长，预计提示词约 ${estimatedPromptTokens} tokens，${request.model || '当前模型'} 需要至少预留 ${reservedCompletion} tokens 输出空间`,
+    };
+  }
+  return { allowed: true };
+}
+
+function getProviderContextWindow(request: CloudRequest): number | undefined {
+  if (isMimoProvider(request)) return MIMO_CONTEXT_WINDOW_TOKENS;
+  return undefined;
 }
 
 function providerKey(request: CloudRequest): string {

@@ -389,6 +389,55 @@ describe('Cloud LLM API - Safety Chain', () => {
       });
     });
 
+    test('blocks Mimo prompts that would leave no completion headroom', async () => {
+      setTokenBudget({ monthlyLimit: 2_000_000 });
+      const messages = Array.from({ length: 1100 }, (_, index) => ({
+        role: index % 2 === 0 ? 'user' : 'assistant',
+        content: `long context turn ${index} ${'x'.repeat(3000)}`,
+      }));
+
+      const result = await callCloudLLM(
+        {
+          baseUrl: 'https://token-plan-cn.xiaomimimo.com/v1',
+          model: 'mimo-v2.5-pro',
+          messages,
+          maxTokens: 64,
+        },
+        'test-key'
+      );
+
+      expect(result.success).toBe(false);
+      expect(result.degraded).toBe(true);
+      expect(result.error).toContain('上下文过长');
+      expect(global.fetch).not.toHaveBeenCalled();
+    });
+
+    test('blocks streaming Mimo prompts that would leave no completion headroom', async () => {
+      setTokenBudget({ monthlyLimit: 2_000_000 });
+      const messages = Array.from({ length: 1100 }, (_, index) => ({
+        role: index % 2 === 0 ? 'user' : 'assistant',
+        content: `stream long context turn ${index} ${'x'.repeat(3000)}`,
+      }));
+
+      const events = [];
+      for await (const chunk of callCloudLLMStream(
+        {
+          baseUrl: 'https://token-plan-cn.xiaomimimo.com/v1',
+          model: 'mimo-v2.5-pro',
+          messages,
+          maxTokens: 64,
+        },
+        'test-key'
+      )) {
+        events.push(chunk);
+      }
+
+      expect(events).toEqual([
+        expect.objectContaining({ type: 'error', error: expect.stringContaining('上下文过长') }),
+      ]);
+      expect(global.fetch).not.toHaveBeenCalled();
+    });
+
     test('allows explicit legacy functions mode override', async () => {
       (global.fetch as jest.Mock).mockResolvedValue({
         ok: true,

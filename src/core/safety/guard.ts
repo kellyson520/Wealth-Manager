@@ -12,8 +12,10 @@ export interface RateLimit {
 }
 
 interface Counter {
-  count: number;
-  resetAt: number;
+  minuteCount: number;
+  minuteResetAt: number;
+  hourCount: number;
+  hourResetAt: number;
 }
 
 export function createTokenBudget(monthlyLimit: number): TokenBudget {
@@ -69,14 +71,32 @@ export function checkRateLimit(key: string, limit: RateLimit): {
   const now = Date.now();
   let counter = callCounters.get(key);
 
-  if (!counter || now > counter.resetAt) {
-    counter = { count: 0, resetAt: now + 60000 };
+  if (!counter) {
+    counter = {
+      minuteCount: 0,
+      minuteResetAt: now + limit.windowMs,
+      hourCount: 0,
+      hourResetAt: now + 60 * 60 * 1000,
+    };
     callCounters.set(key, counter);
   }
 
-  counter.count++;
-  if (counter.count > limit.maxCallsPerMinute) {
+  if (now > counter.minuteResetAt) {
+    counter.minuteCount = 0;
+    counter.minuteResetAt = now + limit.windowMs;
+  }
+  if (now > counter.hourResetAt) {
+    counter.hourCount = 0;
+    counter.hourResetAt = now + 60 * 60 * 1000;
+  }
+
+  counter.minuteCount++;
+  counter.hourCount++;
+  if (counter.minuteCount > limit.maxCallsPerMinute) {
     return { allowed: false, reason: '调用频率超限，请稍后再试' };
+  }
+  if (counter.hourCount > limit.maxCallsPerHour) {
+    return { allowed: false, reason: '小时调用次数超限，请稍后再试' };
   }
 
   return { allowed: true };

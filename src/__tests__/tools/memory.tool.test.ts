@@ -72,6 +72,13 @@ describe('memory tools', () => {
     expect(deleteAiMemory).not.toHaveBeenCalled();
   });
 
+  test('rejects delete with unknown memory kind', async () => {
+    const result = await delete_ai_memory({ id: 'mem_1', kind: 'unknown' as any });
+
+    expect(result.success).toBe(false);
+    expect(deleteAiMemory).not.toHaveBeenCalled();
+  });
+
   test('remembers explicit user preference', async () => {
     const result = await remember_user_preference({
       key: '沟通偏好',
@@ -86,6 +93,16 @@ describe('memory tools', () => {
       confidence: 0.9,
       source: 'user',
     });
+  });
+
+  test('rejects malformed user preference payload', async () => {
+    const result = await remember_user_preference({
+      key: '沟通偏好',
+      value: 123 as any,
+    });
+
+    expect(result.success).toBe(false);
+    expect(upsertUserProfileMemory).not.toHaveBeenCalled();
   });
 
   test('updates AI persona snapshot', async () => {
@@ -104,11 +121,41 @@ describe('memory tools', () => {
     });
   });
 
+  test('normalizes string persona rules before saving snapshot', async () => {
+    const result = await update_ai_persona({
+      soul: '稳定人格',
+      toneRules: '简洁\n克制' as any,
+      boundaries: '不编造' as any,
+    });
+
+    expect(result.success).toBe(true);
+    expect(updatePersonaSnapshot).toHaveBeenCalledWith({
+      soul: '稳定人格',
+      toneRules: ['简洁', '克制'],
+      boundaries: ['不编造'],
+      source: 'user',
+    });
+  });
+
+  test('rejects invalid persona score values', async () => {
+    const result = await update_ai_persona({ rigor: Number.NaN });
+
+    expect(result.success).toBe(false);
+    expect(updatePersonaSnapshot).not.toHaveBeenCalled();
+  });
+
   test('toggles NLU learning', async () => {
     const result = await set_ai_learning_enabled({ enabled: false });
 
     expect(result.success).toBe(true);
     expect(setNluLearningEnabled).toHaveBeenCalledWith(false);
+  });
+
+  test('rejects non-boolean NLU learning value', async () => {
+    const result = await set_ai_learning_enabled({ enabled: 'false' as any });
+
+    expect(result.success).toBe(false);
+    expect(setNluLearningEnabled).not.toHaveBeenCalled();
   });
 
   test('returns AI prompt cache stats', async () => {
