@@ -17,4 +17,18 @@ describe('screen refresh error handling contract', () => {
     expect(source).toContain("from '../../core/logger/logger'");
     expect(source).toContain(marker);
   });
+
+  test.each([
+    "captureError('SettingsScreen.updatePersona'",
+    "captureError('SettingsScreen.updatePreference'",
+    "captureError('SettingsScreen.toggleLearning'",
+    "captureError('SettingsScreen.savePersonaSnapshot'",
+    "captureError('SettingsScreen.rollbackPersona'",
+    "captureError('SettingsScreen.approveCandidate'",
+    "captureError('SettingsScreen.rejectCandidate'",
+  ])('settings mutation failures are logged: %s', (marker) => {
+    const source = read('src/ui/settings/SettingsScreen.tsx');
+
+    expect(source).toContain(marker);
+  });
 });

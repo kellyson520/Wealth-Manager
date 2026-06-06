@@ -136,6 +136,9 @@ export default function SettingsScreen() {
     try {
       const personaParams = await setPersonaParams({ [key]: next });
       setState((prev) => ({ ...prev, personaParams }));
+    } catch (e) {
+      captureError('SettingsScreen.updatePersona', e, 'Failed to update persona params');
+      Alert.alert('保存失败', e instanceof Error ? e.message : '人格颗粒保存失败');
     } finally {
       setSavingKey(null);
     }
@@ -146,6 +149,9 @@ export default function SettingsScreen() {
     try {
       const preferences = await setPreferences(prefs);
       setState((prev) => ({ ...prev, preferences }));
+    } catch (e) {
+      captureError('SettingsScreen.updatePreference', e, 'Failed to update preferences');
+      Alert.alert('保存失败', e instanceof Error ? e.message : '偏好设置保存失败');
     } finally {
       setSavingKey(null);
     }
@@ -156,6 +162,9 @@ export default function SettingsScreen() {
     try {
       const learningEnabled = await setNluLearningEnabled(enabled);
       setState((prev) => ({ ...prev, learningEnabled }));
+    } catch (e) {
+      captureError('SettingsScreen.toggleLearning', e, 'Failed to toggle NLU learning');
+      Alert.alert('设置失败', e instanceof Error ? e.message : 'NLU 自动扩充设置失败');
     } finally {
       setSavingKey(null);
     }
@@ -184,6 +193,7 @@ export default function SettingsScreen() {
         boundariesText: snapshot.boundaries.join('\n'),
       }));
     } catch (e) {
+      captureError('SettingsScreen.savePersonaSnapshot', e, 'Failed to save persona snapshot');
       Alert.alert('保存失败', e instanceof Error ? e.message : '人格设置保存失败');
     } finally {
       setSavingKey(null);
@@ -205,6 +215,7 @@ export default function SettingsScreen() {
       }));
       await refresh(true);
     } catch (e) {
+      captureError('SettingsScreen.rollbackPersona', e, 'Failed to rollback persona snapshot');
       Alert.alert('回滚失败', e instanceof Error ? e.message : '人格版本回滚失败');
     } finally {
       setSavingKey(null);
@@ -216,6 +227,9 @@ export default function SettingsScreen() {
     try {
       await approveNluLearningCandidate(id);
       await refresh(true);
+    } catch (e) {
+      captureError('SettingsScreen.approveCandidate', e, 'Failed to approve NLU learning candidate');
+      Alert.alert('操作失败', e instanceof Error ? e.message : '学习样本批准失败');
     } finally {
       setSavingKey(null);
     }
@@ -228,6 +242,9 @@ export default function SettingsScreen() {
     try {
       await rejectNluLearningCandidate(id);
       await refresh(true);
+    } catch (e) {
+      captureError('SettingsScreen.rejectCandidate', e, 'Failed to reject NLU learning candidate');
+      Alert.alert('操作失败', e instanceof Error ? e.message : '学习样本拒绝失败');
     } finally {
       setSavingKey(null);
     }
