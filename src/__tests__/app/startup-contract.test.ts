@@ -27,14 +27,27 @@ describe('native startup contract', () => {
     expect(dependencies['expo-constants']).toBeDefined();
     expect(dependencies['expo-linking']).toBeDefined();
     expect(dependencies['react-dom']).toBeDefined();
+    expect(dependencies['react-native-get-random-values']).toBeDefined();
     expect(dependencies['expo-sqlite']).toMatch(/^~15\.1\./);
     expect(dependencies['react-native']).toBe('0.76.9');
+  });
+
+  test('loads native runtime polyfills before Expo Router entry', () => {
+    const pkg = readJson('package.json');
+    const entry = readText('index.js');
+    const randomValuesImport = entry.indexOf("import 'react-native-get-random-values';");
+    const gestureImport = entry.indexOf("import 'react-native-gesture-handler';");
+    const routerEntryImport = entry.indexOf("import 'expo-router/entry';");
+
+    expect(pkg.main).toBe('index.js');
+    expect(randomValuesImport).toBe(0);
+    expect(gestureImport).toBeGreaterThan(randomValuesImport);
+    expect(routerEntryImport).toBeGreaterThan(gestureImport);
   });
 
   test('wraps every route in native gesture and safe area providers at the root layout', () => {
     const rootLayout = readText('app/_layout.tsx');
 
-    expect(rootLayout).toContain("import 'react-native-gesture-handler';");
     expect(rootLayout).toContain('GestureHandlerRootView');
     expect(rootLayout).toContain('SafeAreaProvider');
   });
