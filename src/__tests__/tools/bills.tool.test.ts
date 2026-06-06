@@ -27,7 +27,7 @@ jest.mock('../../core/database/database', () => {
   };
 });
 
-import { add_bill, search_bills } from '../../tools/bills/bills.tool';
+import { add_bill, normalizeBillCategory, search_bills } from '../../tools/bills/bills.tool';
 import * as db from '../../core/database/database';
 
 function getMockDb() {
@@ -135,6 +135,24 @@ describe('add_bill Tool', () => {
       expect(callArgs[3]).toBe('其他');
     });
 
+    test('normalizes natural expense categories from cloud tool args', async () => {
+      const mockDb = await getMockDb();
+      mockDb.getFirstAsync.mockResolvedValue({ id: 'test', amount: 32, category: '餐饮' });
+
+      await add_bill({ amount: 32, type: 'expense', merchant: '午饭', category: '午饭' });
+      const callArgs = mockDb.runAsync.mock.calls[0][1];
+      expect(callArgs[3]).toBe('餐饮');
+    });
+
+    test('normalizes natural income categories from cloud tool args', async () => {
+      const mockDb = await getMockDb();
+      mockDb.getFirstAsync.mockResolvedValue({ id: 'test', amount: 5000, category: '工资' });
+
+      await add_bill({ amount: 5000, type: 'income', merchant: '薪水', category: '薪水' });
+      const callArgs = mockDb.runAsync.mock.calls[0][1];
+      expect(callArgs[3]).toBe('工资');
+    });
+
     test('handles very large amount', async () => {
       const mockDb = await getMockDb();
       mockDb.getFirstAsync.mockResolvedValue({ id: 'test', amount: 99999999 });
@@ -216,6 +234,13 @@ describe('search_bills Tool', () => {
       expect(sql).toContain('type = ?');
       expect(values).toContain('income');
     });
+
+    test('normalizes category filter aliases', async () => {
+      await search_bills({ category: '午饭' });
+      const mockDb = await getMockDb();
+      const values = mockDb.getAllAsync.mock.calls[0][1];
+      expect(values).toContain('餐饮');
+    });
   });
 
   describe('edge cases', () => {
@@ -246,5 +271,14 @@ describe('search_bills Tool', () => {
       expect(result.success).toBe(false);
       expect(result.errorCode).toBe('1000');
     });
+  });
+});
+
+describe('normalizeBillCategory', () => {
+  test('maps common merchant-like phrases to canonical categories', () => {
+    expect(normalizeBillCategory('打车', 'expense')).toBe('交通');
+    expect(normalizeBillCategory('盲盒', 'expense')).toBe('娱乐');
+    expect(normalizeBillCategory('薪水', 'income')).toBe('工资');
+    expect(normalizeBillCategory('未知小项', 'expense')).toBe('其他');
   });
 });

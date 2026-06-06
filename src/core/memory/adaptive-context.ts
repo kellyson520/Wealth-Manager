@@ -1,6 +1,7 @@
 import { v4 as uuidv4 } from 'uuid';
 import { getDatabase } from '../database/database';
 import { captureError } from '../logger/logger';
+import { detectPII } from '../cloud/sanitizer';
 import type { AgentId } from '../../shared/types';
 
 export interface PersonaSnapshot {
@@ -19,6 +20,7 @@ export interface UserProfileMemory {
   key: string;
   value: string;
   confidence: number;
+  hits: number;
   source: string;
   createdAt: string;
   updatedAt: string;
@@ -90,6 +92,7 @@ export async function updatePersonaSnapshot(params: {
     createdAt: now,
     updatedAt: now,
   };
+  validatePersonaSnapshotSafety(snapshot);
 
   await db.runAsync(
     `INSERT INTO persona_snapshots (id, version, soul, tone_rules, boundaries, source, created_at, updated_at)
@@ -109,6 +112,39 @@ export async function updatePersonaSnapshot(params: {
   return snapshot;
 }
 
+export async function listPersonaSnapshots(limit: number = 8): Promise<PersonaSnapshot[]> {
+  const db = await getDatabase();
+  await ensureDefaultPersonaSnapshot();
+  const rows = await db.getAllAsync<{
+    id: string;
+    version: number;
+    soul: string;
+    tone_rules: string;
+    boundaries: string;
+    source: string;
+    created_at: string;
+    updated_at: string;
+  }>(
+    `SELECT * FROM persona_snapshots
+     ORDER BY version DESC, updated_at DESC
+     LIMIT ?`,
+    [Math.min(Math.max(limit, 1), 20)]
+  );
+  return rows.map((row) => rowToPersona(row));
+}
+
+export async function rollbackPersonaSnapshot(version: number): Promise<PersonaSnapshot> {
+  const snapshots = await listPersonaSnapshots(20);
+  const target = snapshots.find((snapshot) => snapshot.version === version);
+  if (!target) throw new Error('未找到该人格版本');
+  return updatePersonaSnapshot({
+    soul: target.soul,
+    toneRules: target.toneRules,
+    boundaries: target.boundaries,
+    source: `rollback:v${version}`,
+  });
+}
+
 export async function upsertUserProfileMemory(params: {
   key: string;
   value: string;
@@ -118,27 +154,37 @@ export async function upsertUserProfileMemory(params: {
   const key = params.key.trim();
   const value = params.value.trim();
   if (!key || !value || key.length > 80 || value.length > 500) return null;
+  if (detectPII(`${key} ${value}`).hasPII) return null;
 
   const db = await getDatabase();
   const now = new Date().toISOString();
   const id = uuidv4();
   const confidence = clamp(params.confidence ?? 0.7, 0.1, 1);
   await db.runAsync(
-    `INSERT INTO user_profile_memory (id, key, value, confidence, source, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?)
+    `INSERT INTO user_profile_memory (id, key, value, confidence, hits, source, created_at, updated_at)
+     VALUES (?, ?, ?, ?, 1, ?, ?, ?)
      ON CONFLICT(key) DO UPDATE SET
        value = excluded.value,
-       confidence = MAX(user_profile_memory.confidence, excluded.confidence),
+       confidence = MIN(1.0, MAX(user_profile_memory.confidence, excluded.confidence) + 0.02),
+       hits = COALESCE(user_profile_memory.hits, 1) + 1,
        source = excluded.source,
        updated_at = excluded.updated_at`,
     [id, key, value, confidence, params.source || 'agent', now, now]
   );
 
-  return {
+  const row = await db.getFirstAsync<{
+    id: string; key: string; value: string; confidence: number; hits?: number; source: string; created_at: string; updated_at: string;
+  }>(
+    'SELECT id, key, value, confidence, hits, source, created_at, updated_at FROM user_profile_memory WHERE key = ?',
+    [key]
+  );
+
+  return row ? rowToUserProfileMemory(row) : {
     id,
     key,
     value,
     confidence,
+    hits: 1,
     source: params.source || 'agent',
     createdAt: now,
     updatedAt: now,
@@ -155,15 +201,15 @@ export async function listAiMemories(params: {
 
   if (!params.kind || params.kind === 'user_profile') {
     const rows = await db.getAllAsync<{
-      id: string; key: string; value: string; confidence: number; source: string; updated_at: string;
+      id: string; key: string; value: string; confidence: number; hits?: number; source: string; updated_at: string;
     }>(
-      'SELECT id, key, value, confidence, source, updated_at FROM user_profile_memory ORDER BY confidence DESC, updated_at DESC LIMIT ?',
+      'SELECT id, key, value, confidence, hits, source, updated_at FROM user_profile_memory ORDER BY confidence DESC, hits DESC, updated_at DESC LIMIT ?',
       [limit]
     );
     result.push(...rows.map((row) => ({
       id: row.id,
       kind: 'user_profile' as const,
-      content: `${row.key}: ${row.value}`,
+      content: `${row.key}: ${row.value}${row.hits && row.hits > 1 ? ` (x${row.hits})` : ''}`,
       confidence: row.confidence,
       source: row.source,
       updatedAt: row.updated_at,
@@ -310,12 +356,37 @@ async function ensureDefaultPersonaSnapshot(): Promise<void> {
 async function listUserProfilePromptItems(limit: number): Promise<string[]> {
   const db = await getDatabase();
   const rows = await db.getAllAsync<{
-    key: string; value: string; confidence: number;
+    key: string; value: string; confidence: number; hits?: number;
   }>(
-    'SELECT key, value, confidence FROM user_profile_memory ORDER BY confidence DESC, updated_at DESC LIMIT ?',
+    'SELECT key, value, confidence, hits FROM user_profile_memory ORDER BY confidence DESC, hits DESC, updated_at DESC LIMIT ?',
     [limit]
   );
-  return rows.map((row) => `- ${row.key}: ${row.value} (${Math.round(row.confidence * 100)}%)`);
+  return rows.map((row) => {
+    const hits = row.hits && row.hits > 1 ? `, x${row.hits}` : '';
+    return `- ${row.key}: ${row.value} (${Math.round(row.confidence * 100)}%${hits})`;
+  });
+}
+
+function rowToUserProfileMemory(row: {
+  id: string;
+  key: string;
+  value: string;
+  confidence: number;
+  hits?: number;
+  source: string;
+  created_at: string;
+  updated_at: string;
+}): UserProfileMemory {
+  return {
+    id: row.id,
+    key: row.key,
+    value: row.value,
+    confidence: row.confidence,
+    hits: row.hits || 1,
+    source: row.source,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
 }
 
 async function buildMemoryDigest(agentId: AgentId, limit: number): Promise<string> {
@@ -390,6 +461,14 @@ function sanitizeList(value: string[] | undefined, fallback: string[]): string[]
 
 function normalizeTextBlock(value?: string): string {
   return (value || '').replace(/\s+/g, ' ').trim().slice(0, 1600);
+}
+
+function validatePersonaSnapshotSafety(snapshot: PersonaSnapshot): void {
+  const text = [snapshot.soul, ...snapshot.toneRules, ...snapshot.boundaries].join('\n');
+  const pii = detectPII(text);
+  if (pii.hasPII) {
+    throw new Error(`人格设置包含敏感信息: ${pii.types.join(', ')}`);
+  }
 }
 
 function formatList(items: string[]): string {

@@ -14,6 +14,8 @@ import {
   isNluLearningEnabled,
   listAiMemories,
   setNluLearningEnabled,
+  updatePersonaSnapshot,
+  upsertUserProfileMemory,
 } from '../../../core/memory/adaptive-context';
 
 describe('adaptive context', () => {
@@ -85,5 +87,55 @@ describe('adaptive context', () => {
     await expect(setNluLearningEnabled(false)).resolves.toBe(false);
     await expect(isNluLearningEnabled()).resolves.toBe(true);
     expect(mockDb.runAsync).toHaveBeenCalled();
+  });
+
+  test('upserts user profile memory with hit accumulation fields', async () => {
+    mockDb.getFirstAsync.mockImplementation((query: string) => {
+      if (query.includes('FROM user_profile_memory WHERE key')) {
+        return Promise.resolve({
+          id: 'u1',
+          key: '沟通偏好',
+          value: '回复简洁一点',
+          confidence: 0.92,
+          hits: 2,
+          source: 'user',
+          created_at: '2026-06-01',
+          updated_at: '2026-06-02',
+        });
+      }
+      return Promise.resolve(null);
+    });
+
+    const memory = await upsertUserProfileMemory({
+      key: '沟通偏好',
+      value: '回复简洁一点',
+      confidence: 0.9,
+      source: 'user',
+    });
+
+    expect(memory?.hits).toBe(2);
+    expect(mockDb.runAsync).toHaveBeenCalledWith(
+      expect.stringContaining('hits = COALESCE'),
+      expect.any(Array)
+    );
+  });
+
+  test('rejects sensitive user profile memory before writing', async () => {
+    const memory = await upsertUserProfileMemory({
+      key: '登录偏好',
+      value: 'my password is admin123',
+      confidence: 0.9,
+      source: 'user',
+    });
+
+    expect(memory).toBeNull();
+    expect(mockDb.runAsync).not.toHaveBeenCalled();
+  });
+
+  test('blocks sensitive content in persona snapshots', async () => {
+    await expect(updatePersonaSnapshot({
+      soul: '联系我 13812345678',
+      source: 'settings',
+    })).rejects.toThrow('敏感信息');
   });
 });

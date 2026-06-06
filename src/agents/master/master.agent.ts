@@ -15,15 +15,31 @@ import {
 import { callCloudLLM, callCloudLLMStream } from '../../core/cloud/api';
 import { toolsToOpenAIFunctions, buildSystemPrompt } from '../../core/cloud/function-calling';
 import { getAgentSystemPrompt } from '../../core/cloud/prompts/agent-prompts';
+import {
+  buildPromptCacheScope,
+  buildProviderPromptCacheKey,
+  buildCacheOptimizedMessages,
+  getAdaptiveDynamicBudget,
+  hashToolsetForPromptCache,
+  recordPromptCacheUsage,
+  sortToolsForPromptCache,
+} from '../../core/cloud/prompt-cache';
 import { recallRecentContext } from '../_shared/memory';
 import { generatePersonaPrompt, updateMood, loadPersona } from '../../core/persona/persona-engine';
 import { messageBus } from '../../core/message-bus';
-import { buildAdaptiveContextPrompt } from '../../core/memory/adaptive-context';
+import { buildAdaptiveContextPrompt, getPersonaSnapshot } from '../../core/memory/adaptive-context';
 import {
+  extractNluCorrection,
+  maybeStoreUserPreferenceFromText,
+  recordToolProcedureMemory,
+} from '../../core/memory/memory-extractor';
+import {
+  inferIntentFromCorrectionTarget,
   inferIntentFromToolCall,
   learnIntentAlias,
   loadNluLearningSamples,
 } from './nlu-learning';
+import { applyUserConfirmationToToolArgs } from './tool-confirmation';
 
 let toolsInitialized = false;
 let messageBusInitialized = false;
@@ -188,11 +204,15 @@ export async function processMessage(
   const sanitized = sanitizeText(userMessage);
   await loadNluLearningSamples();
   const intent = classifyIntent(sanitized);
+  const correctionLearned = await maybeLearnNluCorrection(sanitized);
+  maybeStoreUserPreferenceFromText(sanitized).catch(() => {});
 
   let replyContent: string;
   let safetyWarning: string | undefined;
 
-  if (intent.intent === 'unknown' || intent.confidence < 0.3) {
+  if (correctionLearned) {
+    replyContent = `已学习：以后会把「${correctionLearned.aliasText}」理解为 ${correctionLearned.intent}。`;
+  } else if (intent.intent === 'unknown' || intent.confidence < 0.3) {
     if (cloudApiKey) {
       replyContent = await processWithLLM(sanitized, intent);
     } else {
@@ -241,10 +261,12 @@ async function routeIntent(intent: IntentResult): Promise<string> {
 
 async function handleMasterControl(intent: IntentResult): Promise<string> {
   const toolMap: Record<string, string> = {
+    get_ai_cache_stats: 'get_ai_cache_stats',
     list_ai_memories: 'list_ai_memories',
     delete_ai_memory: 'delete_ai_memory',
     update_ai_persona: 'update_ai_persona',
     set_ai_learning_enabled: 'set_ai_learning_enabled',
+    remember_user_preference: 'remember_user_preference',
   };
   const toolName = toolMap[intent.intent];
   if (!toolName) return generateFallbackReply();
@@ -266,6 +288,21 @@ async function handleMasterControl(intent: IntentResult): Promise<string> {
     return `我记住了这些内容：\n${memories.slice(0, 10).map((m) => `- ${m.kind} ${m.id}: ${m.content}`).join('\n')}`;
   }
 
+  if (intent.intent === 'get_ai_cache_stats') {
+    const data = result.data as {
+      overall?: { averageHitRate?: number; calls?: number; warmCalls?: number; averagePromptTokens?: number };
+      stats?: { agentId: string; scope: string; averageHitRate: number; calls: number }[];
+    } | undefined;
+    const overall = data?.overall;
+    const lines = (data?.stats || [])
+      .slice(0, 5)
+      .map((stat) => `- ${stat.scope}: ${stat.averageHitRate.toFixed(1)}%, ${stat.calls} 次`);
+    return [
+      `AI 缓存命中率 ${((overall?.averageHitRate || 0)).toFixed(1)}%，调用 ${overall?.calls || 0} 次，热缓存 ${overall?.warmCalls || 0} 次。`,
+      lines.length > 0 ? lines.join('\n') : '',
+    ].filter(Boolean).join('\n');
+  }
+
   if (intent.intent === 'set_ai_learning_enabled') {
     const data = result.data as { enabled?: boolean } | undefined;
     return data?.enabled === false ? '已关闭自动学习。' : '已开启自动学习。';
@@ -275,6 +312,10 @@ async function handleMasterControl(intent: IntentResult): Promise<string> {
     return '已更新 AI 人格设置。';
   }
 
+  if (intent.intent === 'remember_user_preference') {
+    return '已记住这个偏好。';
+  }
+
   return '已完成。';
 }
 
@@ -282,31 +323,30 @@ async function processWithLLM(
   userText: string,
   intent: IntentResult
 ): Promise<string> {
-  const context = await recallRecentContext('master', 5);
-  const masterTools = listToolsForAgent('master');
-  const adaptiveContext = await buildAdaptiveContextPrompt('master');
+  const agentId: AgentId = 'master';
+  const context = await recallRecentContext(agentId, 2);
+  const masterTools = sortToolsForPromptCache(listToolsForAgent(agentId));
+  const personaSnapshot = await getPersonaSnapshot();
+  const cacheScope = buildPromptCacheScope(agentId, cloudApiConfig.model, {
+    personaVersion: personaSnapshot.version,
+    toolsetHash: hashToolsetForPromptCache(masterTools),
+  });
+  const adaptiveContext = await buildAdaptiveContextPrompt(agentId);
 
   const functions = toolsToOpenAIFunctions(masterTools);
 
-  const messages: { role: string; content: string }[] = [
-    {
-      role: 'system',
-      content: `${adaptiveContext}\n\n${await getAgentSystemPrompt('master')}\n\n${generatePersonaPrompt()}\n${buildSystemPrompt('Master', masterTools)}`,
-    },
-  ];
-
-  if (context) {
-    messages.push({ role: 'system', content: `最近的对话上下文:\n${context}` });
-  }
-
-  if (intent.intent !== 'unknown') {
-    messages.push({
-      role: 'system',
-      content: `本地NLU分析结果: 意图=${intent.intent}, Agent=${intent.agent}, 参数=${JSON.stringify(intent.params)}, 置信度=${intent.confidence.toFixed(2)}`,
-    });
-  }
-
-  messages.push({ role: 'user', content: userText });
+  const { messages } = buildCacheOptimizedMessages({
+    agentSystemPrompt: await getAgentSystemPrompt(agentId),
+    toolSystemPrompt: buildSystemPrompt('Master', masterTools),
+    adaptiveContext,
+    personaPrompt: generatePersonaPrompt(),
+    recentContext: context || undefined,
+    nluContext: intent.intent !== 'unknown'
+      ? `意图=${intent.intent}, Agent=${intent.agent}, 参数=${JSON.stringify(intent.params)}, 置信度=${intent.confidence.toFixed(2)}`
+      : undefined,
+    userText,
+    dynamicBudget: getAdaptiveDynamicBudget(cacheScope),
+  });
 
   const result = await callCloudLLM(
     {
@@ -319,6 +359,8 @@ async function processWithLLM(
       temperature: 0.5,
       functions: functions.length > 0 ? functions : undefined,
       functionCall: functions.length > 0 ? 'auto' : undefined,
+      promptCacheKey: buildProviderPromptCacheKey(cacheScope),
+      promptCacheRetention: '24h',
     },
     cloudApiKey
   );
@@ -331,9 +373,14 @@ async function processWithLLM(
   }
 
   const { response } = result;
+  recordPromptCacheUsage(cacheScope, response.usage, {
+    agentId,
+    source: 'non_stream',
+    model: cloudApiConfig.model,
+  });
 
   if (response.functionCall) {
-    const args = parseToolArgs(response.functionCall.arguments);
+    const args = applyUserConfirmationToToolArgs(parseToolArgs(response.functionCall.arguments), userText);
     const learned = inferIntentFromToolCall(response.functionCall.name, args);
     if (learned && (intent.intent === 'unknown' || intent.confidence < 0.6)) {
       learnIntentAlias({
@@ -347,8 +394,16 @@ async function processWithLLM(
     }
     const toolResult = await executeToolCall(
       response.functionCall.name,
-      response.functionCall.arguments
+      response.functionCall.arguments,
+      userText
     );
+    if (toolResult) {
+      recordToolProcedureMemory({
+        userText,
+        toolName: response.functionCall.name,
+        args,
+      }).catch(() => {});
+    }
     if (toolResult) return toolResult;
   }
 
@@ -357,14 +412,15 @@ async function processWithLLM(
 
 async function executeToolCall(
   toolName: string,
-  rawArgs: string
+  rawArgs: string,
+  userText: string = ''
 ): Promise<string | null> {
   const entry = getTool(toolName);
   if (!entry) return null;
 
   let args: Record<string, unknown>;
   try {
-    args = JSON.parse(rawArgs);
+    args = applyUserConfirmationToToolArgs(JSON.parse(rawArgs), userText);
   } catch {
     return null;
   }
@@ -415,6 +471,18 @@ export async function* processMessageStream(
   const sanitized = sanitizeText(userMessage);
   await loadNluLearningSamples();
   const intent = classifyIntent(sanitized);
+  const correctionLearned = await maybeLearnNluCorrection(sanitized);
+  maybeStoreUserPreferenceFromText(sanitized).catch(() => {});
+
+  if (correctionLearned) {
+    const messageId = `msg_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    const reply = `已学习：以后会把「${correctionLearned.aliasText}」理解为 ${correctionLearned.intent}。`;
+    for (const char of reply) {
+      yield { type: 'token', content: char, messageId };
+    }
+    yield { type: 'done', messageId };
+    return;
+  }
 
   if (!cloudApiKey) {
     const reply = intent.intent === 'unknown' || intent.confidence < 0.3
@@ -432,30 +500,29 @@ export async function* processMessageStream(
   const messageId = `msg_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
   (yield { type: 'thinking' as const, content: '分析中...', messageId }) as void;
 
-  const context = await recallRecentContext('master', 5);
-  const masterTools = listToolsForAgent('master');
+  const agentId: AgentId = 'master';
+  const context = await recallRecentContext(agentId, 2);
+  const masterTools = sortToolsForPromptCache(listToolsForAgent(agentId));
+  const personaSnapshot = await getPersonaSnapshot();
+  const cacheScope = buildPromptCacheScope(agentId, cloudApiConfig.model, {
+    personaVersion: personaSnapshot.version,
+    toolsetHash: hashToolsetForPromptCache(masterTools),
+  });
   const functions = toolsToOpenAIFunctions(masterTools);
-  const adaptiveContext = await buildAdaptiveContextPrompt('master');
+  const adaptiveContext = await buildAdaptiveContextPrompt(agentId);
 
-  const messages: { role: string; content: string }[] = [
-    {
-      role: 'system',
-      content: `${adaptiveContext}\n\n${await getAgentSystemPrompt('master')}\n\n${generatePersonaPrompt()}\n${buildSystemPrompt('Master', masterTools)}`,
-    },
-  ];
-
-  if (context) {
-    messages.push({ role: 'system', content: `最近上下文:\n${context}` });
-  }
-
-  if (intent.intent !== 'unknown') {
-    messages.push({
-      role: 'system',
-      content: `本地NLU分析: 意图=${intent.intent}, Agent=${intent.agent}, 置信度=${intent.confidence.toFixed(2)}`,
-    });
-  }
-
-  messages.push({ role: 'user', content: sanitized });
+  const { messages } = buildCacheOptimizedMessages({
+    agentSystemPrompt: await getAgentSystemPrompt(agentId),
+    toolSystemPrompt: buildSystemPrompt('Master', masterTools),
+    adaptiveContext,
+    personaPrompt: generatePersonaPrompt(),
+    recentContext: context || undefined,
+    nluContext: intent.intent !== 'unknown'
+      ? `意图=${intent.intent}, Agent=${intent.agent}, 置信度=${intent.confidence.toFixed(2)}`
+      : undefined,
+    userText: sanitized,
+    dynamicBudget: getAdaptiveDynamicBudget(cacheScope),
+  });
 
   let textBuffer = '';
 
@@ -470,6 +537,8 @@ export async function* processMessageStream(
       temperature: 0.5,
       functions: functions.length > 0 ? functions : undefined,
       functionCall: functions.length > 0 ? 'auto' : undefined,
+      promptCacheKey: buildProviderPromptCacheKey(cacheScope),
+      promptCacheRetention: '24h',
     },
     cloudApiKey
   );
@@ -484,17 +553,29 @@ export async function* processMessageStream(
         break;
       case 'function_call':
         if (chunk.functionCall) {
+          const safeToolArgs = applyUserConfirmationToToolArgs(
+            parseToolArgs(chunk.functionCall.arguments),
+            sanitized
+          );
           yield {
             type: 'tool_call',
             toolName: chunk.functionCall.name,
-            toolArgs: parseToolArgs(chunk.functionCall.arguments),
+            toolArgs: safeToolArgs,
             messageId,
           };
 
           const toolResult = await executeToolCall(
             chunk.functionCall.name,
-            chunk.functionCall.arguments
+            chunk.functionCall.arguments,
+            sanitized
           );
+          if (toolResult) {
+            recordToolProcedureMemory({
+              userText: sanitized,
+              toolName: chunk.functionCall.name,
+              args: safeToolArgs,
+            }).catch(() => {});
+          }
 
           yield { type: 'tool_result', content: toolResult || '工具执行完成', messageId };
         }
@@ -510,6 +591,13 @@ export async function* processMessageStream(
         }
         break;
       case 'done':
+        if (chunk.usage?.promptTokens) {
+          recordPromptCacheUsage(cacheScope, chunk.usage, {
+            agentId,
+            source: 'stream',
+            model: cloudApiConfig.model,
+          });
+        }
         break;
     }
   }
@@ -523,4 +611,39 @@ function parseToolArgs(rawArgs: string): Record<string, unknown> {
   } catch {
     return {};
   }
+}
+
+async function maybeLearnNluCorrection(text: string): Promise<{
+  aliasText: string;
+  intent: string;
+  agent: string;
+} | null> {
+  const correction = extractNluCorrection(text);
+  if (!correction) return null;
+
+  const classifiedTarget = classifyIntent(correction.targetText);
+  const target = classifiedTarget.intent !== 'unknown' && classifiedTarget.confidence >= 0.3
+    ? {
+      intent: classifiedTarget.intent,
+      agent: classifiedTarget.agent,
+      params: classifiedTarget.params,
+    }
+    : inferIntentFromCorrectionTarget(correction.targetText);
+
+  if (!target) return null;
+
+  await learnIntentAlias({
+    text: correction.aliasText,
+    intent: target.intent,
+    agent: target.agent,
+    params: target.params,
+    source: 'user_feedback',
+    confidence: correction.confidence,
+  });
+
+  return {
+    aliasText: correction.aliasText,
+    intent: target.intent,
+    agent: target.agent,
+  };
 }

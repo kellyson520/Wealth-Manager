@@ -1,4 +1,4 @@
-import { callCloudLLM, resetForTest, setTokenBudget } from '../../core/cloud/api';
+import { callCloudLLM, callCloudLLMStream, getCloudProviderCompatibility, resetForTest, setTokenBudget } from '../../core/cloud/api';
 import { _resetAllForTest } from '../../core/safety/guard';
 
 global.fetch = jest.fn();
@@ -266,7 +266,12 @@ describe('Cloud LLM API - Safety Chain', () => {
           Promise.resolve({
             choices: [{ message: { content: 'AI_CONNECTIVITY_OK' } }],
             model: 'mimo-v2.5-pro',
-            usage: { total_tokens: 12, prompt_tokens: 7, completion_tokens: 5 },
+            usage: {
+              total_tokens: 12,
+              prompt_tokens: 7,
+              completion_tokens: 5,
+              prompt_tokens_details: { cached_tokens: 4 },
+            },
           }),
       });
 
@@ -276,6 +281,8 @@ describe('Cloud LLM API - Safety Chain', () => {
           model: 'mimo-v2.5-pro',
           tokenParam: 'max_completion_tokens',
           thinking: { type: 'disabled' },
+          promptCacheKey: 'wealth-manager-master',
+          promptCacheRetention: '24h',
           messages: [{ role: 'user', content: 'clean text' }],
           maxTokens: 100,
         },
@@ -292,7 +299,10 @@ describe('Cloud LLM API - Safety Chain', () => {
       const body = JSON.parse((global.fetch as jest.Mock).mock.calls[0][1].body);
       expect(body.model).toBe('mimo-v2.5-pro');
       expect(body.thinking).toEqual({ type: 'disabled' });
+      expect(body.prompt_cache_key).toBe('wealth-manager-master');
+      expect(body.prompt_cache_retention).toBe('24h');
       expect(body.max_tokens).toBeUndefined();
+      expect(result.response?.usage.cachedPromptTokens).toBe(4);
     });
 
     test('sends tools format and parses tool_calls response', async () => {
@@ -335,6 +345,237 @@ describe('Cloud LLM API - Safety Chain', () => {
       expect(body.tools[0].function.name).toBe('get_total');
       expect(body.functions).toBeUndefined();
     });
+
+    test('defaults Mimo requests to disabled thinking and tools mode', async () => {
+      (global.fetch as jest.Mock).mockResolvedValue({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            choices: [{
+              message: {
+                content: '',
+                tool_calls: [{
+                  type: 'function',
+                  function: { name: 'get_total', arguments: '{"period":"today"}' },
+                }],
+              },
+            }],
+            model: 'mimo-v2.5-pro',
+            usage: { total_tokens: 20 },
+          }),
+      });
+
+      await callCloudLLM(
+        {
+          baseUrl: 'https://token-plan-cn.xiaomimimo.com/v1',
+          model: 'mimo-v2.5-pro',
+          messages: [{ role: 'user', content: 'clean text' }],
+          functions: [{
+            name: 'get_total',
+            description: '获取统计',
+            parameters: { type: 'object' },
+          }],
+        },
+        'test-key'
+      );
+
+      const body = JSON.parse((global.fetch as jest.Mock).mock.calls[0][1].body);
+      expect(body.thinking).toEqual({ type: 'disabled' });
+      expect(body.tools[0].function.name).toBe('get_total');
+      expect(body.functions).toBeUndefined();
+      expect(getCloudProviderCompatibility()[0]).toMatchObject({
+        preferredToolMode: 'tools',
+        defaultThinkingDisabled: true,
+      });
+    });
+
+    test('blocks Mimo prompts that would leave no completion headroom', async () => {
+      setTokenBudget({ monthlyLimit: 2_000_000 });
+      const messages = Array.from({ length: 1100 }, (_, index) => ({
+        role: index % 2 === 0 ? 'user' : 'assistant',
+        content: `long context turn ${index} ${'x'.repeat(3000)}`,
+      }));
+
+      const result = await callCloudLLM(
+        {
+          baseUrl: 'https://token-plan-cn.xiaomimimo.com/v1',
+          model: 'mimo-v2.5-pro',
+          messages,
+          maxTokens: 64,
+        },
+        'test-key'
+      );
+
+      expect(result.success).toBe(false);
+      expect(result.degraded).toBe(true);
+      expect(result.error).toContain('上下文过长');
+      expect(global.fetch).not.toHaveBeenCalled();
+    });
+
+    test('blocks streaming Mimo prompts that would leave no completion headroom', async () => {
+      setTokenBudget({ monthlyLimit: 2_000_000 });
+      const messages = Array.from({ length: 1100 }, (_, index) => ({
+        role: index % 2 === 0 ? 'user' : 'assistant',
+        content: `stream long context turn ${index} ${'x'.repeat(3000)}`,
+      }));
+
+      const events = [];
+      for await (const chunk of callCloudLLMStream(
+        {
+          baseUrl: 'https://token-plan-cn.xiaomimimo.com/v1',
+          model: 'mimo-v2.5-pro',
+          messages,
+          maxTokens: 64,
+        },
+        'test-key'
+      )) {
+        events.push(chunk);
+      }
+
+      expect(events).toEqual([
+        expect.objectContaining({ type: 'error', error: expect.stringContaining('上下文过长') }),
+      ]);
+      expect(global.fetch).not.toHaveBeenCalled();
+    });
+
+    test('allows explicit legacy functions mode override', async () => {
+      (global.fetch as jest.Mock).mockResolvedValue({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            choices: [{ message: { function_call: { name: 'get_total', arguments: '{}' } } }],
+            model: 'gpt-4o',
+            usage: { total_tokens: 20 },
+          }),
+      });
+
+      await callCloudLLM(
+        {
+          messages: [{ role: 'user', content: 'clean text' }],
+          toolMode: 'functions',
+          functions: [{
+            name: 'get_total',
+            description: '获取统计',
+            parameters: { type: 'object' },
+          }],
+        },
+        'test-key'
+      );
+
+      const body = JSON.parse((global.fetch as jest.Mock).mock.calls[0][1].body);
+      expect(body.functions[0].name).toBe('get_total');
+      expect(body.function_call).toBe('auto');
+      expect(body.tools).toBeUndefined();
+      expect(body.thinking).toBeUndefined();
+    });
+
+    test('parses stream usage and cached prompt tokens', async () => {
+      const chunks = [
+        'data: {"choices":[{"delta":{"content":"OK"}}]}\n',
+        'data: {"choices":[],"usage":{"total_tokens":1800,"prompt_tokens":1650,"completion_tokens":150,"prompt_tokens_details":{"cached_tokens":1600}}}\n',
+        'data: [DONE]\n',
+      ];
+      (global.fetch as jest.Mock).mockResolvedValue({
+        ok: true,
+        body: makeStreamBody(chunks),
+      });
+
+      const events = [];
+      for await (const chunk of callCloudLLMStream(
+        {
+          baseUrl: 'https://token-plan-cn.xiaomimimo.com/v1',
+          model: 'mimo-v2.5-pro',
+          messages: [{ role: 'user', content: 'clean text' }],
+        },
+        'test-key'
+      )) {
+        events.push(chunk);
+      }
+
+      expect(events[0]).toEqual({ type: 'token', content: 'OK' });
+      expect(events[events.length - 1]).toEqual({
+        type: 'done',
+        usage: {
+          promptTokens: 1650,
+          completionTokens: 150,
+          cachedPromptTokens: 1600,
+        },
+      });
+      const body = JSON.parse((global.fetch as jest.Mock).mock.calls[0][1].body);
+      expect(body.stream_options).toEqual({ include_usage: true });
+      expect(getCloudProviderCompatibility()[0]).toMatchObject({
+        supportsStreamUsage: true,
+        returnsCachedTokens: true,
+        usageFormat: 'prompt_tokens_details',
+      });
+    });
+
+    test('buffers streamed content when a later tool call arrives', async () => {
+      const chunks = [
+        'data: {"choices":[{"delta":{"content":"好的，正在记录"}}]}\n',
+        'data: {"choices":[{"delta":{"tool_calls":[{"function":{"name":"add_bill","arguments":""}}]}}]}\n',
+        'data: {"choices":[{"delta":{"tool_calls":[{"function":{"arguments":"{\\"amount\\":32"}}]}}]}\n',
+        'data: {"choices":[{"delta":{"tool_calls":[{"function":{"arguments":",\\"type\\":\\"expense\\"}"}}]}}]}\n',
+        'data: {"choices":[],"usage":{"total_tokens":100,"prompt_tokens":80,"completion_tokens":20}}\n',
+        'data: [DONE]\n',
+      ];
+      (global.fetch as jest.Mock).mockResolvedValue({
+        ok: true,
+        body: makeStreamBody(chunks),
+      });
+
+      const events = [];
+      for await (const chunk of callCloudLLMStream(
+        {
+          messages: [{ role: 'user', content: 'clean text' }],
+          functions: [{
+            name: 'add_bill',
+            description: '新增账单',
+            parameters: { type: 'object' },
+          }],
+        },
+        'test-key'
+      )) {
+        events.push(chunk);
+      }
+
+      expect(events.find((event) => event.type === 'token')).toBeUndefined();
+      expect(events.find((event) => event.type === 'function_call')).toEqual({
+        type: 'function_call',
+        functionCall: {
+          name: 'add_bill',
+          arguments: '{"amount":32,"type":"expense"}',
+        },
+      });
+    });
+
+    test('retries stream without usage option when provider rejects stream_options', async () => {
+      (global.fetch as jest.Mock)
+        .mockResolvedValueOnce({ ok: false, status: 400 })
+        .mockResolvedValueOnce({
+          ok: true,
+          body: makeStreamBody([
+            'data: {"choices":[{"delta":{"content":"OK"}}]}\n',
+            'data: [DONE]\n',
+          ]),
+        });
+
+      const events = [];
+      for await (const chunk of callCloudLLMStream(
+        { messages: [{ role: 'user', content: 'clean text' }] },
+        'test-key'
+      )) {
+        events.push(chunk);
+      }
+
+      expect(global.fetch).toHaveBeenCalledTimes(2);
+      expect(JSON.parse((global.fetch as jest.Mock).mock.calls[0][1].body).stream_options).toEqual({ include_usage: true });
+      expect(JSON.parse((global.fetch as jest.Mock).mock.calls[1][1].body).stream_options).toBeUndefined();
+      expect(events[0]).toEqual({ type: 'token', content: 'OK' });
+      expect(getCloudProviderCompatibility()[0]).toMatchObject({
+        supportsStreamUsage: false,
+      });
+    });
   });
 
   describe('degradation indicator', () => {
@@ -369,3 +610,16 @@ describe('Cloud LLM API - Safety Chain', () => {
     });
   });
 });
+
+function makeStreamBody(chunks: string[]) {
+  const encoder = new TextEncoder();
+  let index = 0;
+  return {
+    getReader: () => ({
+      read: jest.fn().mockImplementation(() => {
+        if (index >= chunks.length) return Promise.resolve({ done: true });
+        return Promise.resolve({ done: false, value: encoder.encode(chunks[index++]) });
+      }),
+    }),
+  };
+}

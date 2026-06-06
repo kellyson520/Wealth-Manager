@@ -3,6 +3,23 @@ import { v4 as uuidv4 } from 'uuid';
 import { initRulesTable } from '../rules';
 
 let db: SQLite.SQLiteDatabase | null = null;
+const DEVELOPMENT_DB_KEY = 'development-only-wealth-manager-db-key';
+
+export interface DatabaseSecurityStatus {
+  keyConfigured: boolean;
+  sqlCipherAvailable: boolean;
+  encryptionActive: boolean;
+  mode: 'sqlcipher' | 'plain-sqlite';
+  warning?: string;
+}
+
+let databaseSecurityStatus: DatabaseSecurityStatus = {
+  keyConfigured: false,
+  sqlCipherAvailable: false,
+  encryptionActive: false,
+  mode: 'plain-sqlite',
+  warning: '数据库尚未初始化',
+};
 
 export async function getDatabase(): Promise<SQLite.SQLiteDatabase> {
   if (db) return db;
@@ -16,13 +33,50 @@ async function configureDatabaseSecurity(db: SQLite.SQLiteDatabase): Promise<voi
   const key = getDatabaseKey();
   await db.execAsync(`PRAGMA key = '${key.replace(/'/g, "''")}'`);
   await db.execAsync('PRAGMA foreign_keys = ON');
+  databaseSecurityStatus = await detectDatabaseSecurity(db, key);
 }
 
 function getDatabaseKey(): string {
   const env = (globalThis as unknown as {
     process?: { env?: Record<string, string | undefined> };
   }).process?.env;
-  return env?.EXPO_PUBLIC_WEALTH_MANAGER_DB_KEY || 'development-only-wealth-manager-db-key';
+  return env?.EXPO_PUBLIC_WEALTH_MANAGER_DB_KEY || DEVELOPMENT_DB_KEY;
+}
+
+async function detectDatabaseSecurity(
+  db: SQLite.SQLiteDatabase,
+  key: string
+): Promise<DatabaseSecurityStatus> {
+  const keyConfigured = Boolean(key && key !== DEVELOPMENT_DB_KEY);
+  let cipherVersion = '';
+  try {
+    const row = await db.getFirstAsync<Record<string, unknown>>('PRAGMA cipher_version');
+    const value = row ? Object.values(row)[0] : '';
+    cipherVersion = typeof value === 'string' ? value : '';
+  } catch {
+    cipherVersion = '';
+  }
+
+  const sqlCipherAvailable = cipherVersion.trim().length > 0;
+  const encryptionActive = keyConfigured && sqlCipherAvailable;
+  return {
+    keyConfigured,
+    sqlCipherAvailable,
+    encryptionActive,
+    mode: encryptionActive ? 'sqlcipher' : 'plain-sqlite',
+    warning: encryptionActive
+      ? undefined
+      : sqlCipherAvailable
+        ? 'SQLCipher 可用，但未配置生产数据库密钥'
+        : '当前运行端未检测到 SQLCipher，SQLite 数据不是文件级加密',
+  };
+}
+
+export async function getDatabaseSecurityStatus(): Promise<DatabaseSecurityStatus> {
+  if (!db) {
+    await getDatabase();
+  }
+  return { ...databaseSecurityStatus };
 }
 
 async function initTables(db: SQLite.SQLiteDatabase): Promise<void> {
@@ -252,6 +306,7 @@ async function initTables(db: SQLite.SQLiteDatabase): Promise<void> {
       key TEXT NOT NULL UNIQUE,
       value TEXT NOT NULL,
       confidence REAL DEFAULT 0.7,
+      hits INTEGER DEFAULT 1,
       source TEXT DEFAULT 'agent',
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
@@ -265,12 +320,29 @@ async function initTables(db: SQLite.SQLiteDatabase): Promise<void> {
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS prompt_cache_telemetry (
+      id TEXT PRIMARY KEY,
+      scope TEXT NOT NULL,
+      agent_id TEXT NOT NULL,
+      prompt_tokens INTEGER DEFAULT 0,
+      completion_tokens INTEGER DEFAULT 0,
+      cached_prompt_tokens INTEGER DEFAULT 0,
+      hit_rate REAL DEFAULT 0,
+      source TEXT DEFAULT 'non_stream',
+      model TEXT,
+      miss_reason TEXT,
+      created_at TEXT NOT NULL
+    );
   `);
 
   await db.execAsync(`CREATE INDEX IF NOT EXISTS idx_vector_source ON vector_store(source_type, source_id)`);
   await db.execAsync(`CREATE INDEX IF NOT EXISTS idx_nlu_learning_lookup ON nlu_learning_samples(normalized_text, enabled, hits)`);
   await db.execAsync(`CREATE INDEX IF NOT EXISTS idx_agent_memory_digest_agent ON agent_memory_digest(agent_id, updated_at)`);
+  await db.execAsync(`CREATE INDEX IF NOT EXISTS idx_prompt_cache_scope_time ON prompt_cache_telemetry(scope, created_at)`);
+  await db.execAsync(`CREATE INDEX IF NOT EXISTS idx_prompt_cache_agent_time ON prompt_cache_telemetry(agent_id, created_at)`);
   await migrateAuditLog(db);
+  await migrateAdaptiveMemory(db);
 
   await initRulesTable();
 
@@ -284,6 +356,21 @@ async function migrateAuditLog(db: SQLite.SQLiteDatabase): Promise<void> {
     `ALTER TABLE audit_log ADD COLUMN params_hash TEXT`,
     `ALTER TABLE audit_log ADD COLUMN permission_level INTEGER DEFAULT 0`,
     `ALTER TABLE audit_log ADD COLUMN duration_ms INTEGER`,
+  ];
+
+  for (const statement of migrations) {
+    try {
+      await db.execAsync(statement);
+    } catch {
+      // Column already exists on newer databases.
+    }
+  }
+}
+
+async function migrateAdaptiveMemory(db: SQLite.SQLiteDatabase): Promise<void> {
+  const migrations = [
+    `ALTER TABLE user_profile_memory ADD COLUMN hits INTEGER DEFAULT 1`,
+    `ALTER TABLE prompt_cache_telemetry ADD COLUMN miss_reason TEXT`,
   ];
 
   for (const statement of migrations) {
@@ -385,10 +472,40 @@ export async function getUserProfile(db: SQLite.SQLiteDatabase): Promise<{
   }>("SELECT persona_params, budget_limits, preferences FROM user_profile WHERE id = 'singleton'");
 
   return {
-    personaParams: JSON.parse(row?.persona_params || '{"rigor":5,"humor":5,"proactivity":5}'),
-    budgetLimits: JSON.parse(row?.budget_limits || '[]'),
-    preferences: JSON.parse(row?.preferences || '{"currency":"CNY","language":"zh-Hans","theme":"dark","firstDayOfWeek":1}'),
+    personaParams: parseJsonObject(row?.persona_params, DEFAULT_PERSONA_PARAMS),
+    budgetLimits: parseJsonArray(row?.budget_limits),
+    preferences: parseJsonObject(row?.preferences, DEFAULT_PREFERENCES),
   };
+}
+
+const DEFAULT_PERSONA_PARAMS = { rigor: 5, humor: 5, proactivity: 5 };
+const DEFAULT_PREFERENCES = {
+  currency: 'CNY',
+  language: 'zh-Hans',
+  theme: 'dark',
+  firstDayOfWeek: 1,
+};
+
+function parseJsonObject<T extends Record<string, unknown>>(raw: string | undefined, fallback: T): T {
+  const parsed = parseJson(raw);
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    return { ...fallback };
+  }
+  return { ...fallback, ...(parsed as Record<string, unknown>) } as T;
+}
+
+function parseJsonArray<T extends Record<string, unknown>>(raw: string | undefined): T[] {
+  const parsed = parseJson(raw);
+  return Array.isArray(parsed) ? parsed as T[] : [];
+}
+
+function parseJson(raw: string | undefined): unknown {
+  if (!raw) return undefined;
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return undefined;
+  }
 }
 
 export async function writeAuditLog(

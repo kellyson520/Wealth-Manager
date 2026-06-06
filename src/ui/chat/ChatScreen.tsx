@@ -4,11 +4,8 @@ import {
   Text,
   FlatList,
   StyleSheet,
-  SafeAreaView,
   StatusBar,
-  TouchableOpacity,
 } from 'react-native';
-import { useRouter } from 'expo-router';
 import MessageBubble from './MessageBubble';
 import InputBar from './InputBar';
 import QuickBar from './QuickBar';
@@ -16,6 +13,7 @@ import { ChatMessage } from '../../shared/types';
 import { processMessage } from '../../agents/master/master.agent';
 import { logger, captureError } from '../../core/logger/logger';
 import { colors, radius, shadow, spacing } from '../theme';
+import AppShell from '../layout/AppShell';
 
 const WELCOME_MESSAGE: ChatMessage = {
   id: 'welcome',
@@ -28,18 +26,23 @@ export default function ChatScreen() {
   const [messages, setMessages] = useState<ChatMessage[]>([WELCOME_MESSAGE]);
   const [isProcessing, setIsProcessing] = useState(false);
   const flatListRef = useRef<FlatList>(null);
-  const router = useRouter();
 
   useEffect(() => {
-    const originalHandler = ErrorUtils.getGlobalHandler?.();
-    if (originalHandler) {
-      ErrorUtils.setGlobalHandler((error: Error, isFatal?: boolean) => {
+    const errorUtils = typeof ErrorUtils !== 'undefined' ? ErrorUtils : undefined;
+    const originalHandler = errorUtils?.getGlobalHandler?.();
+    if (originalHandler && errorUtils?.setGlobalHandler) {
+      errorUtils.setGlobalHandler((error: Error, isFatal?: boolean) => {
         captureError('Global', error, isFatal ? 'Fatal unhandled error' : 'Unhandled error');
         logger.fatal('Global', `App ${isFatal ? 'crash' : 'error'}: ${error.message}`, error.stack);
         originalHandler(error, isFatal);
       });
     }
     logger.info('App', 'Application started');
+    return () => {
+      if (originalHandler && errorUtils?.setGlobalHandler) {
+        errorUtils.setGlobalHandler(originalHandler);
+      }
+    };
   }, []);
 
   const addMessage = useCallback((msg: ChatMessage) => {
@@ -59,7 +62,7 @@ export default function ChatScreen() {
       setIsProcessing(true);
 
       try {
-	        logger.info('Chat', `User message received (${text.length} chars, hash ${hashForLog(text)})`);
+        logger.info('Chat', `User message received (${text.length} chars, hash ${hashForLog(text)})`);
         const result = await processMessage(text);
         addMessage(result.reply);
         logger.info('Chat', `Reply generated, length: ${result.reply.content.length}`);
@@ -113,14 +116,15 @@ export default function ChatScreen() {
   const keyExtractor = useCallback((item: ChatMessage) => item.id, []);
 
   return (
-    <SafeAreaView style={styles.container}>
+    <AppShell>
+    <View style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor={colors.bg} />
       <View style={styles.header}>
         <View style={styles.headerContent}>
           <View style={styles.avatar}>
             <Text style={styles.avatarText}>¥</Text>
           </View>
-          <View style={{ flex: 1 }}>
+          <View style={{ flex: 1, minWidth: 0 }}>
             <View style={styles.titleRow}>
               <View style={styles.statusDot} />
               <Text style={styles.title}>Wealth Manager</Text>
@@ -131,13 +135,6 @@ export default function ChatScreen() {
               <Text style={styles.subtitle}>AI 财务助手</Text>
             </View>
           </View>
-          <TouchableOpacity
-            style={styles.logBtn}
-            onPress={() => router.push('/log')}
-            activeOpacity={0.7}
-          >
-            <Text style={styles.logBtnText}>日志</Text>
-          </TouchableOpacity>
         </View>
       </View>
 
@@ -166,7 +163,8 @@ export default function ChatScreen() {
         onVoice={() => handleSend('语音记账')}
         onOCR={() => handleSend('OCR导入小票')}
       />
-    </SafeAreaView>
+    </View>
+    </AppShell>
   );
 }
 
@@ -237,21 +235,6 @@ const styles = StyleSheet.create({
   subtitle: {
     fontSize: 12,
     color: colors.textMuted,
-  },
-  logBtn: {
-    minHeight: 36,
-    justifyContent: 'center',
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    borderRadius: radius.md,
-    backgroundColor: colors.surfaceRaised,
-    borderWidth: 1,
-    borderColor: colors.borderStrong,
-  },
-  logBtnText: {
-    fontSize: 12,
-    color: colors.text,
-    fontWeight: '700',
   },
   messageList: {
     flex: 1,

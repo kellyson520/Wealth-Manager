@@ -111,6 +111,18 @@ describe('NLU Intent Classification', () => {
     });
   });
 
+  describe('AI runtime queries', () => {
+    test.each([
+      '缓存命中率怎么样',
+      '查看AI运行状态',
+      '显示token统计',
+    ])('"%s" → get_ai_cache_stats', (input) => {
+      const result = classifyIntent(input);
+      expect(result.intent).toBe('get_ai_cache_stats');
+      expect(result.agent).toBe('master');
+    });
+  });
+
   describe('safety queries', () => {
     test.each([
       ['安全扫描', 'safety_check', 'guardian'],
@@ -263,6 +275,14 @@ describe('NLU real model regression cases', () => {
     expect(result.intent).toBe('delete_bill');
     expect(result.agent).toBe('guardian');
     expect(result.params.keyword).toBe('星巴克');
+    expect(result.params.requiresConfirmation).toBe(true);
+  });
+
+  test('does not treat negated delete text as confirmation', () => {
+    const result = classifyIntent('不要确认删除昨晚星巴克那笔账单');
+    expect(result.intent).toBe('delete_bill');
+    expect(result.agent).toBe('guardian');
+    expect(result.params.confirmed).toBe(false);
     expect(result.params.requiresConfirmation).toBe(true);
   });
 
@@ -453,6 +473,7 @@ describe('NLU real model regression cases', () => {
     ['关闭自动学习', 'set_ai_learning_enabled', 'master'],
     ['开启自学习', 'set_ai_learning_enabled', 'master'],
     ['严谨一点', 'update_ai_persona', 'master'],
+    ['请记住：以后回复简洁一点', 'remember_user_preference', 'master'],
   ])('routes second-pass Mimo fuzz case "%s" to %s/%s', (input, expectedIntent, expectedAgent) => {
     const result = classifyIntent(input);
     expect(result.intent).toBe(expectedIntent);

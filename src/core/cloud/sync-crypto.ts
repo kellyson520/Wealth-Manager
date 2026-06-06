@@ -1,9 +1,27 @@
-const encoder = new TextEncoder();
-const decoder = new TextDecoder();
-
 const PBKDF2_ITERATIONS = 120000;
 const SALT_BYTES = 16;
 const IV_BYTES = 12;
+
+type CryptoRuntime = {
+  crypto: Crypto;
+  encoder: TextEncoder;
+  decoder: TextDecoder;
+};
+
+function getCryptoRuntime(): CryptoRuntime | null {
+  const cryptoObj = globalThis.crypto;
+  if (!cryptoObj?.subtle || typeof cryptoObj.getRandomValues !== 'function') {
+    return null;
+  }
+  if (typeof globalThis.TextEncoder !== 'function' || typeof globalThis.TextDecoder !== 'function') {
+    return null;
+  }
+  return {
+    crypto: cryptoObj,
+    encoder: new TextEncoder(),
+    decoder: new TextDecoder(),
+  };
+}
 
 function bytesToBase64(bytes: Uint8Array): string {
   let binary = '';
@@ -22,20 +40,24 @@ function base64ToBytes(b64: string): Uint8Array {
   return bytes;
 }
 
-function randomBytes(length: number): Uint8Array {
-  return crypto.getRandomValues(new Uint8Array(length));
+function randomBytes(cryptoObj: Crypto, length: number): Uint8Array {
+  return cryptoObj.getRandomValues(new Uint8Array(length));
 }
 
-async function deriveKey(passphrase: string, salt: Uint8Array): Promise<CryptoKey> {
-  const keyMaterial = await crypto.subtle.importKey(
+async function deriveKey(
+  runtime: CryptoRuntime,
+  passphrase: string,
+  salt: Uint8Array
+): Promise<CryptoKey> {
+  const keyMaterial = await runtime.crypto.subtle.importKey(
     'raw',
-    encoder.encode(passphrase),
+    runtime.encoder.encode(passphrase),
     'PBKDF2',
     false,
     ['deriveKey']
   );
 
-  return crypto.subtle.deriveKey(
+  return runtime.crypto.subtle.deriveKey(
     {
       name: 'PBKDF2',
       salt,
@@ -54,15 +76,16 @@ export async function encryptPayload(
   passphrase: string
 ): Promise<{ ciphertext: string; salt: string } | null> {
   try {
-    if (!crypto.subtle) return null;
-    const salt = randomBytes(SALT_BYTES);
-    const iv = randomBytes(IV_BYTES);
-    const key = await deriveKey(passphrase, salt);
+    const runtime = getCryptoRuntime();
+    if (!runtime) return null;
+    const salt = randomBytes(runtime.crypto, SALT_BYTES);
+    const iv = randomBytes(runtime.crypto, IV_BYTES);
+    const key = await deriveKey(runtime, passphrase, salt);
     const encrypted = new Uint8Array(
-      await crypto.subtle.encrypt(
+      await runtime.crypto.subtle.encrypt(
         { name: 'AES-GCM', iv },
         key,
-        encoder.encode(plaintext)
+        runtime.encoder.encode(plaintext)
       )
     );
 
@@ -85,22 +108,23 @@ export async function decryptPayload(
   saltBase64: string
 ): Promise<string | null> {
   try {
-    if (!crypto.subtle) return null;
+    const runtime = getCryptoRuntime();
+    if (!runtime) return null;
     const combined = base64ToBytes(encryptedBase64);
     if (combined.length <= IV_BYTES) return null;
 
     const iv = combined.slice(0, IV_BYTES);
     const ciphertext = combined.slice(IV_BYTES);
     const salt = base64ToBytes(saltBase64);
-    const key = await deriveKey(passphrase, salt);
+    const key = await deriveKey(runtime, passphrase, salt);
 
-    const decrypted = await crypto.subtle.decrypt(
+    const decrypted = await runtime.crypto.subtle.decrypt(
       { name: 'AES-GCM', iv },
       key,
       ciphertext
     );
 
-    return decoder.decode(decrypted);
+    return runtime.decoder.decode(decrypted);
   } catch {
     return null;
   }

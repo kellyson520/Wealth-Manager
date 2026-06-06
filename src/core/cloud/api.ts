@@ -22,16 +22,36 @@ export interface CloudRequest {
   }[];
   functionCall?: 'auto' | 'none' | { name: string };
   temperature?: number;
+  promptCacheKey?: string;
+  promptCacheRetention?: string;
 }
 
 export interface CloudResponse {
   content: string;
   model: string;
-  usage: { promptTokens: number; completionTokens: number };
+  usage: { promptTokens: number; completionTokens: number; cachedPromptTokens?: number };
   functionCall?: {
     name: string;
     arguments: string;
   };
+}
+
+export type CloudStreamChunk = {
+  type: 'token' | 'function_call' | 'done' | 'error';
+  content?: string;
+  functionCall?: { name: string; arguments: string };
+  usage?: CloudResponse['usage'];
+  error?: string;
+};
+
+export interface CloudProviderCompatibility {
+  key: string;
+  supportsStreamUsage?: boolean;
+  returnsCachedTokens?: boolean;
+  preferredToolMode?: 'functions' | 'tools';
+  defaultThinkingDisabled?: boolean;
+  usageFormat?: 'prompt_tokens_details' | 'input_token_details' | 'cache_read_input_tokens' | 'cached_tokens' | 'none';
+  lastCheckedAt: string;
 }
 
 const defaultBudget = {
@@ -40,17 +60,25 @@ const defaultBudget = {
   resetDay: new Date().getDate(),
   warningThreshold: 0.8,
 };
+const MIMO_CONTEXT_WINDOW_TOKENS = 1_048_576;
+const MIN_COMPLETION_HEADROOM_TOKENS = 1024;
 
 let tokenBudget: TokenBudget = { ...defaultBudget };
 const breaker = createCircuitBreaker(5, 30000);
+const providerCompatibility = new Map<string, CloudProviderCompatibility>();
 
 export function resetForTest(): void {
   tokenBudget = { ...defaultBudget };
   resetCircuitBreaker(breaker);
+  providerCompatibility.clear();
 }
 
 export function setTokenBudget(budget: Partial<TokenBudget>): void {
   tokenBudget = { ...tokenBudget, ...budget };
+}
+
+export function getCloudProviderCompatibility(): CloudProviderCompatibility[] {
+  return Array.from(providerCompatibility.values()).sort((a, b) => b.lastCheckedAt.localeCompare(a.lastCheckedAt));
 }
 
 export async function callCloudLLM(
@@ -77,11 +105,14 @@ export async function callCloudLLM(
     content: sanitizeContent(m.content),
   }));
 
-  const promptText = sanitizedMessages.map((m) => m.content).join(' ');
-  const estimatedTokens = Math.ceil(promptText.length / 3);
+  const estimatedTokens = estimateUploadPromptTokens(sanitizedMessages);
   const budgetCheck = checkTokenBudget(tokenBudget, estimatedTokens);
   if (!budgetCheck.allowed) {
     return { success: false, error: budgetCheck.reason, degraded: true };
+  }
+  const contextCheck = checkContextWindow(request, estimatedTokens);
+  if (!contextCheck.allowed) {
+    return { success: false, error: contextCheck.reason, degraded: true };
   }
 
   if (!canCall(breaker)) {
@@ -107,12 +138,24 @@ export async function callCloudLLM(
       temperature: request.temperature ?? 0.7,
     };
     body[request.tokenParam || 'max_tokens'] = request.maxTokens || 500;
-    if (request.thinking) {
-      body.thinking = request.thinking;
+    const providerDefaults = getProviderDefaults(request);
+    if (request.thinking || providerDefaults.thinking) {
+      body.thinking = request.thinking || providerDefaults.thinking;
+    }
+    if (request.promptCacheKey) {
+      body.prompt_cache_key = request.promptCacheKey;
+    }
+    if (request.promptCacheRetention) {
+      body.prompt_cache_retention = request.promptCacheRetention;
     }
 
     if (request.functions && request.functions.length > 0) {
-      if (request.toolMode === 'tools') {
+      const toolMode = request.toolMode || providerDefaults.toolMode;
+      recordProviderCompatibility(request, {
+        preferredToolMode: toolMode,
+        defaultThinkingDisabled: Boolean(providerDefaults.thinking),
+      });
+      if (toolMode === 'tools') {
         body.tools = request.functions.map((fn) => ({
           type: 'function',
           function: fn,
@@ -142,6 +185,7 @@ export async function callCloudLLM(
     const actualTokens = (data.usage?.total_tokens || estimatedTokens);
     consumeTokens(tokenBudget, actualTokens);
     recordSuccess(breaker);
+    recordProviderUsageCompatibility(request, data.usage);
 
     const cloudResponse: CloudResponse = {
       content: data.choices?.[0]?.message?.content || '',
@@ -149,6 +193,7 @@ export async function callCloudLLM(
       usage: {
         promptTokens: data.usage?.prompt_tokens || 0,
         completionTokens: data.usage?.completion_tokens || 0,
+        cachedPromptTokens: extractCachedPromptTokens(data.usage),
       },
     };
 
@@ -201,15 +246,27 @@ function normalizeToolCall(toolCall: unknown): { name: string; arguments: string
   };
 }
 
+function extractCachedPromptTokens(usage: unknown): number {
+  const u = usage as {
+    prompt_tokens_details?: { cached_tokens?: number };
+    input_token_details?: { cached_tokens?: number; cache_read?: number };
+    cache_read_input_tokens?: number;
+    cached_tokens?: number;
+  } | undefined;
+  return (
+    u?.prompt_tokens_details?.cached_tokens ||
+    u?.input_token_details?.cached_tokens ||
+    u?.input_token_details?.cache_read ||
+    u?.cache_read_input_tokens ||
+    u?.cached_tokens ||
+    0
+  );
+}
+
 export async function* callCloudLLMStream(
   request: CloudRequest,
   apiKey?: string
-): AsyncGenerator<{
-  type: 'token' | 'function_call' | 'done' | 'error';
-  content?: string;
-  functionCall?: { name: string; arguments: string };
-  error?: string;
-}> {
+): AsyncGenerator<CloudStreamChunk> {
   const rateCheck = checkRateLimit('cloud_llm', { maxCallsPerMinute: 10, maxCallsPerHour: 100, windowMs: 60000 });
   if (!rateCheck.allowed) {
     yield { type: 'error', error: rateCheck.reason };
@@ -228,11 +285,15 @@ export async function* callCloudLLMStream(
     content: sanitizeContent(m.content),
   }));
 
-  const promptText = sanitizedMessages.map((m) => m.content).join(' ');
-  const estimatedTokens = Math.ceil(promptText.length / 3);
+  const estimatedTokens = estimateUploadPromptTokens(sanitizedMessages);
   const budgetCheck = checkTokenBudget(tokenBudget, estimatedTokens);
   if (!budgetCheck.allowed) {
     yield { type: 'error', error: budgetCheck.reason };
+    return;
+  }
+  const contextCheck = checkContextWindow(request, estimatedTokens);
+  if (!contextCheck.allowed) {
+    yield { type: 'error', error: contextCheck.reason };
     return;
   }
 
@@ -252,14 +313,27 @@ export async function* callCloudLLMStream(
       messages: sanitizedMessages,
       temperature: request.temperature ?? 0.7,
       stream: true,
+      stream_options: { include_usage: true },
     };
     body[request.tokenParam || 'max_tokens'] = request.maxTokens || 500;
-    if (request.thinking) {
-      body.thinking = request.thinking;
+    const providerDefaults = getProviderDefaults(request);
+    if (request.thinking || providerDefaults.thinking) {
+      body.thinking = request.thinking || providerDefaults.thinking;
+    }
+    if (request.promptCacheKey) {
+      body.prompt_cache_key = request.promptCacheKey;
+    }
+    if (request.promptCacheRetention) {
+      body.prompt_cache_retention = request.promptCacheRetention;
     }
 
     if (request.functions && request.functions.length > 0) {
-      if (request.toolMode === 'tools') {
+      const toolMode = request.toolMode || providerDefaults.toolMode;
+      recordProviderCompatibility(request, {
+        preferredToolMode: toolMode,
+        defaultThinkingDisabled: Boolean(providerDefaults.thinking),
+      });
+      if (toolMode === 'tools') {
         body.tools = request.functions.map((fn) => ({
           type: 'function',
           function: fn,
@@ -271,14 +345,21 @@ export async function* callCloudLLMStream(
       }
     }
 
-    const fetchResponse = await fetch(resolveChatCompletionsUrl(request.baseUrl), {
-	      method: 'POST',
-	      headers: {
-	        'Content-Type': 'application/json',
-	        Authorization: `Bearer ${apiKey}`,
-	      },
-	      body: JSON.stringify(body),
-	    });
+    const sendStreamRequest = () => fetch(resolveChatCompletionsUrl(request.baseUrl), {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify(body),
+    });
+
+    let fetchResponse = await sendStreamRequest();
+    if (!fetchResponse.ok && body.stream_options) {
+      delete body.stream_options;
+      fetchResponse = await sendStreamRequest();
+      recordProviderCompatibility(request, { supportsStreamUsage: fetchResponse.ok ? false : undefined });
+    }
 
     if (!fetchResponse.ok) {
       recordFailure(breaker);
@@ -297,7 +378,12 @@ export async function* callCloudLLMStream(
     let functionCallName = '';
     let functionCallArgs = '';
     let isFunctionCall = false;
+    let contentBuffer = '';
+    const bufferContentUntilToolDecision = Boolean(request.functions?.length && request.functionCall !== 'none');
     let totalTokens = 0;
+    let promptTokens = 0;
+    let completionTokens = 0;
+    let cachedPromptTokens = 0;
 
     while (true) {
       const { done, value } = await reader.read();
@@ -313,7 +399,6 @@ export async function* callCloudLLMStream(
 
         const jsonStr = trimmed.slice(6);
         if (jsonStr === '[DONE]') {
-          yield { type: 'done' };
           continue;
         }
 
@@ -337,11 +422,20 @@ export async function* callCloudLLMStream(
 	              functionCallArgs += streamedToolCall.arguments;
 	            }
 	          } else if (delta?.content) {
-            yield { type: 'token', content: delta.content };
+            if (bufferContentUntilToolDecision) {
+              contentBuffer += delta.content;
+            } else {
+              yield { type: 'token', content: delta.content };
+            }
           }
 
-          if (parsed.usage?.total_tokens) {
-            totalTokens = parsed.usage.total_tokens;
+          if (parsed.usage) {
+            totalTokens = parsed.usage.total_tokens || totalTokens;
+            promptTokens = parsed.usage.prompt_tokens || promptTokens;
+            completionTokens = parsed.usage.completion_tokens || completionTokens;
+            cachedPromptTokens = extractCachedPromptTokens(parsed.usage) || cachedPromptTokens;
+            recordProviderUsageCompatibility(request, parsed.usage);
+            recordProviderCompatibility(request, { supportsStreamUsage: true });
           }
         } catch {
           // Skip malformed JSON chunks
@@ -354,15 +448,114 @@ export async function* callCloudLLMStream(
         type: 'function_call',
         functionCall: { name: functionCallName, arguments: functionCallArgs },
       };
+    } else if (contentBuffer) {
+      yield { type: 'token', content: contentBuffer };
     }
 
     const actualTokens = totalTokens || estimatedTokens;
     consumeTokens(tokenBudget, actualTokens);
     recordSuccess(breaker);
 
-    yield { type: 'done' };
+    yield {
+      type: 'done',
+      usage: {
+        promptTokens,
+        completionTokens,
+        cachedPromptTokens,
+      },
+    };
   } catch (e) {
     recordFailure(breaker);
     yield { type: 'error', error: e instanceof Error ? e.message : '网络异常' };
   }
+}
+
+function getProviderDefaults(request: CloudRequest): {
+  toolMode: 'functions' | 'tools';
+  thinking?: Record<string, unknown>;
+} {
+  const isMimo = isMimoProvider(request);
+  return {
+    toolMode: 'tools',
+    thinking: isMimo ? { type: 'disabled' } : undefined,
+  };
+}
+
+function isMimoProvider(request: CloudRequest): boolean {
+  const baseUrl = (request.baseUrl || '').toLowerCase();
+  const model = (request.model || '').toLowerCase();
+  return baseUrl.includes('xiaomimimo.com') || model.includes('mimo');
+}
+
+function estimateUploadPromptTokens(messages: { content: string }[]): number {
+  const contentChars = messages.reduce((sum, message) => sum + message.content.length, 0);
+  const messageOverheadTokens = messages.length * 4;
+  return Math.max(1, Math.ceil(contentChars / 2) + messageOverheadTokens);
+}
+
+function checkContextWindow(
+  request: CloudRequest,
+  estimatedPromptTokens: number
+): { allowed: boolean; reason?: string } {
+  const contextWindow = getProviderContextWindow(request);
+  if (!contextWindow) return { allowed: true };
+
+  const requestedCompletion = request.maxTokens || 500;
+  const reservedCompletion = Math.max(requestedCompletion, MIN_COMPLETION_HEADROOM_TOKENS);
+  const promptLimit = contextWindow - reservedCompletion;
+  if (estimatedPromptTokens >= promptLimit) {
+    return {
+      allowed: false,
+      reason: `上下文过长，预计提示词约 ${estimatedPromptTokens} tokens，${request.model || '当前模型'} 需要至少预留 ${reservedCompletion} tokens 输出空间`,
+    };
+  }
+  return { allowed: true };
+}
+
+function getProviderContextWindow(request: CloudRequest): number | undefined {
+  if (isMimoProvider(request)) return MIMO_CONTEXT_WINDOW_TOKENS;
+  return undefined;
+}
+
+function providerKey(request: CloudRequest): string {
+  return `${request.baseUrl || 'https://api.openai.com/v1'}|${request.model || 'gpt-4o'}`;
+}
+
+function recordProviderCompatibility(
+  request: CloudRequest,
+  patch: Partial<CloudProviderCompatibility>
+): void {
+  const key = providerKey(request);
+  const current = providerCompatibility.get(key) || {
+    key,
+    lastCheckedAt: new Date().toISOString(),
+  };
+  providerCompatibility.set(key, {
+    ...current,
+    ...patch,
+    key,
+    lastCheckedAt: new Date().toISOString(),
+  });
+}
+
+function recordProviderUsageCompatibility(request: CloudRequest, usage: unknown): void {
+  const usageFormat = detectUsageFormat(usage);
+  recordProviderCompatibility(request, {
+    usageFormat,
+    returnsCachedTokens: extractCachedPromptTokens(usage) > 0,
+  });
+}
+
+function detectUsageFormat(usage: unknown): CloudProviderCompatibility['usageFormat'] {
+  const u = usage as {
+    prompt_tokens_details?: { cached_tokens?: number };
+    input_token_details?: { cached_tokens?: number; cache_read?: number };
+    cache_read_input_tokens?: number;
+    cached_tokens?: number;
+  } | undefined;
+  if (u?.prompt_tokens_details) return 'prompt_tokens_details';
+  if (u?.input_token_details) return 'input_token_details';
+  if (u?.cache_read_input_tokens !== undefined) return 'cache_read_input_tokens';
+  if (u?.cached_tokens !== undefined) return 'cached_tokens';
+  return 'none';
 }

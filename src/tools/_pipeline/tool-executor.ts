@@ -2,6 +2,7 @@ import { getDatabase } from '../../core/database/database';
 import { v4 as uuidv4 } from 'uuid';
 import type { ToolEntry } from '../../agents/_shared/tool-registry';
 import { getSecurityProfile } from '../../agents/_shared/security-profile';
+import { hasScopedToolPermission } from '../../agents/_shared/scoped-permissions';
 import type { AgentId } from '../../shared/types';
 
 export interface ToolExecutionResult {
@@ -140,7 +141,12 @@ function getExecutionDenial(
   if (!entry.allowedAgents.includes(agentId)) {
     return { code: 'AGENT_NOT_ALLOWED', message: `${agentId} 无权调用工具 ${entry.definition.name}` };
   }
-  if (entry.definition.permissionLevel > profile.maxPermissionLevel) {
+  const hasScopedPermissionOverride = hasScopedToolPermission(
+    agentId,
+    entry.definition.name,
+    entry.definition.permissionLevel
+  );
+  if (entry.definition.permissionLevel > profile.maxPermissionLevel && !hasScopedPermissionOverride) {
     return {
       code: 'PERMISSION_EXCEEDED',
       message: `${agentId} 权限 L${profile.maxPermissionLevel} 不足以调用 L${entry.definition.permissionLevel} 工具 ${entry.definition.name}`,

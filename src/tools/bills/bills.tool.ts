@@ -5,6 +5,42 @@ import { captureError } from '../../core/logger/logger';
 import { generateHashForBill, rebuildHashChain } from '../../core/hashchain/hashchain';
 import { recordCorrection } from '../../core/rules/rule-learner';
 
+const EXPENSE_CATEGORIES = ['餐饮', '交通', '购物', '住房', '娱乐', '医疗', '教育', '水电', '其他'];
+const INCOME_CATEGORIES = ['工资', '奖金', '投资', '兼职', '其他收入'];
+
+const CATEGORY_ALIASES: { category: string; patterns: RegExp[] }[] = [
+  { category: '餐饮', patterns: [/餐饮|吃|饭|早餐|午餐|午饭|晚餐|晚饭|夜宵|火锅|奶茶|咖啡|外卖|餐厅|食堂|水果|零食/] },
+  { category: '交通', patterns: [/交通|打车|出租|网约车|地铁|公交|高铁|火车|机票|停车|油费|加油|过路费/] },
+  { category: '购物', patterns: [/购物|买|超市|淘宝|京东|拼多多|衣服|鞋|日用品|家电|数码/] },
+  { category: '住房', patterns: [/住房|房租|租房|房贷|物业|公寓|水电房租/] },
+  { category: '娱乐', patterns: [/娱乐|电影|游戏|会员|演唱会|盲盒|玩具|酒吧|ktv/i] },
+  { category: '医疗', patterns: [/医疗|医院|药|体检|门诊|牙|医保/] },
+  { category: '教育', patterns: [/教育|课程|学费|书|培训|考试|教材/] },
+  { category: '水电', patterns: [/水电|电费|水费|燃气|煤气|话费|网费|宽带/] },
+  { category: '工资', patterns: [/工资|薪水|薪资|发薪|月薪/] },
+  { category: '奖金', patterns: [/奖金|年终奖|绩效|提成/] },
+  { category: '投资', patterns: [/投资|股票|基金|理财|分红|利息/] },
+  { category: '兼职', patterns: [/兼职|副业|外快/] },
+];
+
+export function normalizeBillCategory(
+  category: string | undefined,
+  type: 'income' | 'expense' | 'refund',
+  context: string = ''
+): string {
+  const allowed = type === 'income' ? INCOME_CATEGORIES : EXPENSE_CATEGORIES;
+  const raw = `${category || ''} ${context || ''}`.trim();
+  if (!raw) return type === 'income' ? '其他收入' : '其他';
+  if (allowed.includes(category || '')) return category as string;
+
+  for (const alias of CATEGORY_ALIASES) {
+    if (!allowed.includes(alias.category)) continue;
+    if (alias.patterns.some((pattern) => pattern.test(raw))) return alias.category;
+  }
+
+  return type === 'income' ? '其他收入' : '其他';
+}
+
 export async function add_bill(params: {
   amount: number;
   type: 'income' | 'expense';
@@ -21,6 +57,11 @@ export async function add_bill(params: {
   const id = uuidv4();
   const now = new Date().toISOString();
   const date = params.date || now.split('T')[0];
+  const category = normalizeBillCategory(
+    params.category,
+    params.type,
+    `${params.merchant || ''} ${params.note || ''}`
+  );
 
   try {
     await db.runAsync(
@@ -30,7 +71,7 @@ export async function add_bill(params: {
         id,
         params.amount,
         params.type,
-        params.category || '其他',
+        category,
         params.merchant || '',
         params.merchant || params.note || '',
         date,
@@ -88,9 +129,18 @@ export async function modify_bill(params: {
 
     const updates: string[] = [];
     const values: (string | number)[] = [];
+    let normalizedCategory: string | undefined;
 
     if (params.amount !== undefined) { updates.push('amount = ?'); values.push(params.amount); }
-    if (params.category !== undefined) { updates.push('category = ?'); values.push(params.category); }
+    if (params.category !== undefined) {
+      normalizedCategory = normalizeBillCategory(
+        params.category,
+        (params.type || existing.type) as 'income' | 'expense' | 'refund',
+        `${params.merchant || existing.merchant || ''} ${params.note || existing.note || ''}`
+      );
+      updates.push('category = ?');
+      values.push(normalizedCategory);
+    }
     if (params.merchant !== undefined) {
       updates.push('merchant = ?');
       values.push(params.merchant);
@@ -110,12 +160,12 @@ export async function modify_bill(params: {
       `UPDATE bills SET ${updates.join(', ')} WHERE id = ?`, values
     );
 
-	    if (params.category !== undefined && params.category !== oldCategory) {
+	    if (normalizedCategory !== undefined && normalizedCategory !== oldCategory) {
 	      recordCorrection({
         billId: params.billId,
         merchant: oldMerchant,
         originalCategory: oldCategory,
-        correctedCategory: params.category,
+        correctedCategory: normalizedCategory,
 	      }).catch(() => {});
 	    }
 	    await rebuildHashChain();
@@ -172,7 +222,10 @@ export async function search_bills(params: {
   }
   if (params.startDate) { conditions.push('date >= ?'); values.push(params.startDate); }
   if (params.endDate) { conditions.push('date <= ?'); values.push(params.endDate); }
-  if (params.category) { conditions.push('category = ?'); values.push(params.category); }
+  if (params.category) {
+    conditions.push('category = ?');
+    values.push(normalizeBillCategory(params.category, params.type || 'expense'));
+  }
   if (params.type) { conditions.push('type = ?'); values.push(params.type); }
 
   const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';

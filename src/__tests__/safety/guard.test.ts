@@ -102,6 +102,26 @@ describe('Rate Limiter', () => {
     expect(result.reason).toContain('频率超限');
   });
 
+  test('blocks calls over the per-hour limit', () => {
+    for (let i = 0; i < 3; i++) {
+      const result = checkRateLimit('hourly', {
+        maxCallsPerMinute: 100,
+        maxCallsPerHour: 3,
+        windowMs: 60000,
+      });
+      expect(result.allowed).toBe(true);
+    }
+
+    const result = checkRateLimit('hourly', {
+      maxCallsPerMinute: 100,
+      maxCallsPerHour: 3,
+      windowMs: 60000,
+    });
+
+    expect(result.allowed).toBe(false);
+    expect(result.reason).toContain('小时');
+  });
+
   test('different keys have independent limits', () => {
     for (let i = 0; i < 10; i++) {
       checkRateLimit('user_a', { maxCallsPerMinute: 10, maxCallsPerHour: 100, windowMs: 60000 });
