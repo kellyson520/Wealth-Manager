@@ -14,6 +14,7 @@ import {
   PromptCacheRuntimeStats,
 } from '../../core/cloud/prompt-cache';
 import { CloudProviderCompatibility, getCloudProviderCompatibility } from '../../core/cloud/api';
+import { captureError } from '../../core/logger/logger';
 import { colors, radius, shadow, spacing } from '../theme';
 import AppShell from '../layout/AppShell';
 
@@ -75,6 +76,8 @@ export default function AiCacheScreen() {
     try {
       setDashboard(await getPromptCacheDashboard({ limit: 50 }));
       setCompatibility(getCloudProviderCompatibility());
+    } catch (e) {
+      captureError('AiCacheScreen.refresh', e, 'Failed to refresh AI cache dashboard');
     } finally {
       setLoading(false);
       setRefreshing(false);

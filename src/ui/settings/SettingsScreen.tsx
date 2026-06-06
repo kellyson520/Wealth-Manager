@@ -34,6 +34,7 @@ import {
   NluLearningSample,
   rejectNluLearningCandidate,
 } from '../../agents/master/nlu-learning';
+import { captureError } from '../../core/logger/logger';
 import { colors, radius, shadow, spacing } from '../theme';
 import AppShell from '../layout/AppShell';
 
@@ -111,6 +112,8 @@ export default function SettingsScreen() {
         nluCandidates,
         nluStats,
       });
+    } catch (e) {
+      captureError('SettingsScreen.refresh', e, 'Failed to refresh settings');
     } finally {
       setLoading(false);
       setRefreshing(false);
