@@ -472,10 +472,40 @@ export async function getUserProfile(db: SQLite.SQLiteDatabase): Promise<{
   }>("SELECT persona_params, budget_limits, preferences FROM user_profile WHERE id = 'singleton'");
 
   return {
-    personaParams: JSON.parse(row?.persona_params || '{"rigor":5,"humor":5,"proactivity":5}'),
-    budgetLimits: JSON.parse(row?.budget_limits || '[]'),
-    preferences: JSON.parse(row?.preferences || '{"currency":"CNY","language":"zh-Hans","theme":"dark","firstDayOfWeek":1}'),
+    personaParams: parseJsonObject(row?.persona_params, DEFAULT_PERSONA_PARAMS),
+    budgetLimits: parseJsonArray(row?.budget_limits),
+    preferences: parseJsonObject(row?.preferences, DEFAULT_PREFERENCES),
   };
+}
+
+const DEFAULT_PERSONA_PARAMS = { rigor: 5, humor: 5, proactivity: 5 };
+const DEFAULT_PREFERENCES = {
+  currency: 'CNY',
+  language: 'zh-Hans',
+  theme: 'dark',
+  firstDayOfWeek: 1,
+};
+
+function parseJsonObject<T extends Record<string, unknown>>(raw: string | undefined, fallback: T): T {
+  const parsed = parseJson(raw);
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    return { ...fallback };
+  }
+  return { ...fallback, ...(parsed as Record<string, unknown>) } as T;
+}
+
+function parseJsonArray<T extends Record<string, unknown>>(raw: string | undefined): T[] {
+  const parsed = parseJson(raw);
+  return Array.isArray(parsed) ? parsed as T[] : [];
+}
+
+function parseJson(raw: string | undefined): unknown {
+  if (!raw) return undefined;
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return undefined;
+  }
 }
 
 export async function writeAuditLog(
