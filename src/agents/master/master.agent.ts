@@ -39,6 +39,7 @@ import {
   learnIntentAlias,
   loadNluLearningSamples,
 } from './nlu-learning';
+import { applyUserConfirmationToToolArgs } from './tool-confirmation';
 
 let toolsInitialized = false;
 let messageBusInitialized = false;
@@ -379,7 +380,7 @@ async function processWithLLM(
   });
 
   if (response.functionCall) {
-    const args = parseToolArgs(response.functionCall.arguments);
+    const args = applyUserConfirmationToToolArgs(parseToolArgs(response.functionCall.arguments), userText);
     const learned = inferIntentFromToolCall(response.functionCall.name, args);
     if (learned && (intent.intent === 'unknown' || intent.confidence < 0.6)) {
       learnIntentAlias({
@@ -393,7 +394,8 @@ async function processWithLLM(
     }
     const toolResult = await executeToolCall(
       response.functionCall.name,
-      response.functionCall.arguments
+      response.functionCall.arguments,
+      userText
     );
     if (toolResult) {
       recordToolProcedureMemory({
@@ -410,14 +412,15 @@ async function processWithLLM(
 
 async function executeToolCall(
   toolName: string,
-  rawArgs: string
+  rawArgs: string,
+  userText: string = ''
 ): Promise<string | null> {
   const entry = getTool(toolName);
   if (!entry) return null;
 
   let args: Record<string, unknown>;
   try {
-    args = JSON.parse(rawArgs);
+    args = applyUserConfirmationToToolArgs(JSON.parse(rawArgs), userText);
   } catch {
     return null;
   }
@@ -550,22 +553,27 @@ export async function* processMessageStream(
         break;
       case 'function_call':
         if (chunk.functionCall) {
+          const safeToolArgs = applyUserConfirmationToToolArgs(
+            parseToolArgs(chunk.functionCall.arguments),
+            sanitized
+          );
           yield {
             type: 'tool_call',
             toolName: chunk.functionCall.name,
-            toolArgs: parseToolArgs(chunk.functionCall.arguments),
+            toolArgs: safeToolArgs,
             messageId,
           };
 
           const toolResult = await executeToolCall(
             chunk.functionCall.name,
-            chunk.functionCall.arguments
+            chunk.functionCall.arguments,
+            sanitized
           );
           if (toolResult) {
             recordToolProcedureMemory({
               userText: sanitized,
               toolName: chunk.functionCall.name,
-              args: parseToolArgs(chunk.functionCall.arguments),
+              args: safeToolArgs,
             }).catch(() => {});
           }
 

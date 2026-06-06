@@ -7,6 +7,7 @@ import {
   getToolNamesForAgent,
   describeToolsForAgent,
 } from '../../agents/_shared/tool-registry';
+import { canCallTool } from '../../agents/_shared/delegate';
 import { ToolEntry } from '../../agents/_shared';
 import { AgentId } from '../../shared/types';
 
@@ -99,6 +100,23 @@ describe('Tool Registry', () => {
 
     test('returns false for unregistered tool', () => {
       expect(isToolAllowedForAgent('nonexistent', 'ledger')).toBe(false);
+    });
+  });
+
+  describe('canCallTool scoped permissions', () => {
+    test('allows master to call scoped AI control L1 tools', () => {
+      registerTool(createMockTool('set_ai_learning_enabled', 1, ['master']));
+
+      expect(canCallTool('master', 'set_ai_learning_enabled').allowed).toBe(true);
+    });
+
+    test('does not allow master to call generic L1 tools', () => {
+      registerTool(createMockTool('add_bill', 1, ['master']));
+
+      const result = canCallTool('master', 'add_bill');
+
+      expect(result.allowed).toBe(false);
+      expect(result.reason).toContain('权限 L0 不足以调用 L1');
     });
   });
 

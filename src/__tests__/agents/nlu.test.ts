@@ -278,6 +278,14 @@ describe('NLU real model regression cases', () => {
     expect(result.params.requiresConfirmation).toBe(true);
   });
 
+  test('does not treat negated delete text as confirmation', () => {
+    const result = classifyIntent('不要确认删除昨晚星巴克那笔账单');
+    expect(result.intent).toBe('delete_bill');
+    expect(result.agent).toBe('guardian');
+    expect(result.params.confirmed).toBe(false);
+    expect(result.params.requiresConfirmation).toBe(true);
+  });
+
   test('uses scheduler-compatible five-field cron for recurring reminders', () => {
     const result = classifyIntent('每晚9点提醒我记账');
     expect(result.intent).toBe('create_reminder');

@@ -1,5 +1,6 @@
 import { IntentResult } from '../../shared/types';
 import { applyLearnedIntent } from './nlu-learning';
+import { hasExplicitToolConfirmation } from './tool-confirmation';
 
 const BUDGET_PAIR_PATTERN = /([\u4e00-\u9fa5A-Za-z]{1,16})预算(?:设成|设置为|设为|调整为|调到|定为|是|为)?\s*(\d+(?:\.\d{1,2})?)/g;
 const CHINESE_NUMERAL_PATTERN = /[零〇一二两三四五六七八九十百千万]+/;
@@ -243,7 +244,7 @@ function extractModifyBillParams(text: string): Record<string, unknown> {
     keyword,
     category,
     date: extractRelativeDate(text),
-    confirmed: /确认/.test(text),
+    confirmed: hasExplicitToolConfirmation(text),
   };
 }
 
@@ -413,12 +414,13 @@ const intentPatterns: { intent: string; patterns: RegExp[]; agent: string; prior
     extractParams: (_match, text) => {
       const keyword = extractDeleteKeyword(text);
       const billId = text.match(/(?:账单|记录|id|ID)\s*([0-9a-f-]{8,36})/i)?.[1];
+      const confirmed = hasExplicitToolConfirmation(text);
       return {
         billId,
         keyword,
         date: extractRelativeDate(text),
-        confirmed: /确认/.test(text),
-        requiresConfirmation: !/确认/.test(text),
+        confirmed,
+        requiresConfirmation: !confirmed,
       };
     },
   },

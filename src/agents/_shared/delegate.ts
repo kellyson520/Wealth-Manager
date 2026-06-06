@@ -4,6 +4,7 @@ import {
   AgentMessage,
 } from '../../shared/types';
 import { getSecurityProfile } from './security-profile';
+import { hasScopedToolPermission } from './scoped-permissions';
 import { getTool, isToolAllowedForAgent } from './tool-registry';
 
 export interface DelegationRequest {
@@ -69,7 +70,10 @@ export function canCallTool(
   }
   const profile = getSecurityProfile(agentId);
   const tool = getTool(toolName);
-  if (tool && tool.definition.permissionLevel > profile.maxPermissionLevel) {
+  const hasScopedPermissionOverride = tool
+    ? hasScopedToolPermission(agentId, tool.definition.name, tool.definition.permissionLevel)
+    : false;
+  if (tool && tool.definition.permissionLevel > profile.maxPermissionLevel && !hasScopedPermissionOverride) {
     return {
       allowed: false,
       reason: `${agentId} 权限 L${profile.maxPermissionLevel} 不足以调用 L${tool.definition.permissionLevel} 工具 ${toolName}`,
