@@ -17,6 +17,7 @@ import { toolsToOpenAIFunctions, buildSystemPrompt } from '../../core/cloud/func
 import { getAgentSystemPrompt } from '../../core/cloud/prompts/agent-prompts';
 import {
   buildPromptCacheScope,
+  buildProviderPromptCacheKey,
   buildCacheOptimizedMessages,
   getAdaptiveDynamicBudget,
   hashToolsetForPromptCache,
@@ -357,6 +358,8 @@ async function processWithLLM(
       temperature: 0.5,
       functions: functions.length > 0 ? functions : undefined,
       functionCall: functions.length > 0 ? 'auto' : undefined,
+      promptCacheKey: buildProviderPromptCacheKey(cacheScope),
+      promptCacheRetention: '24h',
     },
     cloudApiKey
   );
@@ -531,6 +534,8 @@ export async function* processMessageStream(
       temperature: 0.5,
       functions: functions.length > 0 ? functions : undefined,
       functionCall: functions.length > 0 ? 'auto' : undefined,
+      promptCacheKey: buildProviderPromptCacheKey(cacheScope),
+      promptCacheRetention: '24h',
     },
     cloudApiKey
   );

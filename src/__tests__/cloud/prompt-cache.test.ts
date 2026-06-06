@@ -10,6 +10,7 @@ import {
   buildCacheOptimizedMessages,
   buildPromptCacheMetrics,
   buildPromptCacheScope,
+  buildProviderPromptCacheKey,
   getAdaptiveDynamicBudget,
   getPromptCacheDashboard,
   getPromptCacheRuntimeStats,
@@ -193,6 +194,13 @@ describe('prompt cache planning', () => {
 
     expect(first).toBe(second);
     expect(first).toHaveLength(8);
+  });
+
+  test('builds safe provider cache keys from scoped runtime identity', () => {
+    const key = buildProviderPromptCacheKey('master:mimo-v2.5-pro:p3:tabcdef12');
+
+    expect(key).toBe('wealth-manager:master:mimo-v2.5-pro:p3:tabcdef12');
+    expect(key.length).toBeLessThanOrEqual(175);
   });
 
   test('hydrates telemetry from SQLite and returns dashboard stats', async () => {

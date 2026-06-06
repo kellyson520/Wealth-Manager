@@ -290,6 +290,13 @@ export function buildPromptCacheScope(
   return scopeParts.join(':');
 }
 
+export function buildProviderPromptCacheKey(scope: string): string {
+  const safeScope = scope
+    .replace(/[^a-zA-Z0-9_.:-]/g, '_')
+    .slice(0, 160);
+  return `wealth-manager:${safeScope}`;
+}
+
 export function hashToolsetForPromptCache(tools: ToolEntry[]): string {
   return hashForCache(tools.map((tool) => tool.definition.name).sort().join('|')).slice(0, 8);
 }
