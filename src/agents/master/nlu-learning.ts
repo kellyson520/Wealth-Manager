@@ -37,6 +37,21 @@ export interface NluLearningReviewStats {
   autoPromoted: number;
 }
 
+type NluLearningRow = {
+  id: string;
+  phrase: string;
+  normalized_text: string;
+  intent: string;
+  agent: string;
+  params: string;
+  source: string;
+  confidence: number;
+  hits: number;
+  enabled: number;
+  created_at: string;
+  updated_at: string;
+};
+
 const MIN_ALIAS_LENGTH = 2;
 const MAX_ALIAS_LENGTH = 120;
 const HIGH_CONFIDENCE_STATIC_MATCH = 0.85;
@@ -82,20 +97,7 @@ export async function loadNluLearningSamples(): Promise<void> {
   if (loaded) return;
   try {
     const db = await getDatabase();
-    const rows = await db.getAllAsync<{
-      id: string;
-      phrase: string;
-      normalized_text: string;
-      intent: string;
-      agent: string;
-      params: string;
-      source: string;
-      confidence: number;
-      hits: number;
-      enabled: number;
-      created_at: string;
-      updated_at: string;
-    }>(
+    const rows = await db.getAllAsync<NluLearningRow>(
       `SELECT id, phrase, normalized_text, intent, agent, params, source, confidence, hits, enabled, created_at, updated_at
        FROM nlu_learning_samples
        WHERE enabled = 1
@@ -105,20 +107,7 @@ export async function loadNluLearningSamples(): Promise<void> {
 
     learnedSamples.length = 0;
     for (const row of rows) {
-      learnedSamples.push({
-        id: row.id,
-        text: row.phrase,
-        normalizedText: row.normalized_text,
-        intent: row.intent,
-        agent: row.agent,
-        params: safeParseParams(row.params),
-        source: normalizeSource(row.source),
-        confidence: row.confidence,
-        hits: row.hits,
-        enabled: row.enabled === 1,
-        createdAt: row.created_at,
-        updatedAt: row.updated_at,
-      });
+      learnedSamples.push(rowToSample(row));
     }
     loaded = true;
   } catch (e) {
@@ -186,6 +175,14 @@ export async function learnIntentAlias(params: LearnIntentAliasParams): Promise<
         AUTO_ENABLE_HITS,
       ]
     );
+    const row = await db.getFirstAsync<NluLearningRow>(
+      `SELECT id, phrase, normalized_text, intent, agent, params, source, confidence, hits, enabled, created_at, updated_at
+       FROM nlu_learning_samples
+       WHERE normalized_text = ? AND intent = ?
+       LIMIT 1`,
+      [sample.normalizedText, sample.intent]
+    );
+    if (row) replaceMemorySample(rowToSample(row));
   } catch (e) {
     captureError('nlu_learning.learn', e, 'Failed to persist NLU learning sample');
   }
@@ -193,20 +190,7 @@ export async function learnIntentAlias(params: LearnIntentAliasParams): Promise<
 
 export async function listNluLearningCandidates(limit: number = 20): Promise<NluLearningSample[]> {
   const db = await getDatabase();
-  const rows = await db.getAllAsync<{
-    id: string;
-    phrase: string;
-    normalized_text: string;
-    intent: string;
-    agent: string;
-    params: string;
-    source: string;
-    confidence: number;
-    hits: number;
-    enabled: number;
-    created_at: string;
-    updated_at: string;
-  }>(
+  const rows = await db.getAllAsync<NluLearningRow>(
     `SELECT id, phrase, normalized_text, intent, agent, params, source, confidence, hits, enabled, created_at, updated_at
      FROM nlu_learning_samples
      WHERE enabled = 0
@@ -214,20 +198,7 @@ export async function listNluLearningCandidates(limit: number = 20): Promise<Nlu
      LIMIT ?`,
     [Math.min(Math.max(limit, 1), 80)]
   );
-  return rows.map((row) => ({
-    id: row.id,
-    text: row.phrase,
-    normalizedText: row.normalized_text,
-    intent: row.intent,
-    agent: row.agent,
-    params: safeParseParams(row.params),
-    source: normalizeSource(row.source),
-    confidence: row.confidence,
-    hits: row.hits,
-    enabled: row.enabled === 1,
-    createdAt: row.created_at,
-    updatedAt: row.updated_at,
-  }));
+  return rows.map(rowToSample);
 }
 
 export async function approveNluLearningCandidate(id: string): Promise<boolean> {
@@ -425,6 +396,35 @@ function upsertMemorySample(sample: NluLearningSample): void {
   }
   learnedSamples.unshift(sample);
   if (learnedSamples.length > 200) learnedSamples.length = 200;
+}
+
+function replaceMemorySample(sample: NluLearningSample): void {
+  const index = learnedSamples.findIndex(
+    (existing) => existing.normalizedText === sample.normalizedText && existing.intent === sample.intent
+  );
+  if (index >= 0) {
+    learnedSamples[index] = sample;
+  } else {
+    learnedSamples.unshift(sample);
+  }
+  if (learnedSamples.length > 200) learnedSamples.length = 200;
+}
+
+function rowToSample(row: NluLearningRow): NluLearningSample {
+  return {
+    id: row.id,
+    text: row.phrase,
+    normalizedText: row.normalized_text,
+    intent: row.intent,
+    agent: row.agent,
+    params: safeParseParams(row.params),
+    source: normalizeSource(row.source),
+    confidence: row.confidence,
+    hits: row.hits,
+    enabled: row.enabled === 1,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
 }
 
 function reinforceSample(sample: NluLearningSample, confidenceDelta: number): void {

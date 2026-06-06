@@ -232,8 +232,7 @@ export function recordPromptCacheUsage(
 export function getPromptCacheRuntimeStats(scope: string): PromptCacheRuntimeStats {
   const rows = telemetry.get(scope) || [];
   const warmRows = rows.filter((row) => row.cachedPromptTokens > 0);
-  const sourceRows = warmRows.length > 0 ? warmRows : rows;
-  const averageHitRate = average(sourceRows.map((row) => row.hitRate));
+  const averageHitRate = calculateTokenHitRate(rows);
   const advice = buildOptimizationAdvice(rows, averageHitRate);
 
   return {
@@ -243,9 +242,9 @@ export function getPromptCacheRuntimeStats(scope: string): PromptCacheRuntimeSta
     warmCalls: warmRows.length,
     lastHitRate: rows[rows.length - 1]?.hitRate || 0,
     averageHitRate,
-    averagePromptTokens: Math.round(average(sourceRows.map((row) => row.promptTokens))),
-    averageCachedTokens: Math.round(average(sourceRows.map((row) => row.cachedPromptTokens))),
-    averageCompletionTokens: Math.round(average(sourceRows.map((row) => row.completionTokens))),
+    averagePromptTokens: Math.round(average(rows.map((row) => row.promptTokens))),
+    averageCachedTokens: Math.round(average(rows.map((row) => row.cachedPromptTokens))),
+    averageCompletionTokens: Math.round(average(rows.map((row) => row.completionTokens))),
     targetHitRate: TARGET_CACHE_HIT_RATE,
     budgetPressure: getBudgetPressure(rows, averageHitRate),
     recommendedBudget: getAdaptiveDynamicBudget(scope),
@@ -297,10 +296,9 @@ export function hashToolsetForPromptCache(tools: ToolEntry[]): string {
 
 export function getAdaptiveDynamicBudget(scope: string): DynamicPromptBudget {
   const rows = telemetry.get(scope) || [];
-  const warmRows = rows.filter((row) => row.cachedPromptTokens > 0);
-  if (warmRows.length < 2) return { ...DEFAULT_DYNAMIC_BUDGET };
+  if (rows.length < 2) return { ...DEFAULT_DYNAMIC_BUDGET };
 
-  const averageHitRate = average(warmRows.map((row) => row.hitRate));
+  const averageHitRate = calculateTokenHitRate(rows);
   if (averageHitRate >= TARGET_CACHE_HIT_RATE) return { ...DEFAULT_DYNAMIC_BUDGET };
 
   const pressure = averageHitRate < 80 ? 0.45 : 0.65;
@@ -422,6 +420,13 @@ function scaleBudget(budget: DynamicPromptBudget, factor: number): DynamicPrompt
 function average(values: number[]): number {
   if (values.length === 0) return 0;
   return Math.round((values.reduce((sum, value) => sum + value, 0) / values.length) * 100) / 100;
+}
+
+function calculateTokenHitRate(rows: Pick<TelemetrySample, 'promptTokens' | 'cachedPromptTokens'>[]): number {
+  const promptTokens = rows.reduce((sum, row) => sum + row.promptTokens, 0);
+  if (promptTokens <= 0) return 0;
+  const cachedPromptTokens = rows.reduce((sum, row) => sum + row.cachedPromptTokens, 0);
+  return Math.round((cachedPromptTokens / promptTokens) * 10000) / 100;
 }
 
 async function persistPromptCacheTelemetry(sample: TelemetrySample): Promise<void> {
@@ -577,13 +582,16 @@ function buildOptimizationAdvice(rows: TelemetrySample[], averageHitRate: number
 function buildOverallStats(stats: PromptCacheRuntimeStats[]): PromptCacheRuntimeStats {
   const calls = stats.reduce((sum, stat) => sum + stat.calls, 0);
   const warmCalls = stats.reduce((sum, stat) => sum + stat.warmCalls, 0);
+  const weightedHitRate = calls > 0
+    ? Math.round((stats.reduce((sum, stat) => sum + stat.averageHitRate * stat.calls, 0) / calls) * 100) / 100
+    : 0;
   return {
     scope: 'all',
     agentId: 'all',
     calls,
     warmCalls,
     lastHitRate: stats[0]?.lastHitRate || 0,
-    averageHitRate: average(stats.map((stat) => stat.averageHitRate).filter((value) => value > 0)),
+    averageHitRate: weightedHitRate,
     averagePromptTokens: Math.round(average(stats.map((stat) => stat.averagePromptTokens).filter((value) => value > 0))),
     averageCachedTokens: Math.round(average(stats.map((stat) => stat.averageCachedTokens).filter((value) => value > 0))),
     averageCompletionTokens: Math.round(average(stats.map((stat) => stat.averageCompletionTokens).filter((value) => value > 0))),

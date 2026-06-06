@@ -228,11 +228,21 @@ describe('prompt cache planning', () => {
 
     expect(dashboard.stats[0].scope).toBe('master:mimo-v2.5-pro');
     expect(dashboard.stats[0].warmCalls).toBe(1);
-    expect(dashboard.stats[0].averageHitRate).toBe(96.97);
+    expect(dashboard.stats[0].averageHitRate).toBe(48.48);
     expect(dashboard.recent).toHaveLength(2);
     expect(dashboard.cost.savedPromptTokens).toBe(1600);
     expect(dashboard.cost.cacheSavingsRate).toBe(48.48);
     expect(dashboard.cost.estimatedUncachedCostUnits).toBe(3450);
     expect(dashboard.cost.savedCostUnits).toBeGreaterThan(0);
+  });
+
+  test('includes cold misses in runtime hit rate and budget pressure', () => {
+    const scope = 'master:mimo-v2.5-pro';
+    recordPromptCacheUsage(scope, { promptTokens: 1650, cachedPromptTokens: 0, completionTokens: 70 });
+    const stats = recordPromptCacheUsage(scope, { promptTokens: 1650, cachedPromptTokens: 1600, completionTokens: 80 });
+
+    expect(stats.averageHitRate).toBe(48.48);
+    expect(stats.budgetPressure).toBe('tighten');
+    expect(stats.recommendedBudget.adaptiveContextChars).toBeLessThan(420);
   });
 });
