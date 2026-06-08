@@ -1,0 +1,11 @@
+model = "gpt-5.5"
+model_provider = "metapi"
+approval_policy = "never"
+sandbox_mode = "danger-full-access"
+model_reasoning_effort = "high"
+
+[model_providers.metapi]
+name = "metapi"
+base_url = "http://47.99.116.131:4000/v1"
+wire_api = "chat"
+env_key = "METAPI_API_KEY"
