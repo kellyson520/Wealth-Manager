@@ -33,7 +33,25 @@ describe('record_repayment Tool', () => {
 
     expect(result.success).toBe(false);
     expect(result.error).toBe('还款金额不能超过剩余金额');
+    expect(mockDb.execAsync).toHaveBeenNthCalledWith(1, 'BEGIN IMMEDIATE TRANSACTION');
+    expect(mockDb.execAsync).toHaveBeenNthCalledWith(2, 'COMMIT');
     expect(mockDb.runAsync).not.toHaveBeenCalled();
+  });
+
+  test('reads debt balance after acquiring write lock', async () => {
+    const mockDb = await getMockDb();
+    const calls: string[] = [];
+    mockDb.execAsync.mockImplementation(async (sql: string) => {
+      calls.push(sql);
+    });
+    mockDb.getFirstAsync.mockImplementation(async () => {
+      calls.push('SELECT debt');
+      return { remaining: 100, principal: 200 };
+    });
+
+    await record_repayment({ debtId: 'debt-1', amount: 40 });
+
+    expect(calls).toEqual(['BEGIN IMMEDIATE TRANSACTION', 'SELECT debt', 'COMMIT']);
   });
 
   test('records repayment and updates debt inside a transaction', async () => {

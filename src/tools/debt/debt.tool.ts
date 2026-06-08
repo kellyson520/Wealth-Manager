@@ -151,22 +151,27 @@ export async function record_repayment(params: {
     const date = params.date || now.split('T')[0];
     const repaymentId = uuidv4();
 
-    const debt = await db.getFirstAsync<{ remaining: number; principal: number }>(
-      'SELECT remaining, principal FROM debts WHERE id = ?', [params.debtId]
-    );
-
-    if (!debt) {
-      return { success: false, error: '未找到该债务记录' };
-    }
-    if (params.amount > debt.remaining) {
-      return { success: false, error: '还款金额不能超过剩余金额' };
-    }
-
-    const newRemaining = debt.remaining - params.amount;
-
-    const newStatus = newRemaining === 0 ? 'cleared' : 'active';
+    let newRemaining = 0;
+    let newStatus: DebtRecord['status'] = 'active';
     try {
       await db.execAsync('BEGIN IMMEDIATE TRANSACTION');
+
+      const debt = await db.getFirstAsync<{ remaining: number; principal: number }>(
+        'SELECT remaining, principal FROM debts WHERE id = ?', [params.debtId]
+      );
+
+      if (!debt) {
+        await db.execAsync('COMMIT');
+        return { success: false, error: '未找到该债务记录' };
+      }
+      if (params.amount > debt.remaining) {
+        await db.execAsync('COMMIT');
+        return { success: false, error: '还款金额不能超过剩余金额' };
+      }
+
+      newRemaining = debt.remaining - params.amount;
+      newStatus = newRemaining === 0 ? 'cleared' : 'active';
+
       await db.runAsync(
         'INSERT INTO repayments (id, debt_id, amount, date, note, created_at) VALUES (?, ?, ?, ?, ?, ?)',
         [repaymentId, params.debtId, params.amount, date, params.note || '', now]
