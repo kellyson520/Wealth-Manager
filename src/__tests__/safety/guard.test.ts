@@ -126,4 +126,16 @@ describe('Rate Limiter', () => {
     });
     expect(result.allowed).toBe(true);
   });
+
+  test('blocks calls over the per-hour limit', () => {
+    // Use high per-minute limit so hourly limit kicks in first
+    const limit = { maxCallsPerMinute: 1000, maxCallsPerHour: 5, windowMs: 60000 };
+    for (let i = 0; i < 5; i++) {
+      const result = checkRateLimit('hourly', limit);
+      expect(result.allowed).toBe(true);
+    }
+    const blocked = checkRateLimit('hourly', limit);
+    expect(blocked.allowed).toBe(false);
+    expect(blocked.reason).toContain('频率超限');
+  });
 });
