@@ -49,7 +49,7 @@ export async function create_savings_goal(params: {
   targetAmount: number;
   deadline?: string;
 }): Promise<ToolResult> {
-  if (!params.name || params.targetAmount <= 0) {
+  if (!params.name || !Number.isFinite(params.targetAmount) || params.targetAmount <= 0) {
     return { success: false, error: '请输入有效的目标名称和金额', errorCode: '1002' };
   }
 
