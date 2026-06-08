@@ -104,6 +104,10 @@ describe('update_savings_progress', () => {
     expect(result.success).toBe(true);
     const data = result.data as any;
     expect(data.length).toBe(1);
+    expect(mockDb.runAsync).toHaveBeenCalledWith(
+      'UPDATE savings_goals SET current_amount = ? WHERE id = ?',
+      [1000, 'goal1']
+    );
   });
 
   test('handles zero income gracefully', async () => {

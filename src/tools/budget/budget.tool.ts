@@ -182,7 +182,8 @@ export async function update_savings_progress(params: {
       const totalExpense = expenseResult?.total || 0;
       const savingsRate = 0.2;
       const estimatedSavings = Math.max(0, (totalIncome - totalExpense) * savingsRate);
-      const newAmount = Math.min(estimatedSavings, goal.targetAmount);
+      const targetAmount = getGoalTargetAmount(goal);
+      const newAmount = Math.min(estimatedSavings, targetAmount);
 
       await db.runAsync(
         'UPDATE savings_goals SET current_amount = ? WHERE id = ?',
@@ -197,4 +198,10 @@ export async function update_savings_progress(params: {
     captureError('BudgetTool.update_savings_progress', e, 'Update savings progress failed');
     return { success: false, error: '更新储蓄进度失败', errorCode: '1000' };
   }
+}
+
+function getGoalTargetAmount(goal: SavingsGoal): number {
+  const rawGoal = goal as SavingsGoal & { target_amount?: number };
+  const targetAmount = rawGoal.targetAmount ?? rawGoal.target_amount ?? 0;
+  return Number.isFinite(targetAmount) && targetAmount > 0 ? targetAmount : 0;
 }
