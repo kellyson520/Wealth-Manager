@@ -46,8 +46,9 @@ export async function matchRules(
 
     const totalCond = countConditions(rule.conditions);
     const matchedCond = countMatchedConditions(rule.conditions, facts);
+    const groupResult = evaluateConditionGroup(rule.conditions, facts);
 
-    if (matchedCond === 0) continue;
+    if (matchedCond === 0 || !groupResult) continue;
 
     const condRatio = totalCond > 0 ? matchedCond / totalCond : 0;
     const matchResult: RuleMatchResult = {
@@ -58,12 +59,7 @@ export async function matchRules(
       confidence: condRatio,
     };
 
-    const groupResult = evaluateConditionGroup(rule.conditions, facts);
-    if (groupResult) {
-      matchResult.confidence = Math.max(matchResult.confidence, 0.8);
-    } else if (rule.conditions.operator === 'or') {
-      matchResult.confidence = Math.max(matchResult.confidence, 0.6);
-    }
+    matchResult.confidence = Math.max(matchResult.confidence, 0.8);
 
     if (matchResult.confidence >= effectiveConfig.minConfidence) {
       results.push(matchResult);
