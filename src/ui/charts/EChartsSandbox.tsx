@@ -2,7 +2,7 @@ import React, { useEffect, useState, useRef } from 'react';
 import { View, StyleSheet, ActivityIndicator, Text } from 'react-native';
 import { WebView, WebViewMessageEvent } from 'react-native-webview';
 import { Asset } from 'expo-asset';
-import { sanitizeChartConfig, SanitizeResult } from './sanitizer';
+import { sanitizeChartConfig, sanitizeJSONString, SanitizeResult } from './sanitizer';
 import { colors } from '../theme';
 
 interface EChartsSandboxProps {
@@ -167,13 +167,10 @@ export default function EChartsSandbox({ config, height = 200, onError }: EChart
     if (configStr === configRef.current) return;
     configRef.current = configStr;
 
-    const escaped = configStr
-      .replace(/\\/g, '\\\\')
-      .replace(/'/g, "\\'")
-      .replace(/\n/g, '\\n');
+    const escaped = sanitizeJSONString(configStr);
 
     webViewRef.current.injectJavaScript(
-      `try { renderChart('${escaped}'); true; } catch(e) { window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'error', message: e.message })); true; }`
+      `try { renderChart(${JSON.stringify(escaped)}); true; } catch(e) { window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'error', message: e.message })); true; }`
     );
   }, [html, webViewReady, sanitizeResult]);
 
