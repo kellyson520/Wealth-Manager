@@ -296,13 +296,17 @@ export async function split_bill(params: {
       await db.runAsync('UPDATE bills SET note = note || ? WHERE id = ?', [
         ` [已拆分为${params.splits.length}笔]`, params.billId,
       ]);
+
+      const rebuildResult = await rebuildHashChain();
+      if (!rebuildResult.success) {
+        throw new Error('Failed to rebuild hash chain');
+      }
+
       await db.execAsync('COMMIT');
     } catch (e) {
       await db.execAsync('ROLLBACK').catch(() => undefined);
       throw e;
     }
-
-    await rebuildHashChain();
 
     return { success: true, data: { originalBillId: params.billId, originalAmount: original.amount, splits: created } };
   } catch (e) {

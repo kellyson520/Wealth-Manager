@@ -29,7 +29,7 @@ jest.mock('../../core/database/database', () => {
 
 jest.mock('../../core/hashchain/hashchain', () => ({
   generateHashForBill: jest.fn().mockResolvedValue('hash'),
-  rebuildHashChain: jest.fn().mockResolvedValue({ valid: true }),
+  rebuildHashChain: jest.fn().mockResolvedValue({ success: true }),
 }));
 
 import { add_bill, modify_bill, refund_bill, search_bills, split_bill } from '../../tools/bills/bills.tool';
@@ -397,6 +397,34 @@ describe('split_bill Tool', () => {
     expect(mockDb.execAsync).toHaveBeenNthCalledWith(1, 'BEGIN IMMEDIATE TRANSACTION');
     expect(mockDb.execAsync).toHaveBeenNthCalledWith(2, 'ROLLBACK');
     expect(rebuildHashChain).not.toHaveBeenCalled();
+  });
+
+  test('rolls back when rebuilding the hash chain fails after splitting', async () => {
+    const mockDb = await getMockDb();
+    mockDb.getFirstAsync.mockResolvedValue({
+      id: 'bill-1',
+      amount: 100,
+      type: 'expense',
+      category: '餐饮',
+      merchant: '午饭',
+      date: '2024-01-15',
+    });
+    mockDb.runAsync.mockResolvedValue({ changes: 1 });
+    (rebuildHashChain as jest.Mock).mockResolvedValue({ success: false });
+
+    const result = await split_bill({
+      billId: 'bill-1',
+      splits: [
+        { amount: 40, category: '餐饮' },
+        { amount: 60, category: '交通' },
+      ],
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.errorCode).toBe('1000');
+    expect(mockDb.execAsync).toHaveBeenNthCalledWith(1, 'BEGIN IMMEDIATE TRANSACTION');
+    expect(mockDb.execAsync).toHaveBeenNthCalledWith(2, 'ROLLBACK');
+    expect(mockDb.execAsync).not.toHaveBeenCalledWith('COMMIT');
   });
 });
 
