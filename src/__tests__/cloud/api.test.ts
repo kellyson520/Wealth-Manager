@@ -276,7 +276,7 @@ describe('Cloud LLM API - Safety Chain', () => {
 
     test('rejects local or private custom base URL before sending API key', async () => {
       const blockedUrls = [
-        'https://localhost:11434/v1',
+        'https://localhost./v1',
         'https://127.0.0.1:11434/v1',
         'https://10.0.0.5/v1',
         'https://172.16.0.5/v1',

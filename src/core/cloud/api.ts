@@ -206,7 +206,7 @@ function validateCloudBaseUrl(baseUrl: string): string {
     throw new Error('云端 API 地址必须使用 HTTPS');
   }
 
-  const hostname = url.hostname.toLowerCase();
+  const hostname = url.hostname.toLowerCase().replace(/\.+$/, '');
   if (
     hostname === 'localhost' ||
     hostname.endsWith('.localhost') ||
