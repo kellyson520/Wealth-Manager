@@ -7,7 +7,7 @@ let db: SQLite.SQLiteDatabase | null = null;
 export async function getDatabase(): Promise<SQLite.SQLiteDatabase> {
   if (db) return db;
   const key = getDatabaseKey();
-  db = await SQLite.openDatabaseAsync('wealth_manager.db', { key });
+  db = await SQLite.openDatabaseAsync('wealth_manager.db', { key } as SQLite.SQLiteOpenOptions & { key: string });
   await configureDatabaseSecurity(db);
   await initTables(db);
   return db;
