@@ -1,10 +1,11 @@
 import { getDatabase } from '../../core/database/database';
 import { v4 as uuidv4 } from 'uuid';
 import { captureError } from '../../core/logger/logger';
-import type { ToolResult } from '../../shared/types';
+import type { ToolResult, AgentId } from '../../shared/types';
 
 interface SharedLink {
   id: string;
+  ownerId: string;
   bills: { id: string; merchant: string; amount: number; date: string; category: string }[];
   createdAt: string;
   expiresAt?: string;
@@ -17,11 +18,25 @@ function generateToken(): string {
   return uuidv4().replace(/-/g, '').slice(0, 12);
 }
 
+/**
+ * Validate that the requesting agent/user owns the resource.
+ * In a multi-user deployment this should resolve the caller's user ID
+ * from the session.  For the current single-user-agent architecture we
+ * enforce that only the agent that created the link (ownerId) can
+ * access or delete it.
+ */
+function assertOwnership(link: SharedLink, callerId: string): void {
+  if (link.ownerId !== callerId) {
+    throw new Error('PERMISSION_DENIED: 无权访问该资源');
+  }
+}
+
 export async function create_link(params: {
   billIds?: string[];
   startDate?: string;
   endDate?: string;
   expiresInHours?: number;
+  ownerId?: string;
 }): Promise<ToolResult> {
   try {
     const db = await getDatabase();
@@ -56,6 +71,7 @@ export async function create_link(params: {
 
     const link: SharedLink = {
       id,
+      ownerId: params.ownerId || 'default',
       bills: rows.map((r) => ({
         id: r.id, merchant: r.merchant, amount: r.amount, date: r.date, category: r.category,
       })),
@@ -90,6 +106,7 @@ export async function create_link(params: {
 
 export async function leave_shared(params: {
   token: string;
+  callerId?: string;
 }): Promise<ToolResult> {
   try {
     if (!params.token) return { success: false, error: '分享令牌不能为空' };
@@ -100,6 +117,13 @@ export async function leave_shared(params: {
           linkStore.delete(id);
           return { success: false, error: '分享链接已过期' };
         }
+
+        // Enforce ownership: only the owner or explicitly permitted caller can access
+        const caller = params.callerId || 'default';
+        if (link.ownerId !== caller) {
+          return { success: false, error: '无权访问该分享链接', errorCode: 'PERMISSION_DENIED' };
+        }
+
         return {
           success: true,
           data: { linkId: id, bills: link.bills, createdAt: link.createdAt },
@@ -116,18 +140,24 @@ export async function leave_shared(params: {
 
 export async function delete_link(params: {
   linkId: string;
+  callerId?: string;
 }): Promise<ToolResult> {
   try {
     if (!params.linkId) return { success: false, error: '链接ID不能为空' };
 
-    const existed = linkStore.has(params.linkId);
-    linkStore.delete(params.linkId);
+    const link = linkStore.get(params.linkId);
+    if (!link) return { success: false, error: '分享链接不存在' };
 
-    if (!existed) return { success: false, error: '分享链接不存在' };
+    // Enforce ownership: only the owner can delete
+    const caller = params.callerId || 'default';
+    assertOwnership(link, caller);
+
+    linkStore.delete(params.linkId);
 
     return { success: true, data: { linkId: params.linkId, deleted: true } };
   } catch (e) {
+    const msg = e instanceof Error ? e.message : '删除分享链接失败';
     captureError('delete_link', e, 'Failed to delete share link');
-    return { success: false, error: '删除分享链接失败' };
+    return { success: false, error: msg, errorCode: msg.includes('PERMISSION_DENIED') ? 'PERMISSION_DENIED' : undefined };
   }
 }

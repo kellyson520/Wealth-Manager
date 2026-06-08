@@ -6,15 +6,14 @@ let db: SQLite.SQLiteDatabase | null = null;
 
 export async function getDatabase(): Promise<SQLite.SQLiteDatabase> {
   if (db) return db;
-  db = await SQLite.openDatabaseAsync('wealth_manager.db');
+  const key = getDatabaseKey();
+  db = await SQLite.openDatabaseAsync('wealth_manager.db', { key });
   await configureDatabaseSecurity(db);
   await initTables(db);
   return db;
 }
 
 async function configureDatabaseSecurity(db: SQLite.SQLiteDatabase): Promise<void> {
-  const key = getDatabaseKey();
-  await db.execAsync(`PRAGMA key = '${key.replace(/'/g, "''")}'`);
   await db.execAsync('PRAGMA foreign_keys = ON');
 }
 
@@ -434,9 +433,17 @@ function stableStringify(value: unknown): string {
 async function hashParams(params: Record<string, unknown>): Promise<string> {
   const input = stableStringify(params);
   try {
-    const bytes = new TextEncoder().encode(input);
-    const digest = await crypto.subtle.digest('SHA-256', bytes);
-    return Array.from(new Uint8Array(digest)).map((b) => b.toString(16).padStart(2, '0')).join('');
+    const webCrypto = getWebCryptoForHashing();
+    const secret = getHashSecret();
+    const key = await webCrypto.subtle.importKey(
+      'raw',
+      new TextEncoder().encode(secret),
+      { name: 'HMAC', hash: 'SHA-256' },
+      false,
+      ['sign']
+    );
+    const signature = await webCrypto.subtle.sign('HMAC', key, new TextEncoder().encode(input));
+    return Array.from(new Uint8Array(signature)).map((b) => b.toString(16).padStart(2, '0')).join('');
   } catch {
     let hash = 2166136261;
     for (let i = 0; i < input.length; i++) {
@@ -445,4 +452,22 @@ async function hashParams(params: Record<string, unknown>): Promise<string> {
     }
     return (hash >>> 0).toString(16).padStart(8, '0');
   }
+}
+
+function getWebCryptoForHashing(): Crypto {
+  if (typeof globalThis.crypto?.subtle !== 'undefined') {
+    return globalThis.crypto;
+  }
+  const nodeCrypto = require('crypto') as { webcrypto?: Crypto };
+  if (nodeCrypto.webcrypto?.subtle) {
+    return nodeCrypto.webcrypto;
+  }
+  throw new Error('WebCrypto unavailable');
+}
+
+function getHashSecret(): string {
+  const env = (globalThis as unknown as {
+    process?: { env?: Record<string, string | undefined> };
+  }).process?.env;
+  return env?.EXPO_PUBLIC_WEALTH_MANAGER_DB_KEY || 'development-only-wealth-manager-db-key';
 }
