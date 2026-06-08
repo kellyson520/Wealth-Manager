@@ -44,8 +44,8 @@ export async function import_csv(params: {
           continue;
         }
 
-        const amount = parseFloat(cols[1]);
-        if (isNaN(amount) || amount <= 0) {
+        const amount = parseStrictPositiveAmount(cols[1]);
+        if (amount === null) {
           errors.push({ line: i + 1, raw: line, error: '金额无效' });
           continue;
         }
@@ -192,6 +192,15 @@ function parseCSVLine(line: string, delimiter: string): string[] {
   }
   result.push(current.trim());
   return result;
+}
+
+function parseStrictPositiveAmount(value: string): number | null {
+  const trimmed = value.trim();
+  if (!/^\d+(?:\.\d+)?$/.test(trimmed)) {
+    return null;
+  }
+  const amount = Number(trimmed);
+  return Number.isFinite(amount) && amount > 0 ? amount : null;
 }
 
 function parseWeChatText(text: string): ParsedBill[] {
