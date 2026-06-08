@@ -58,10 +58,19 @@ ${echartsJS}
 (function() {
   'use strict';
 
+  var resizeHandler = null;
+
   function reportError(msg) {
     try {
       window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'error', message: msg }));
     } catch(e) {}
+  }
+
+  function clearResizeHandler() {
+    if (resizeHandler) {
+      window.removeEventListener('resize', resizeHandler);
+      resizeHandler = null;
+    }
   }
 
   function renderChart(configStr) {
@@ -69,6 +78,8 @@ ${echartsJS}
     if (!container) { reportError('Container not found'); return; }
 
     if (!window.echarts) { reportError('ECharts not loaded'); return; }
+
+    clearResizeHandler();
 
     var existing = window.echarts.getInstanceByDom(container);
     if (existing) existing.dispose();
@@ -89,10 +100,12 @@ ${echartsJS}
 
       chart.setOption(config);
 
-      window.addEventListener('resize', function() {
+      resizeHandler = function() {
         if (chart && !chart.isDisposed()) chart.resize();
-      });
+      };
+      window.addEventListener('resize', resizeHandler);
     } catch(e) {
+      clearResizeHandler();
       reportError('ECharts error: ' + e.message);
       container.innerHTML = '<div class="error-box">图表渲染失败</div>';
     }
