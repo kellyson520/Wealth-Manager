@@ -47,6 +47,7 @@ describe('Sharing permission bypass fix (Fix #3)', () => {
       expect(result.success).toBe(true);
       expect(result.data).toHaveProperty('linkId');
       expect(result.data).toHaveProperty('token');
+      expect((result.data as any).token).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
     });
   });
 

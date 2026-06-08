@@ -15,7 +15,7 @@ interface SharedLink {
 const linkStore = new Map<string, SharedLink>();
 
 function generateToken(): string {
-  return uuidv4().replace(/-/g, '').slice(0, 12);
+  return crypto.randomUUID();
 }
 
 /**
