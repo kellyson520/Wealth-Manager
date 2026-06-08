@@ -23,7 +23,10 @@ export default function ConfirmCard({ data, onConfirm, onCancel }: ConfirmCardPr
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
-    if (!data.cooldownSeconds || data.cooldownSeconds <= 0) return;
+    if (!data.cooldownSeconds || data.cooldownSeconds <= 0) {
+      setCooldownRemaining(0);
+      return;
+    }
     setCooldownRemaining(data.cooldownSeconds);
     timerRef.current = setInterval(() => {
       setCooldownRemaining((prev) => {
