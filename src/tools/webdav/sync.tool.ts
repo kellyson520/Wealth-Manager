@@ -318,7 +318,11 @@ export async function sync_download(params?: {
 
     let filename: string;
     if (params?.filename) {
-      filename = params.filename;
+      const sanitizedFilename = sanitizeSyncFilename(params.filename);
+      if (!sanitizedFilename) {
+        return { success: false, error: '同步文件名无效' };
+      }
+      filename = sanitizedFilename;
     } else {
       const listResult = await webdavRequest(config, 'PROPFIND', folder);
       if (!listResult.ok) {
@@ -495,9 +499,20 @@ async function mergeData(
 function sanitizePathSegment(segment: string): string {
   return segment
     .split('/')
-    .filter(Boolean)
-    .map((part) => part.replace(/[^A-Za-z0-9._-]/g, '_'))
+    .map((part) => part.trim().replace(/[^A-Za-z0-9._-]/g, '_'))
+    .filter((part) => part && part !== '.' && part !== '..')
     .join('/');
+}
+
+function sanitizeSyncFilename(filename: string): string | null {
+  const trimmed = filename.trim();
+  if (!/^[A-Za-z0-9._-]+\.json$/i.test(trimmed)) {
+    return null;
+  }
+  if (trimmed === '.' || trimmed === '..' || trimmed.includes('..')) {
+    return null;
+  }
+  return trimmed;
 }
 
 function isPrimitiveDbValue(value: unknown): boolean {
@@ -527,7 +542,7 @@ export async function list_sync_files(params?: {
       return { success: false, error: '请先配置并启用 WebDAV 同步' };
     }
 
-    const folder = params?.subfolder ? `/wealth_manager/${params.subfolder.replace(/^\//, '')}` : '/wealth_manager';
+    const folder = params?.subfolder ? `/wealth_manager/${sanitizePathSegment(params.subfolder)}` : '/wealth_manager';
     const result = await webdavRequest(config, 'PROPFIND', folder);
 
     if (!result.ok || !result.body) {

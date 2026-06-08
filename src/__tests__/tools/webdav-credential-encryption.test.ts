@@ -18,7 +18,7 @@ jest.mock('expo-secure-store', () => ({
 
 import { decryptPayload, encryptPayload } from '../../core/cloud/sync-crypto';
 import { getDatabase } from '../../core/database/database';
-import { configure_webdav, get_sync_status } from '../../tools/webdav/sync.tool';
+import { configure_webdav, get_sync_status, list_sync_files, sync_download } from '../../tools/webdav/sync.tool';
 import * as SecureStore from 'expo-secure-store';
 
 const secureStore = SecureStore as jest.Mocked<typeof SecureStore>;
@@ -112,5 +112,64 @@ describe('WebDAV credential encryption', () => {
     await expect(
       decryptPayload(saved.passwordCiphertext, 'modern-secure-store-secret-32-bytes', saved.passwordSalt)
     ).resolves.toBe('legacy-password');
+  });
+});
+
+describe('WebDAV sync path validation', () => {
+  async function mockStoredConfig() {
+    const encrypted = await encryptPayload('webdav-password', 'secure-store-secret');
+    expect(encrypted).not.toBeNull();
+
+    const mockDb = await getMockDb();
+    mockDb.getFirstAsync.mockResolvedValue({
+      value: JSON.stringify({
+        url: 'https://dav.example.com',
+        username: 'alice',
+        passwordCiphertext: encrypted!.ciphertext,
+        passwordSalt: encrypted!.salt,
+        enabled: true,
+      }),
+    });
+    secureStore.getItemAsync.mockResolvedValue('secure-store-secret');
+  }
+
+  beforeEach(async () => {
+    jest.clearAllMocks();
+    const mockDb = await getMockDb();
+    mockDb.runAsync.mockResolvedValue({ changes: 1 });
+    mockDb.getAllAsync.mockResolvedValue([]);
+  });
+
+  test('rejects sync download filenames that include path traversal', async () => {
+    await mockStoredConfig();
+    (globalThis as any).fetch = jest.fn();
+
+    const result = await sync_download({
+      filename: '../secrets.json',
+      decrypt: true,
+      passphrase: 'backup-passphrase',
+      salt: 'salt',
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.error).toBe('同步文件名无效');
+    expect(globalThis.fetch).not.toHaveBeenCalled();
+  });
+
+  test('sanitizes list_sync_files subfolder before building the WebDAV path', async () => {
+    await mockStoredConfig();
+    (globalThis as any).fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      status: 207,
+      text: jest.fn().mockResolvedValue('<D:href>/wealth_manager/safe/backup.json</D:href>'),
+    });
+
+    const result = await list_sync_files({ subfolder: '../team folder' });
+
+    expect(result.success).toBe(true);
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      'https://dav.example.com/wealth_manager/team_folder',
+      expect.objectContaining({ method: 'PROPFIND' })
+    );
   });
 });
