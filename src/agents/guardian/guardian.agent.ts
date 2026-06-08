@@ -1,5 +1,5 @@
 import { IntentResult, AgentId } from '../../shared/types';
-import { run_safety_check, analyze_subscriptions, sanitize_input, sanitize_for_cloud, verify_hash_chain, repair_hash_chain, export_audit_package, get_privacy_report, revoke_cloud_access } from '../../tools/security/security.tool';
+import { run_safety_check, analyze_subscriptions, sanitize_input, sanitize_for_cloud, verify_hash_chain, repair_hash_chain, export_audit_package, get_privacy_report } from '../../tools/security/security.tool';
 import { create_recurring_task, get_recurring_tasks, delete_recurring_task, register_shortcut, schedule_local_notification, get_notification_permission_status } from '../../tools/automation/automation.tool';
 import {
   canCallTool,
@@ -27,7 +27,7 @@ export async function handleIntent(intent: IntentResult): Promise<string> {
     case 'export_audit':
       return handleExportAudit(intent.params);
     case 'revoke_cloud':
-      return handleRevokeCloud();
+      return handleRevokeCloud(intent.params);
     case 'create_reminder':
       return handleCreateReminder(intent.params);
     case 'get_reminders':
@@ -301,11 +301,27 @@ async function handleExportAudit(params: Record<string, unknown>): Promise<strin
   return `📦 审计包已导出，包含 ${data.entries.length} 条记录。\n导出时间：${new Date(data.exportedAt).toLocaleString()}`;
 }
 
-async function handleRevokeCloud(): Promise<string> {
-  const result = await revoke_cloud_access();
+async function handleRevokeCloud(params: Record<string, unknown>): Promise<string> {
+  if (params.confirmed !== true) {
+    return `⚠️ 撤销云端访问是敏感操作，需要用户确认。\n\n如确认撤销，请回复"确认撤销云端访问"。`;
+  }
+
+  const toolCheck = canCallTool(AGENT_ID, 'revoke_cloud_access');
+  if (!toolCheck.allowed) {
+    return `操作被拒绝：${toolCheck.reason}`;
+  }
+
+  const tool = getTool('revoke_cloud_access');
+  if (!tool) return '撤销云端访问功能暂不可用。';
+
+  const result = await executeTool(
+    tool,
+    {},
+    { agentId: AGENT_ID, userConfirmed: true }
+  );
 
   if (!result.success) {
-    return `⚠️ 撤销云端访问是敏感操作，需要用户确认。\n\n如确认撤销，请回复"确认撤销云端访问"。`;
+    return `撤销云端访问失败：${result.error}`;
   }
 
   return '✅ 云端访问已撤销。';

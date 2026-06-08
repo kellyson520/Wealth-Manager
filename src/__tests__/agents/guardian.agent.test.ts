@@ -2,6 +2,8 @@ import { handleIntent } from '../../agents/guardian/guardian.agent';
 import { sanitizeText, sanitizeCloudData } from '../../agents/guardian/guardian.agent';
 
 const mockSyncUploadHandler = jest.fn().mockResolvedValue({ success: true });
+const mockRevokeCloudTool = { handler: jest.fn().mockResolvedValue({ success: true }) };
+const mockExecuteTool = jest.fn().mockResolvedValue({ success: true });
 const mockGetSyncStatusHandler = jest.fn().mockResolvedValue({
   success: true,
   data: { configured: true, enabled: true, lastSync: null },
@@ -82,8 +84,12 @@ jest.mock('../../agents/_shared', () => ({
     if (name === 'sync_upload') {
       return { handler: mockSyncUploadHandler };
     }
+    if (name === 'revoke_cloud_access') {
+      return mockRevokeCloudTool;
+    }
     return undefined;
   }),
+  executeTool: (...args: unknown[]) => mockExecuteTool(...args),
   rememberThis: jest.fn().mockResolvedValue(undefined),
   rememberMoment: jest.fn().mockResolvedValue(undefined),
 }));
@@ -258,6 +264,37 @@ describe('Guardian Agent', () => {
 
       expect(mockSyncUploadHandler).toHaveBeenCalledWith({ confirmed: true });
       expect(reply).toContain('数据已成功上传');
+    });
+
+    test('requires explicit confirmation before revoking cloud access', async () => {
+      const { revoke_cloud_access } = require('../../tools/security/security.tool');
+
+      const reply = await handleIntent({
+        intent: 'revoke_cloud',
+        params: {},
+        confidence: 0.8,
+        agent: 'guardian',
+      });
+
+      expect(reply).toContain('需要用户确认');
+      expect(revoke_cloud_access).not.toHaveBeenCalled();
+      expect(mockExecuteTool).not.toHaveBeenCalled();
+    });
+
+    test('revokes cloud access through the tool execution boundary after confirmation', async () => {
+      const reply = await handleIntent({
+        intent: 'revoke_cloud',
+        params: { confirmed: true },
+        confidence: 0.8,
+        agent: 'guardian',
+      });
+
+      expect(mockExecuteTool).toHaveBeenCalledWith(
+        mockRevokeCloudTool,
+        {},
+        { agentId: 'guardian', userConfirmed: true }
+      );
+      expect(reply).toContain('云端访问已撤销');
     });
 
     test('handles unknown intent with help message', async () => {
