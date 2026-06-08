@@ -14,12 +14,28 @@ jest.mock('../../core/logger/logger', () => ({
   captureError: jest.fn(),
 }));
 
-import { check_budget_overrun, update_savings_progress } from '../../tools/budget/budget.tool';
+import { check_budget_overrun, set_budget, update_savings_progress } from '../../tools/budget/budget.tool';
 import * as db from '../../core/database/database';
 
 function getMockDb() {
   return db.getDatabase() as any;
 }
+
+describe('set_budget', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  test.each([NaN, Infinity, -Infinity])('rejects non-finite budget limit %p', async limit => {
+    const mockDb = await getMockDb();
+
+    const result = await set_budget({ category: '餐饮', limit });
+
+    expect(result.success).toBe(false);
+    expect(result.errorCode).toBe('1002');
+    expect(mockDb.runAsync).not.toHaveBeenCalled();
+  });
+});
 
 describe('check_budget_overrun', () => {
   beforeEach(async () => {

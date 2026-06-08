@@ -8,7 +8,7 @@ export async function set_budget(params: {
   limit: number;
   period?: 'monthly' | 'weekly';
 }): Promise<ToolResult> {
-  if (!params.category || params.limit <= 0) {
+  if (!params.category || !Number.isFinite(params.limit) || params.limit <= 0) {
     return { success: false, error: '请输入有效的分类和预算金额', errorCode: '1002' };
   }
 
