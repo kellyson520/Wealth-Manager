@@ -23,4 +23,30 @@ describe('Chart config sanitizer', () => {
     expect(result.valid).toBe(false);
     expect(result.error).toContain('Forbidden key');
   });
+
+  test('rejects accessors without invoking them', () => {
+    const getter = jest.fn(() => '<script>alert(1)</script>');
+    const payload = { title: {} };
+    Object.defineProperty(payload.title, 'text', {
+      enumerable: true,
+      get: getter,
+    });
+
+    const result = sanitizeChartConfig(payload);
+
+    expect(result.valid).toBe(false);
+    expect(result.error).toContain('accessor');
+    expect(getter).not.toHaveBeenCalled();
+  });
+
+  test('rejects toJSON methods without invoking them', () => {
+    const toJSON = jest.fn(() => ({ title: { text: '<script>alert(1)</script>' } }));
+    const payload = { toJSON };
+
+    const result = sanitizeChartConfig(payload);
+
+    expect(result.valid).toBe(false);
+    expect(result.error).toContain('non-JSON value');
+    expect(toJSON).not.toHaveBeenCalled();
+  });
 });

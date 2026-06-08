@@ -34,43 +34,43 @@ export interface SanitizeResult {
   error?: string;
 }
 
-function validateJSONDepth(obj: unknown, depth: number): boolean {
-  if (depth > MAX_CONFIG_DEPTH) return false;
-  if (typeof obj !== 'object' || obj === null) return true;
-  if (Array.isArray(obj)) {
-    for (const item of obj) {
-      if (!validateJSONDepth(item, depth + 1)) return false;
-    }
-    return true;
-  }
-  for (const value of Object.values(obj as Record<string, unknown>)) {
-    if (!validateJSONDepth(value, depth + 1)) return false;
-  }
-  return true;
-}
+function validateChartValue(value: unknown, path: string, depth: number): string | null {
+  if (depth > MAX_CONFIG_DEPTH) return `Config exceeds max depth of ${MAX_CONFIG_DEPTH}`;
 
-function scanForInjection(value: unknown, path: string): string | null {
   if (typeof value === 'string') {
-    if (hasInjectionPattern(value)) {
-      return `Suspicious pattern at ${path}`;
+    return hasInjectionPattern(value) ? `Suspicious pattern at ${path}` : null;
+  }
+
+  if (typeof value === 'function' || typeof value === 'symbol' || typeof value === 'bigint') {
+    return `Config contains non-JSON value at ${path}`;
+  }
+
+  if (typeof value !== 'object' || value === null) return null;
+
+  if (!Array.isArray(value)) {
+    const prototype = Object.getPrototypeOf(value);
+    if (prototype !== Object.prototype && prototype !== null) {
+      return `Config contains unsupported object at ${path}`;
     }
   }
-  if (typeof value === 'object' && value !== null) {
-    if (Array.isArray(value)) {
-      for (let i = 0; i < value.length; i++) {
-        const err = scanForInjection(value[i], `${path}[${i}]`);
-        if (err) return err;
-      }
-    } else {
-      for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
-        if (FORBIDDEN_KEYS.has(k)) {
-          return `Forbidden key at ${path}.${k}`;
-        }
-        const err = scanForInjection(v, `${path}.${k}`);
-        if (err) return err;
-      }
+
+  const descriptors = Object.getOwnPropertyDescriptors(value);
+
+  for (const [key, descriptor] of Object.entries(descriptors)) {
+    const nextPath = Array.isArray(value) ? `${path}[${key}]` : `${path}.${key}`;
+
+    if (FORBIDDEN_KEYS.has(key)) {
+      return `Forbidden key at ${nextPath}`;
     }
+
+    if (descriptor.get || descriptor.set) {
+      return `Config contains accessor at ${nextPath}`;
+    }
+
+    const err = validateChartValue(descriptor.value, nextPath, depth + 1);
+    if (err) return err;
   }
+
   return null;
 }
 
@@ -93,8 +93,9 @@ export function sanitizeChartConfig(raw: unknown): SanitizeResult {
     return { valid: false, config: {}, error: 'Config must be an object or JSON string' };
   }
 
-  if (!validateJSONDepth(config, 0)) {
-    return { valid: false, config: {}, error: `Config exceeds max depth of ${MAX_CONFIG_DEPTH}` };
+  const validationErr = validateChartValue(config, 'root', 0);
+  if (validationErr) {
+    return { valid: false, config: {}, error: validationErr };
   }
 
   let jsonStr: string;
@@ -110,11 +111,6 @@ export function sanitizeChartConfig(raw: unknown): SanitizeResult {
 
   if (hasPattern(SCRIPT_PATTERN, jsonStr)) {
     return { valid: false, config: {}, error: 'Config contains script tags' };
-  }
-
-  const injectionErr = scanForInjection(config, 'root');
-  if (injectionErr) {
-    return { valid: false, config: {}, error: injectionErr };
   }
 
   return { valid: true, config };
