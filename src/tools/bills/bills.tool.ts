@@ -179,19 +179,40 @@ export async function search_bills(params: {
   if (params.type) { conditions.push('type = ?'); values.push(params.type); }
 
   const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
-  const limit = params.limit || 50;
-  const offset = params.offset || 0;
+  const pagination = normalizePagination(params.limit, params.offset);
+  if (!pagination) {
+    return { success: false, error: '分页参数不正确', errorCode: '1002' };
+  }
 
   try {
     const bills = await db.getAllAsync<BillRecord>(
       `SELECT * FROM bills ${where} ORDER BY date DESC, created_at DESC LIMIT ? OFFSET ?`,
-      [...values, limit, offset]
+      [...values, pagination.limit, pagination.offset]
     );
     return { success: true, data: bills };
   } catch (e) {
     captureError('BillsTool.search_bills', e, 'Failed to search bills');
     return { success: false, error: '查询失败', errorCode: '1000' };
   }
+}
+
+function normalizePagination(
+  limit?: number,
+  offset?: number
+): { limit: number; offset: number } | null {
+  const normalizedLimit = limit ?? 50;
+  const normalizedOffset = offset ?? 0;
+
+  if (
+    !Number.isInteger(normalizedLimit) ||
+    !Number.isInteger(normalizedOffset) ||
+    normalizedLimit <= 0 ||
+    normalizedOffset < 0
+  ) {
+    return null;
+  }
+
+  return { limit: Math.min(normalizedLimit, 200), offset: normalizedOffset };
 }
 
 export async function split_bill(params: {

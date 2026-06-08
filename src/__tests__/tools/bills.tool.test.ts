@@ -244,6 +244,32 @@ describe('search_bills Tool', () => {
       expect(values[values.length - 2]).toBe(10);
       expect(values[values.length - 1]).toBe(5);
     });
+
+    test('caps large limits to avoid unbounded bill queries', async () => {
+      await search_bills({ limit: 1000, offset: 0 });
+      const mockDb = await getMockDb();
+      const values = mockDb.getAllAsync.mock.calls[0][1];
+      expect(values[values.length - 2]).toBe(200);
+      expect(values[values.length - 1]).toBe(0);
+    });
+
+    test('rejects invalid pagination before querying bills', async () => {
+      const mockDb = await getMockDb();
+
+      for (const params of [
+        { limit: 0 },
+        { limit: -1 },
+        { limit: 1.5 },
+        { offset: -1 },
+        { offset: 2.5 },
+      ]) {
+        const result = await search_bills(params);
+        expect(result.success).toBe(false);
+        expect(result.errorCode).toBe('1002');
+      }
+
+      expect(mockDb.getAllAsync).not.toHaveBeenCalled();
+    });
   });
 
   describe('error handling', () => {
