@@ -83,6 +83,24 @@ describe('Cloud Data Sanitizer', () => {
 
       expect(result.category).toBe('cards *** and ***');
     });
+
+    test('masks multiple sensitive types inside the same allowed field', () => {
+      const result = sanitizeForCloud({
+        category: 'card 4111111111111111 email user@example.com phone 13812345678',
+      });
+
+      expect(result.category).toBe('card *** email *** phone ***');
+    });
+
+    test('drops nullish allowed fields', () => {
+      const result = sanitizeForCloud({
+        amount: null,
+        category: undefined,
+        type: 'expense',
+      });
+
+      expect(result).toEqual({ type: 'expense' });
+    });
   });
 
   describe('sanitizeTextForCloud', () => {

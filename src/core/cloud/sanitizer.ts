@@ -13,8 +13,9 @@ const SENSITIVE_PATTERNS = [
 export function sanitizeForCloud(data: Record<string, unknown>): Record<string, unknown> {
   const filtered: Record<string, unknown> = {};
   for (const key of ALLOWED_CLOUD_FIELDS) {
-    if (key in data) {
-      filtered[key] = maskIfSensitive(String(data[key]));
+    const value = data[key];
+    if (value != null) {
+      filtered[key] = maskIfSensitive(String(value));
     }
   }
   return filtered;
@@ -30,12 +31,11 @@ export function sanitizeTextForCloud(text: string): string {
 }
 
 function maskIfSensitive(value: string): string {
+  let masked = value;
   for (const pattern of SENSITIVE_PATTERNS) {
-    if (pattern.test(value)) {
-      return value.replace(new RegExp(pattern.source, `${pattern.flags}g`), '***');
-    }
+    masked = masked.replace(new RegExp(pattern.source, `${pattern.flags}g`), '***');
   }
-  return value;
+  return masked;
 }
 
 export function detectPII(text: string): { hasPII: boolean; types: string[] } {
