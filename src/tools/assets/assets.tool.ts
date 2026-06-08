@@ -120,6 +120,11 @@ export async function update_asset_value(params: {
     }
 
     const db = await getDatabase();
+    const existing = await db.getFirstAsync<{ id: string }>(
+      'SELECT id FROM assets WHERE id = ?', [params.assetId]
+    );
+    if (!existing) return { success: false, error: '资产不存在' };
+
     const now = new Date().toISOString();
 
     await db.runAsync(
@@ -165,6 +170,11 @@ export async function delete_asset(params: { assetId: string }): Promise<ToolRes
     }
 
     const db = await getDatabase();
+    const existing = await db.getFirstAsync<{ id: string }>(
+      'SELECT id FROM assets WHERE id = ?', [params.assetId]
+    );
+    if (!existing) return { success: false, error: '资产不存在' };
+
     await db.runAsync('DELETE FROM assets WHERE id = ?', [params.assetId]);
 
     return { success: true, data: { id: params.assetId, deleted: true } };
