@@ -115,23 +115,37 @@ export async function modify_bill(params: {
     const oldMerchant = existing.merchant;
 
     values.push(params.billId);
-    await db.runAsync(
-      `UPDATE bills SET ${updates.join(', ')} WHERE id = ?`, values
-    );
 
-	    if (params.category !== undefined && params.category !== oldCategory) {
-	      recordCorrection({
+    let updated: BillRecord | null = null;
+    try {
+      await db.execAsync('BEGIN IMMEDIATE TRANSACTION');
+      await db.runAsync(
+        `UPDATE bills SET ${updates.join(', ')} WHERE id = ?`, values
+      );
+
+      const rebuildResult = await rebuildHashChain();
+      if (!rebuildResult.success) {
+        throw new Error('Failed to rebuild hash chain');
+      }
+
+      updated = await db.getFirstAsync<BillRecord>(
+        'SELECT * FROM bills WHERE id = ?', [params.billId]
+      );
+      await db.execAsync('COMMIT');
+    } catch (e) {
+      await db.execAsync('ROLLBACK').catch(() => undefined);
+      throw e;
+    }
+
+    if (params.category !== undefined && params.category !== oldCategory) {
+      recordCorrection({
         billId: params.billId,
         merchant: oldMerchant,
         originalCategory: oldCategory,
         correctedCategory: params.category,
-	      }).catch(() => {});
-	    }
-	    await rebuildHashChain();
+      }).catch(() => {});
+    }
 
-    const updated = await db.getFirstAsync<BillRecord>(
-      'SELECT * FROM bills WHERE id = ?', [params.billId]
-    );
     return { success: true, data: updated };
   } catch (e) {
     captureError('BillsTool.modify_bill', e, 'Failed to modify bill');
@@ -152,8 +166,21 @@ export async function delete_bill(params: { billId: string; confirmed?: boolean 
     );
     if (!existing) return { success: false, error: '账单不存在' };
 
-	    await db.runAsync('DELETE FROM bills WHERE id = ?', [params.billId]);
-	    await rebuildHashChain();
+    try {
+      await db.execAsync('BEGIN IMMEDIATE TRANSACTION');
+      await db.runAsync('DELETE FROM bills WHERE id = ?', [params.billId]);
+
+      const rebuildResult = await rebuildHashChain();
+      if (!rebuildResult.success) {
+        throw new Error('Failed to rebuild hash chain');
+      }
+
+      await db.execAsync('COMMIT');
+    } catch (e) {
+      await db.execAsync('ROLLBACK').catch(() => undefined);
+      throw e;
+    }
+
     return { success: true, data: { id: params.billId, deleted: true, amount: existing.amount, merchant: existing.merchant } };
   } catch (e) {
     captureError('BillsTool.delete_bill', e, 'Failed to delete bill');
