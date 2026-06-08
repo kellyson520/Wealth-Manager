@@ -11,6 +11,7 @@ import {
 	  getTool,
 	  listToolsForAgent,
 	  executeTool,
+	  canCallTool,
 	} from '../_shared';
 import { callCloudLLM, callCloudLLMStream } from '../../core/cloud/api';
 import { toolsToOpenAIFunctions, buildSystemPrompt } from '../../core/cloud/function-calling';
@@ -361,6 +362,11 @@ async function executeToolCall(
 ): Promise<string | null> {
   const entry = getTool(toolName);
   if (!entry) return `工具 ${toolName} 不存在或不可用`;
+
+  const toolCheck = canCallTool('master', toolName);
+  if (!toolCheck.allowed) {
+    return `操作被拒绝：${toolCheck.reason}`;
+  }
 
   let args: Record<string, unknown>;
   try {
