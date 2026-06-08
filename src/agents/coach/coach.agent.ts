@@ -3,7 +3,6 @@ import { set_budget, create_savings_goal, get_savings_progress } from '../../too
 import { get_streak_info, get_achievement } from '../../tools/gamification/gamification.tool';
 import { get_budget_status } from '../../tools/stats/stats.tool';
 import { run_proactive_check, get_proactive_insights, get_today_summary } from '../../tools/proactive/proactive.tool';
-import { schedule_daily_reminder } from '../../tools/automation/automation.tool';
 import {
   canCallTool,
   rememberThis,
@@ -438,7 +437,15 @@ async function handleSetupReminder(params: Record<string, unknown>): Promise<str
   const hour = (params.hour as number) || 20;
   const minute = (params.minute as number) || 0;
 
-  const result = await schedule_daily_reminder({
+  const toolCheck = canCallTool(AGENT_ID, 'schedule_daily_reminder');
+  if (!toolCheck.allowed) {
+    return `操作被拒绝：${toolCheck.reason}`;
+  }
+
+  const tool = getTool('schedule_daily_reminder');
+  if (!tool) return '提醒功能暂不可用。';
+
+  const result = await tool.handler({
     title: '📝 记账提醒',
     body: '今天还没记账哦！花几分钟记录一下今天的收支吧～',
     hour,
