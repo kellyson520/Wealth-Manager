@@ -292,8 +292,8 @@ export async function refund_bill(params: {
     );
     if (!original) return { success: false, error: '原账单不存在' };
 
-    const refundAmount = params.amount || original.amount;
-    if (refundAmount <= 0 || refundAmount > original.amount) {
+    const refundAmount = params.amount ?? original.amount;
+    if (!Number.isFinite(refundAmount) || refundAmount <= 0 || refundAmount > original.amount) {
       return { success: false, error: '退款金额不合法' };
     }
 
