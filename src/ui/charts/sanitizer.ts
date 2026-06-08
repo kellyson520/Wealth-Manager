@@ -17,6 +17,7 @@ const INJECTION_PATTERNS = [
   SET_TIMEOUT_PATTERN,
   SET_INTERVAL_PATTERN,
 ];
+const FORBIDDEN_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
 
 function hasPattern(pattern: RegExp, value: string): boolean {
   pattern.lastIndex = 0;
@@ -50,10 +51,6 @@ function validateJSONDepth(obj: unknown, depth: number): boolean {
 
 function scanForInjection(value: unknown, path: string): string | null {
   if (typeof value === 'string') {
-    const key = path.split('.').pop() || '';
-    if (key === '__proto__' || key === 'constructor' || key === 'prototype') {
-      return `Forbidden key at ${path}`;
-    }
     if (hasInjectionPattern(value)) {
       return `Suspicious pattern at ${path}`;
     }
@@ -66,6 +63,9 @@ function scanForInjection(value: unknown, path: string): string | null {
       }
     } else {
       for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+        if (FORBIDDEN_KEYS.has(k)) {
+          return `Forbidden key at ${path}.${k}`;
+        }
         const err = scanForInjection(v, `${path}.${k}`);
         if (err) return err;
       }

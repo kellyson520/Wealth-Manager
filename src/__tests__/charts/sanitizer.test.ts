@@ -14,4 +14,13 @@ describe('Chart config sanitizer', () => {
     expect(sanitizeChartConfig(payload).valid).toBe(false);
     expect(sanitizeChartConfig(payload).valid).toBe(false);
   });
+
+  test('rejects forbidden keys even when their value is not a string', () => {
+    const payload = JSON.parse('{"series":[{"__proto__":{"polluted":true}}]}');
+
+    const result = sanitizeChartConfig(payload);
+
+    expect(result.valid).toBe(false);
+    expect(result.error).toContain('Forbidden key');
+  });
 });
