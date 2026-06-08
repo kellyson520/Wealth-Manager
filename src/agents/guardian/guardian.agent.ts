@@ -3,6 +3,7 @@ import { run_safety_check, analyze_subscriptions, sanitize_input, sanitize_for_c
 import { create_recurring_task, get_recurring_tasks, delete_recurring_task, register_shortcut, schedule_local_notification, get_notification_permission_status } from '../../tools/automation/automation.tool';
 import {
   canCallTool,
+  executeTool,
   rememberMoment,
   getTool,
 } from '../_shared';
@@ -220,7 +221,11 @@ async function handleDeleteBill(params: Record<string, unknown>): Promise<string
     const tool = getTool('delete_bill');
     if (!tool) return '删除账单功能暂不可用。';
 
-    const result = await tool.handler({ billId, confirmed: true });
+    const result = await executeTool(
+      tool,
+      { billId, confirmed: true },
+      { agentId: AGENT_ID, userConfirmed: true }
+    );
     if (result.success) {
       const data = result.data as { merchant?: string; amount?: number };
       await rememberMoment(AGENT_ID, `删除账单:${billId}|${data.merchant || ''}|¥${data.amount || 0}`);
