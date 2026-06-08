@@ -35,7 +35,7 @@ export default function ConfirmCard({ data, onConfirm, onCancel }: ConfirmCardPr
       });
     }, 1000);
     return () => { if (timerRef.current) clearInterval(timerRef.current); };
-  }, [data.cooldownSeconds]);
+  }, [data.actionId, data.cooldownSeconds]);
 
   const handleConfirm = () => {
     if (cooldownRemaining > 0) return;
