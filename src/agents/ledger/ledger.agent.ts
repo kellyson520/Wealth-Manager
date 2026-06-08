@@ -1,6 +1,7 @@
 import { IntentResult, ToolResult, AgentId } from '../../shared/types';
 import { add_bill, search_bills } from '../../tools/bills/bills.tool';
 import { get_aggregation } from '../../tools/stats/stats.tool';
+import { executeTool } from '../../tools/_pipeline/tool-executor';
 import { preActionCheck } from '../guardian/guardian.agent';
 import {
   canCallTool,
@@ -320,7 +321,7 @@ async function handleImportBills(params: Record<string, unknown>): Promise<strin
     const tool = getTool('ocr_import');
     if (!tool) return '导入功能暂不可用。';
     const normalizedText = normalizeInlineBillText(rawText);
-    const result = await tool.handler({ rawText: normalizedText, source: 'text' });
+    const result = await executeTool(tool, { rawText: normalizedText, source: 'text' }, { agentId: AGENT_ID });
     if (result.success && result.data) {
       const data = result.data as { importedCount: number; imported?: { merchant: string; amount: number }[] };
       if (data.importedCount > 0) {
@@ -337,7 +338,7 @@ async function handleImportBills(params: Record<string, unknown>): Promise<strin
 
   const tool = getTool('get_import_history');
   if (!tool) return '导入功能暂不可用。';
-  const result = await tool.handler({ limit: 10 });
+  const result = await executeTool(tool, { limit: 10 }, { agentId: AGENT_ID });
   if (result.success && result.data) {
     const history = result.data as { date: string; count: number }[];
     if (history.length === 0) return '暂无导入记录。您可以通过"导入微信账单"导入数据。';
