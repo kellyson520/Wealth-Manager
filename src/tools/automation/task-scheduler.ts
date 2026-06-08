@@ -82,11 +82,11 @@ export function shouldExecuteNow(task: RecurringTask, now: Date): boolean {
   if (!task.lastTriggered) return true;
 
   const lastTrigger = new Date(task.lastTriggered);
+  return !isSameMinute(lastTrigger, now);
+}
 
-  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const lastTriggerDate = new Date(lastTrigger.getFullYear(), lastTrigger.getMonth(), lastTrigger.getDate());
-
-  return lastTriggerDate.getTime() < todayStart.getTime();
+function isSameMinute(a: Date, b: Date): boolean {
+  return Math.floor(a.getTime() / 60000) === Math.floor(b.getTime() / 60000);
 }
 
 function cronFieldMatches(

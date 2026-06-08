@@ -38,4 +38,24 @@ describe('task scheduler cron matching', () => {
       }), now)
     ).toBe(false);
   });
+
+  test('executes recurring same-day cron schedules after a previous matching minute', () => {
+    const now = new Date(2026, 5, 5, 8, 45);
+    expect(
+      shouldExecuteNow(task({
+        cron: '*/15 * * * *',
+        lastTriggered: '2026-06-05T08:30:00.000Z',
+      }), now)
+    ).toBe(true);
+  });
+
+  test('does not execute a cron task twice in the same minute', () => {
+    const now = new Date(2026, 5, 5, 8, 45, 20);
+    expect(
+      shouldExecuteNow(task({
+        cron: '*/15 * * * *',
+        lastTriggered: '2026-06-05T08:45:02.000Z',
+      }), now)
+    ).toBe(false);
+  });
 });
