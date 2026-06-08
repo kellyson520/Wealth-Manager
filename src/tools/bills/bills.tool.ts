@@ -292,6 +292,8 @@ export async function refund_bill(params: {
       ]
     );
 
+    await generateHashForBill(id);
+
     const refundBill = await db.getFirstAsync<BillRecord>(
       'SELECT * FROM bills WHERE id = ?', [id]
     );

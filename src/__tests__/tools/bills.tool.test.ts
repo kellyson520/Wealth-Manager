@@ -32,7 +32,7 @@ jest.mock('../../core/hashchain/hashchain', () => ({
   rebuildHashChain: jest.fn().mockResolvedValue({ valid: true }),
 }));
 
-import { add_bill, modify_bill, search_bills, split_bill } from '../../tools/bills/bills.tool';
+import { add_bill, modify_bill, refund_bill, search_bills, split_bill } from '../../tools/bills/bills.tool';
 import * as db from '../../core/database/database';
 import { generateHashForBill, rebuildHashChain } from '../../core/hashchain/hashchain';
 
@@ -353,5 +353,60 @@ describe('split_bill Tool', () => {
     expect(mockDb.execAsync).toHaveBeenNthCalledWith(1, 'BEGIN IMMEDIATE TRANSACTION');
     expect(mockDb.execAsync).toHaveBeenNthCalledWith(2, 'ROLLBACK');
     expect(rebuildHashChain).not.toHaveBeenCalled();
+  });
+});
+
+describe('refund_bill Tool', () => {
+  beforeEach(async () => {
+    jest.clearAllMocks();
+  });
+
+  test('generates a hash for the refund bill', async () => {
+    const mockDb = await getMockDb();
+    const originalBill = {
+      id: 'bill-1',
+      amount: 100,
+      type: 'expense',
+      category: '餐饮',
+      merchant: '午饭',
+    };
+    const refundBill = {
+      id: 'refund-1',
+      amount: 40,
+      type: 'refund',
+      category: '餐饮',
+      merchant: '午饭',
+    };
+    mockDb.getFirstAsync
+      .mockResolvedValueOnce(originalBill)
+      .mockResolvedValueOnce(refundBill);
+    mockDb.runAsync.mockResolvedValue({ changes: 1 });
+
+    const result = await refund_bill({ billId: 'bill-1', amount: 40 });
+
+    expect(result.success).toBe(true);
+    expect(mockDb.runAsync).toHaveBeenCalledWith(
+      expect.stringContaining('INSERT INTO bills'),
+      expect.any(Array)
+    );
+    expect(generateHashForBill).toHaveBeenCalledWith(expect.any(String));
+  });
+
+  test('rejects invalid refund amounts before inserting a refund bill', async () => {
+    const mockDb = await getMockDb();
+    mockDb.getFirstAsync.mockResolvedValue({
+      id: 'bill-1',
+      amount: 100,
+      type: 'expense',
+      category: '餐饮',
+      merchant: '午饭',
+    });
+
+    const result = await refund_bill({ billId: 'bill-1', amount: 101 });
+
+    expect(result.success).toBe(false);
+    expect(result.error).toBe('退款金额不合法');
+    expect(mockDb.runAsync).not.toHaveBeenCalled();
+    expect(generateHashForBill).not.toHaveBeenCalled();
   });
 });
