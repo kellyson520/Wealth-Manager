@@ -25,7 +25,7 @@ export async function import_csv(params: {
     }
 
     const delimiter = params.delimiter || ',';
-    const lines = params.csvContent.trim().split('\n');
+    const records = splitCSVRecords(params.csvContent.trim());
     const startIdx = params.hasHeader ? 1 : 0;
     const db = await getDatabase();
     const now = new Date().toISOString();
@@ -33,21 +33,22 @@ export async function import_csv(params: {
     const imported: { id: string; merchant: string; amount: number }[] = [];
     const errors: { line: number; raw: string; error: string }[] = [];
 
-    for (let i = startIdx; i < lines.length; i++) {
-      const line = lines[i].trim();
+    for (let i = startIdx; i < records.length; i++) {
+      const record = records[i];
+      const line = record.text.trim();
       if (!line) continue;
 
       try {
         const cols = parseCSVLine(line, delimiter);
 
         if (cols.length < 2) {
-          errors.push({ line: i + 1, raw: line, error: '列数不足' });
+          errors.push({ line: record.line, raw: line, error: '列数不足' });
           continue;
         }
 
         const amount = parseStrictPositiveAmount(cols[1]);
         if (amount === null) {
-          errors.push({ line: i + 1, raw: line, error: '金额无效' });
+          errors.push({ line: record.line, raw: line, error: '金额无效' });
           continue;
         }
 
@@ -67,7 +68,7 @@ export async function import_csv(params: {
 
         imported.push({ id: billId, merchant, amount });
       } catch (e) {
-        errors.push({ line: i + 1, raw: line, error: e instanceof Error ? e.message : '解析错误' });
+        errors.push({ line: record.line, raw: line, error: e instanceof Error ? e.message : '解析错误' });
       }
     }
 
@@ -186,7 +187,12 @@ function parseCSVLine(line: string, delimiter: string): string[] {
   for (let i = 0; i < line.length; i++) {
     const ch = line[i];
     if (ch === '"') {
-      inQuotes = !inQuotes;
+      if (inQuotes && line[i + 1] === '"') {
+        current += '"';
+        i++;
+      } else {
+        inQuotes = !inQuotes;
+      }
     } else if (ch === delimiter && !inQuotes) {
       result.push(current.trim());
       current = '';
@@ -196,6 +202,53 @@ function parseCSVLine(line: string, delimiter: string): string[] {
   }
   result.push(current.trim());
   return result;
+}
+
+function splitCSVRecords(content: string): { text: string; line: number }[] {
+  const records: { text: string; line: number }[] = [];
+  let current = '';
+  let inQuotes = false;
+  let line = 1;
+  let recordLine = 1;
+
+  for (let i = 0; i < content.length; i++) {
+    const ch = content[i];
+
+    if (ch === '"') {
+      current += ch;
+      if (inQuotes && content[i + 1] === '"') {
+        current += content[i + 1];
+        i++;
+      } else {
+        inQuotes = !inQuotes;
+      }
+      continue;
+    }
+
+    if ((ch === '\n' || ch === '\r') && !inQuotes) {
+      records.push({ text: current, line: recordLine });
+      current = '';
+      if (ch === '\r' && content[i + 1] === '\n') i++;
+      line++;
+      recordLine = line;
+      continue;
+    }
+
+    current += ch;
+    if (ch === '\n' || ch === '\r') {
+      if (ch === '\r' && content[i + 1] === '\n') {
+        current += content[i + 1];
+        i++;
+      }
+      line++;
+    }
+  }
+
+  if (current.length > 0) {
+    records.push({ text: current, line: recordLine });
+  }
+
+  return records;
 }
 
 function parseStrictPositiveAmount(value: string): number | null {

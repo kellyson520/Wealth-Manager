@@ -51,4 +51,23 @@ describe('import_csv Tool', () => {
     expect(generateHashForBill).toHaveBeenCalledTimes(1);
     expect(generateHashForBill).toHaveBeenCalledWith(expect.any(String));
   });
+
+  test('imports quoted records that contain newlines in a field', async () => {
+    const result = await import_csv({
+      csvContent: [
+        '商户,金额,类型,分类,日期,备注',
+        '"咖啡店",32.5,支出,餐饮,2026-06-08,"第一行',
+        '第二行"',
+      ].join('\n'),
+      hasHeader: true,
+    });
+
+    const mockDb = await getMockDb();
+    expect(result.success).toBe(true);
+    expect((result.data as any).importedCount).toBe(1);
+    expect((result.data as any).errorCount).toBe(0);
+    expect(mockDb.runAsync).toHaveBeenCalledTimes(1);
+    expect(mockDb.runAsync.mock.calls[0][1][4]).toBe('咖啡店');
+    expect(mockDb.runAsync.mock.calls[0][1][7]).toBe('第一行\n第二行');
+  });
 });
