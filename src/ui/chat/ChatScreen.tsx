@@ -40,6 +40,12 @@ export default function ChatScreen() {
       });
     }
     logger.info('App', 'Application started');
+
+    return () => {
+      if (originalHandler) {
+        ErrorUtils.setGlobalHandler(originalHandler);
+      }
+    };
   }, []);
 
   const addMessage = useCallback((msg: ChatMessage) => {
