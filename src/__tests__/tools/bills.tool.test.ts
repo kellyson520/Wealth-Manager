@@ -27,7 +27,7 @@ jest.mock('../../core/database/database', () => {
   };
 });
 
-import { add_bill, modify_bill, search_bills } from '../../tools/bills/bills.tool';
+import { add_bill, modify_bill, search_bills, split_bill } from '../../tools/bills/bills.tool';
 import * as db from '../../core/database/database';
 
 function getMockDb() {
@@ -271,6 +271,28 @@ describe('modify_bill Tool', () => {
 
     expect(result.success).toBe(false);
     expect(result.errorCode).toBe('1002');
+    expect(mockDb.getFirstAsync).not.toHaveBeenCalled();
+  });
+});
+
+describe('split_bill Tool', () => {
+  beforeEach(async () => {
+    jest.clearAllMocks();
+  });
+
+  test('rejects non-positive split amounts before querying the database', async () => {
+    const mockDb = await getMockDb();
+
+    const result = await split_bill({
+      billId: 'bill-1',
+      splits: [
+        { amount: 150, category: '餐饮' },
+        { amount: -50, category: '优惠' },
+      ],
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.error).toBe('拆分金额必须全部大于0');
     expect(mockDb.getFirstAsync).not.toHaveBeenCalled();
   });
 });

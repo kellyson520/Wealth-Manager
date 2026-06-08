@@ -201,6 +201,9 @@ export async function split_bill(params: {
   try {
     if (!params.billId) return { success: false, error: '账单ID不能为空' };
     if (!params.splits || params.splits.length < 2) return { success: false, error: '至少需要2个拆分项' };
+    if (params.splits.some((split) => !Number.isFinite(split.amount) || split.amount <= 0)) {
+      return { success: false, error: '拆分金额必须全部大于0' };
+    }
 
     const db = await getDatabase();
     const original = await db.getFirstAsync<BillRecord>(
