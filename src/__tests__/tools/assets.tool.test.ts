@@ -12,7 +12,7 @@ jest.mock('../../core/database/database', () => {
 });
 
 import { getDatabase } from '../../core/database/database';
-import { transfer_asset } from '../../tools/assets/assets.tool';
+import { transfer_asset, update_asset_value } from '../../tools/assets/assets.tool';
 
 async function getMockDb() {
   return getDatabase() as any;
@@ -59,5 +59,18 @@ describe('assets tool', () => {
     expect(result.error).toBe('转账时发生异常');
     expect(db.execAsync).toHaveBeenNthCalledWith(1, 'BEGIN IMMEDIATE TRANSACTION');
     expect(db.execAsync).toHaveBeenNthCalledWith(2, 'ROLLBACK');
+  });
+
+  test('rejects negative asset value updates', async () => {
+    const db = await getMockDb();
+
+    const result = await update_asset_value({
+      assetId: 'asset-from',
+      amount: -1,
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.error).toBe('资产金额不能为负');
+    expect(db.runAsync).not.toHaveBeenCalled();
   });
 });

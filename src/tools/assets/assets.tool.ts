@@ -115,6 +115,9 @@ export async function update_asset_value(params: {
     if (!params.assetId) {
       return { success: false, error: '资产ID不能为空' };
     }
+    if (params.amount < 0) {
+      return { success: false, error: '资产金额不能为负' };
+    }
 
     const db = await getDatabase();
     const now = new Date().toISOString();
