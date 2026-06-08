@@ -283,6 +283,9 @@ describe('Cloud LLM API - Safety Chain', () => {
         'https://192.168.1.5/v1',
         'https://[fd00::1]/v1',
         'https://[fe80::1]/v1',
+        'https://[::ffff:7f00:1]/v1',
+        'https://[::ffff:a00:5]/v1',
+        'https://[::ffff:c0a8:105]/v1',
       ];
 
       for (const baseUrl of blockedUrls) {

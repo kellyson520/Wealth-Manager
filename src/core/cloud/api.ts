@@ -211,9 +211,8 @@ function validateCloudBaseUrl(baseUrl: string): string {
     hostname === 'localhost' ||
     hostname.endsWith('.localhost') ||
     hostname === '0.0.0.0' ||
-    hostname === '127.0.0.1' ||
     hostname === '::1' ||
-    hostname.startsWith('127.')
+    isLocalIPv4(hostname)
   ) {
     throw new Error('云端 API 地址不能指向本机地址');
   }
@@ -225,14 +224,25 @@ function validateCloudBaseUrl(baseUrl: string): string {
   return url.toString();
 }
 
-function isPrivateIPv4(hostname: string): boolean {
+function parseIPv4Octets(hostname: string): number[] | undefined {
   const parts = hostname.split('.');
-  if (parts.length !== 4) return false;
+  if (parts.length !== 4) return undefined;
 
   const octets = parts.map((part) => Number(part));
   if (octets.some((octet, index) => !/^\d+$/.test(parts[index]) || octet < 0 || octet > 255)) {
-    return false;
+    return undefined;
   }
+  return octets;
+}
+
+function isLocalIPv4(hostname: string): boolean {
+  const octets = parseIPv4Octets(hostname);
+  return !!octets && octets[0] === 127;
+}
+
+function isPrivateIPv4(hostname: string): boolean {
+  const octets = parseIPv4Octets(hostname);
+  if (!octets) return false;
 
   const [a, b] = octets;
   return (
@@ -245,7 +255,29 @@ function isPrivateIPv4(hostname: string): boolean {
 
 function isPrivateIPv6(hostname: string): boolean {
   const normalized = hostname.replace(/^\[|\]$/g, '').toLowerCase();
-  return normalized === '::1' || normalized.startsWith('fc') || normalized.startsWith('fd') || normalized.startsWith('fe80:');
+  const mappedIPv4 = parseIPv4MappedIPv6(normalized);
+  return (
+    normalized === '::1' ||
+    normalized.startsWith('fc') ||
+    normalized.startsWith('fd') ||
+    normalized.startsWith('fe80:') ||
+    (mappedIPv4 !== undefined && (isLocalIPv4(mappedIPv4) || isPrivateIPv4(mappedIPv4)))
+  );
+}
+
+function parseIPv4MappedIPv6(hostname: string): string | undefined {
+  const parts = hostname.match(/^::ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/);
+  if (parts) {
+    const high = parseInt(parts[1], 16);
+    const low = parseInt(parts[2], 16);
+    return `${high >> 8}.${high & 255}.${low >> 8}.${low & 255}`;
+  }
+
+  const compressed = hostname.match(/^::ffff:([0-9a-f]{1,7})$/);
+  if (!compressed) return undefined;
+
+  const value = parseInt(compressed[1], 16);
+  return `${(value >>> 24) & 255}.${(value >>> 16) & 255}.${(value >>> 8) & 255}.${value & 255}`;
 }
 
 function normalizeToolChoice(
