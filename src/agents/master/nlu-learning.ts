@@ -59,7 +59,7 @@ export function addNluLearningSampleForTest(sample: LearnIntentAliasParams): voi
     normalizedText,
     intent: sample.intent,
     agent: sample.agent,
-    params: sample.params || {},
+    params: sanitizeLearnedParams(sample.params || {}),
     source: sample.source || 'test',
     confidence: sample.confidence || 0.9,
     hits: 1,
@@ -103,7 +103,7 @@ export async function loadNluLearningSamples(): Promise<void> {
         normalizedText: row.normalized_text,
         intent: row.intent,
         agent: row.agent,
-        params: safeParseParams(row.params),
+        params: sanitizeLearnedParams(safeParseParams(row.params)),
         source: normalizeSource(row.source),
         confidence: row.confidence,
         hits: row.hits,
@@ -131,7 +131,7 @@ export async function learnIntentAlias(params: LearnIntentAliasParams): Promise<
     normalizedText,
     intent: params.intent,
     agent: params.agent,
-    params: params.params || {},
+    params: sanitizeLearnedParams(params.params || {}),
     source: params.source || 'cloud_function',
     confidence: clampConfidence(params.confidence ?? 0.82),
     hits: 1,
@@ -277,9 +277,20 @@ function sampleToIntent(sample: NluLearningSample, base: IntentResult, confidenc
   return {
     intent: sample.intent,
     agent: sample.agent,
-    params: { ...base.params, ...sample.params },
+    params: { ...sample.params, ...stripUndefinedParams(base.params) },
     confidence: Math.max(confidenceFloor, Math.min(0.97, sample.confidence + Math.min(sample.hits, 8) * 0.005)),
   };
+}
+
+function stripUndefinedParams(params: Record<string, unknown>): Record<string, unknown> {
+  return Object.fromEntries(
+    Object.entries(params).filter(([, value]) => value !== undefined)
+  );
+}
+
+function sanitizeLearnedParams(params: Record<string, unknown>): Record<string, unknown> {
+  const { confirmed, userConfirmed, ...safeParams } = params;
+  return safeParams;
 }
 
 function canLearnAlias(normalizedText: string, intent: string): boolean {
