@@ -153,6 +153,18 @@ describe('Guardian Agent', () => {
       expect(preActionCheck).toBeDefined();
       expect(typeof preActionCheck).toBe('function');
     });
+
+    test('blocks writes when safety check fails', async () => {
+      const { run_safety_check } = require('../../tools/security/security.tool');
+      const { preActionCheck } = require('../../agents/guardian/guardian.agent');
+
+      run_safety_check.mockResolvedValueOnce({ success: false, error: 'scanner unavailable' });
+
+      await expect(preActionCheck({ amount: 100, merchant: '测试商户' })).resolves.toEqual({
+        safe: false,
+        message: '安全预检失败，请稍后重试。',
+      });
+    });
   });
 
   describe('handleIntent', () => {

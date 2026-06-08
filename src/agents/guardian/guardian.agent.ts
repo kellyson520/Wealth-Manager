@@ -58,7 +58,7 @@ export async function preActionCheck(params: {
   });
 
   if (!result.success || !result.data) {
-    return { safe: true };
+    return { safe: false, message: '安全预检失败，请稍后重试。' };
   }
 
   const check = result.data as {
