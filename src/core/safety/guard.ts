@@ -1,7 +1,7 @@
 export interface TokenBudget {
   monthlyLimit: number;
   used: number;
-  resetDay: number;
+  resetPeriod: string;
   warningThreshold: number;
 }
 
@@ -21,11 +21,16 @@ interface DualCounter {
   hour: Counter;
 }
 
+function getCurrentBudgetPeriod(): string {
+  const now = new Date();
+  return `${now.getFullYear()}-${now.getMonth()}`;
+}
+
 export function createTokenBudget(monthlyLimit: number): TokenBudget {
   return {
     monthlyLimit,
     used: 0,
-    resetDay: new Date().getDate(),
+    resetPeriod: getCurrentBudgetPeriod(),
     warningThreshold: 0.8,
   };
 }
@@ -36,10 +41,10 @@ export function checkTokenBudget(budget: TokenBudget, estimatedTokens: number): 
   warning: boolean;
   reason?: string;
 } {
-  const now = new Date();
-  if (now.getDate() !== budget.resetDay) {
+  const currentPeriod = getCurrentBudgetPeriod();
+  if (currentPeriod !== budget.resetPeriod) {
     budget.used = 0;
-    budget.resetDay = now.getDate();
+    budget.resetPeriod = currentPeriod;
   }
 
   const afterUse = budget.used + estimatedTokens;

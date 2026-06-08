@@ -45,15 +45,29 @@ describe('Token Budget', () => {
     expect(budget.used).toBe(15000);
   });
 
-  test('resets on new day', () => {
+  test('does not reset within the same month', () => {
     budget.used = 45000;
-    budget.resetDay = 15;
+    budget.resetPeriod = '2024-0';
     const mockDate = new Date(2024, 0, 16);
+    jest.spyOn(global, 'Date').mockImplementation(() => mockDate as unknown as string);
+
+    const result = checkTokenBudget(budget, 5000);
+    expect(result.allowed).toBe(false);
+    expect(budget.used).toBe(45000);
+
+    jest.restoreAllMocks();
+  });
+
+  test('resets on new month', () => {
+    budget.used = 45000;
+    budget.resetPeriod = '2023-11';
+    const mockDate = new Date(2024, 0, 1);
     jest.spyOn(global, 'Date').mockImplementation(() => mockDate as unknown as string);
 
     const result = checkTokenBudget(budget, 5000);
     expect(result.allowed).toBe(true);
     expect(budget.used).toBe(0);
+    expect(budget.resetPeriod).toBe('2024-0');
 
     jest.restoreAllMocks();
   });

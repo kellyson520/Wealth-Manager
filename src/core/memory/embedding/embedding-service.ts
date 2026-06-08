@@ -14,7 +14,7 @@ const CLOUD_EMBED_MODEL = 'text-embedding-3-small';
 const OPENAI_BASE_URL = 'https://api.openai.com/v1';
 
 let cachedApiKey: string | undefined;
-const embedBudget: TokenBudget = { monthlyLimit: 200000, used: 0, resetDay: new Date().getDate(), warningThreshold: 0.8 };
+const embedBudget: TokenBudget = { monthlyLimit: 200000, used: 0, resetPeriod: `${new Date().getFullYear()}-${new Date().getMonth()}`, warningThreshold: 0.8 };
 const embedBreaker = createCircuitBreaker(5, 30000);
 
 export function setEmbeddingApiKey(key: string): void {
@@ -27,7 +27,7 @@ export function getEmbeddingApiKey(): string | undefined {
 
 export function resetEmbeddingForTest(): void {
   embedBudget.used = 0;
-  embedBudget.resetDay = new Date().getDate();
+  embedBudget.resetPeriod = `${new Date().getFullYear()}-${new Date().getMonth()}`;
   embedBreaker.state = 'closed';
   embedBreaker.failureCount = 0;
 }

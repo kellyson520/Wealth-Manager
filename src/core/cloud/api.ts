@@ -37,7 +37,7 @@ export interface CloudResponse {
 const defaultBudget = {
   monthlyLimit: 50000,
   used: 0,
-  resetDay: new Date().getDate(),
+  resetPeriod: `${new Date().getFullYear()}-${new Date().getMonth()}`,
   warningThreshold: 0.8,
 };
 
