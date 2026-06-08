@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useCallback, useMemo } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { ChartCardData } from '../../shared/types';
 import { EChartsSandbox } from '../charts';
@@ -288,6 +288,9 @@ export default function ChartCard({ data }: ChartCardProps) {
   const label = CHART_LABELS[data.chartType] || data.chartType;
 
   const echartsConfig = useMemo(() => buildEChartsConfig(data), [data]);
+  const handleChartError = useCallback((err: string) => {
+    console.warn('[ChartCard] ECharts error:', err);
+  }, []);
 
   return (
     <View style={styles.card}>
@@ -303,9 +306,7 @@ export default function ChartCard({ data }: ChartCardProps) {
         <EChartsSandbox
           config={echartsConfig}
           height={190}
-          onError={(err) => {
-            console.warn('[ChartCard] ECharts error:', err);
-          }}
+          onError={handleChartError}
         />
       </View>
 
