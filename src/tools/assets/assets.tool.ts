@@ -25,8 +25,8 @@ export async function add_asset(params: {
     if (!params.name || params.name.trim().length === 0) {
       return { success: false, error: '资产名称不能为空' };
     }
-    if (params.amount < 0) {
-      return { success: false, error: '资产金额不能为负' };
+    if (!Number.isFinite(params.amount) || params.amount < 0) {
+      return { success: false, error: '资产金额必须为非负数' };
     }
 
     const db = await getDatabase();
@@ -115,8 +115,8 @@ export async function update_asset_value(params: {
     if (!params.assetId) {
       return { success: false, error: '资产ID不能为空' };
     }
-    if (params.amount < 0) {
-      return { success: false, error: '资产金额不能为负' };
+    if (!Number.isFinite(params.amount) || params.amount < 0) {
+      return { success: false, error: '资产金额必须为非负数' };
     }
 
     const db = await getDatabase();
@@ -194,8 +194,8 @@ export async function transfer_asset(params: {
     if (!params.fromAssetId || !params.toAssetId) {
       return { success: false, error: '转出和转入资产ID不能为空' };
     }
-    if (!params.amount || params.amount <= 0) {
-      return { success: false, error: '转账金额必须大于0' };
+    if (!Number.isFinite(params.amount) || params.amount <= 0) {
+      return { success: false, error: '转账金额必须为大于0的有限数字' };
     }
     if (params.fromAssetId === params.toAssetId) {
       return { success: false, error: '不能向同一资产转账' };
