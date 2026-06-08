@@ -13,6 +13,7 @@ import {
   canCallTool,
   rememberMoment,
   getTool,
+  executeTool,
 } from '../_shared';
 
 const AGENT_ID: AgentId = 'analyst';
@@ -305,7 +306,7 @@ function getCategoryEmoji(cat: string): string {
 async function handleExportData(params: Record<string, unknown>): Promise<string> {
   const tool = getTool('export_csv');
   if (!tool) return '导出功能暂不可用。';
-  const result = await tool.handler(params);
+  const result = await executeTool(tool, params, { agentId: AGENT_ID });
   if (result.success && result.data) {
     const data = result.data as { rowCount: number; filename: string; filePath?: string };
     let reply = `已导出 ${data.rowCount} 条账单到 "${data.filename}"`;
