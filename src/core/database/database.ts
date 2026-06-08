@@ -458,8 +458,9 @@ function getWebCryptoForHashing(): Crypto {
   if (typeof globalThis.crypto?.subtle !== 'undefined') {
     return globalThis.crypto;
   }
-  const nodeCrypto = require('crypto') as { webcrypto?: Crypto };
-  if (nodeCrypto.webcrypto?.subtle) {
+  const nodeRequire = (globalThis as unknown as { require?: (moduleName: string) => unknown }).require;
+  const nodeCrypto = nodeRequire?.('crypto') as { webcrypto?: Crypto } | undefined;
+  if (nodeCrypto?.webcrypto?.subtle) {
     return nodeCrypto.webcrypto;
   }
   throw new Error('WebCrypto unavailable');
