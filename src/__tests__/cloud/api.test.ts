@@ -1,4 +1,4 @@
-import { callCloudLLM, resetForTest, setTokenBudget } from '../../core/cloud/api';
+import { callCloudLLM, callCloudLLMStream, resetForTest, setTokenBudget } from '../../core/cloud/api';
 import { _resetAllForTest } from '../../core/safety/guard';
 
 global.fetch = jest.fn();
@@ -378,6 +378,37 @@ describe('Cloud LLM API - Safety Chain', () => {
       const body = JSON.parse((global.fetch as jest.Mock).mock.calls[0][1].body);
       expect(body.tools[0].function.name).toBe('get_total');
       expect(body.functions).toBeUndefined();
+    });
+  });
+
+
+  describe('streaming API', () => {
+    test('emits a single done event for OpenAI-compatible SSE completion', async () => {
+      const encoder = new TextEncoder();
+      (global.fetch as jest.Mock).mockResolvedValue({
+        ok: true,
+        body: new ReadableStream({
+          start(controller) {
+            controller.enqueue(
+              encoder.encode('data: {"choices":[{"delta":{"content":"hello"}}],"usage":{"total_tokens":3}}\n\n')
+            );
+            controller.enqueue(encoder.encode('data: [DONE]\n\n'));
+            controller.close();
+          },
+        }),
+      });
+
+      const chunks = [];
+      for await (const chunk of callCloudLLMStream(
+        { messages: [{ role: 'user', content: 'clean text' }] },
+        'test-key'
+      )) {
+        chunks.push(chunk);
+      }
+
+      expect(chunks.filter((chunk) => chunk.type === 'done')).toHaveLength(1);
+      expect(chunks).toContainEqual({ type: 'token', content: 'hello' });
+      expect(global.fetch).toHaveBeenCalledTimes(1);
     });
   });
 

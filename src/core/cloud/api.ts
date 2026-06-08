@@ -418,7 +418,6 @@ export async function* callCloudLLMStream(
 
         const jsonStr = trimmed.slice(6);
         if (jsonStr === '[DONE]') {
-          yield { type: 'done' };
           continue;
         }
 
