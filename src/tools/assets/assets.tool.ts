@@ -205,15 +205,22 @@ export async function transfer_asset(params: {
     );
     if (!toAsset) return { success: false, error: '转入资产不存在' };
 
-    await db.runAsync(
-      'UPDATE assets SET amount = amount - ?, updated_at = ? WHERE id = ?',
-      [params.amount, now, params.fromAssetId]
-    );
+    try {
+      await db.execAsync('BEGIN IMMEDIATE TRANSACTION');
+      await db.runAsync(
+        'UPDATE assets SET amount = amount - ?, updated_at = ? WHERE id = ?',
+        [params.amount, now, params.fromAssetId]
+      );
 
-    await db.runAsync(
-      'UPDATE assets SET amount = amount + ?, updated_at = ? WHERE id = ?',
-      [params.amount, now, params.toAssetId]
-    );
+      await db.runAsync(
+        'UPDATE assets SET amount = amount + ?, updated_at = ? WHERE id = ?',
+        [params.amount, now, params.toAssetId]
+      );
+      await db.execAsync('COMMIT');
+    } catch (e) {
+      await db.execAsync('ROLLBACK').catch(() => undefined);
+      throw e;
+    }
 
     return {
       success: true,
