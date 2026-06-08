@@ -158,19 +158,29 @@ export async function record_repayment(params: {
     if (!debt) {
       return { success: false, error: '未找到该债务记录' };
     }
+    if (params.amount > debt.remaining) {
+      return { success: false, error: '还款金额不能超过剩余金额' };
+    }
 
-    const newRemaining = Math.max(0, debt.remaining - params.amount);
-
-    await db.runAsync(
-      'INSERT INTO repayments (id, debt_id, amount, date, note, created_at) VALUES (?, ?, ?, ?, ?, ?)',
-      [repaymentId, params.debtId, params.amount, date, params.note || '', now]
-    );
+    const newRemaining = debt.remaining - params.amount;
 
     const newStatus = newRemaining === 0 ? 'cleared' : 'active';
-    await db.runAsync(
-      'UPDATE debts SET remaining = ?, status = ?, updated_at = ? WHERE id = ?',
-      [newRemaining, newStatus, now, params.debtId]
-    );
+    try {
+      await db.execAsync('BEGIN IMMEDIATE TRANSACTION');
+      await db.runAsync(
+        'INSERT INTO repayments (id, debt_id, amount, date, note, created_at) VALUES (?, ?, ?, ?, ?, ?)',
+        [repaymentId, params.debtId, params.amount, date, params.note || '', now]
+      );
+
+      await db.runAsync(
+        'UPDATE debts SET remaining = ?, status = ?, updated_at = ? WHERE id = ?',
+        [newRemaining, newStatus, now, params.debtId]
+      );
+      await db.execAsync('COMMIT');
+    } catch (e) {
+      await db.execAsync('ROLLBACK').catch(() => undefined);
+      throw e;
+    }
 
     return {
       success: true,
