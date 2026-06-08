@@ -1,6 +1,7 @@
 import { getDatabase } from '../../core/database/database';
 import { v4 as uuidv4 } from 'uuid';
 import { captureError } from '../../core/logger/logger';
+import { generateHashForBill } from '../../core/hashchain/hashchain';
 import type { ToolResult, BillType } from '../../shared/types';
 
 interface ParsedBill {
@@ -62,6 +63,7 @@ export async function import_csv(params: {
            VALUES (?, ?, ?, ?, '[]', ?, ?, ?, ?, 'import', ?)`,
           [billId, amount, type, category, merchant, line, date, note, now]
         );
+        await generateHashForBill(billId);
 
         imported.push({ id: billId, merchant, amount });
       } catch (e) {
@@ -104,6 +106,7 @@ export async function import_wechat(params: {
          VALUES (?, ?, ?, ?, '[]', ?, ?, ?, ?, 'import', ?)`,
         [billId, bill.amount, bill.type, bill.category, bill.merchant, bill.raw, bill.date, bill.note, now]
       );
+      await generateHashForBill(billId);
       imported.push({ id: billId, merchant: bill.merchant, amount: bill.amount, type: bill.type });
     }
 
@@ -137,6 +140,7 @@ export async function import_alipay(params: {
          VALUES (?, ?, ?, ?, '[]', ?, ?, ?, ?, 'import', ?)`,
         [billId, bill.amount, bill.type, bill.category, bill.merchant, bill.raw, bill.date, bill.note, now]
       );
+      await generateHashForBill(billId);
       imported.push({ id: billId, merchant: bill.merchant, amount: bill.amount, type: bill.type });
     }
 

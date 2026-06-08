@@ -8,7 +8,12 @@ jest.mock('../../core/database/database', () => {
   };
 });
 
+jest.mock('../../core/hashchain/hashchain', () => ({
+  generateHashForBill: jest.fn().mockResolvedValue('hash'),
+}));
+
 import { getDatabase } from '../../core/database/database';
+import { generateHashForBill } from '../../core/hashchain/hashchain';
 import { import_csv } from '../../tools/import/import.tool';
 
 async function getMockDb() {
@@ -43,5 +48,7 @@ describe('import_csv Tool', () => {
     ]);
     expect(mockDb.runAsync).toHaveBeenCalledTimes(1);
     expect(mockDb.runAsync.mock.calls[0][1][1]).toBe(12.5);
+    expect(generateHashForBill).toHaveBeenCalledTimes(1);
+    expect(generateHashForBill).toHaveBeenCalledWith(expect.any(String));
   });
 });
