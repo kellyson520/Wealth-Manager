@@ -70,4 +70,40 @@ describe('import_csv Tool', () => {
     expect(mockDb.runAsync.mock.calls[0][1][4]).toBe('咖啡店');
     expect(mockDb.runAsync.mock.calls[0][1][7]).toBe('第一行\n第二行');
   });
+
+  test('imports CSV with a custom single-character delimiter', async () => {
+    const result = await import_csv({
+      csvContent: [
+        '商户;金额;类型;分类;日期',
+        '咖啡店;32.5;支出;餐饮;2026-06-08',
+      ].join('\n'),
+      delimiter: ';',
+      hasHeader: true,
+    });
+
+    const mockDb = await getMockDb();
+    expect(result.success).toBe(true);
+    expect((result.data as any).importedCount).toBe(1);
+    expect(mockDb.runAsync).toHaveBeenCalledTimes(1);
+    expect(mockDb.runAsync.mock.calls[0][1][4]).toBe('咖啡店');
+  });
+
+  test('rejects empty, multi-character, or newline CSV delimiters', async () => {
+    const invalidDelimiters = ['', '||', '\n', '\r'];
+
+    for (const delimiter of invalidDelimiters) {
+      const result = await import_csv({
+        csvContent: '商户,金额\n咖啡店,32.5',
+        delimiter,
+        hasHeader: true,
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.error).toBe('CSV分隔符必须是单个非换行字符');
+    }
+
+    const mockDb = await getMockDb();
+    expect(mockDb.runAsync).not.toHaveBeenCalled();
+    expect(generateHashForBill).not.toHaveBeenCalled();
+  });
 });

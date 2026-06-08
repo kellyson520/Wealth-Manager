@@ -24,7 +24,10 @@ export async function import_csv(params: {
       return { success: false, error: 'CSV内容不能为空' };
     }
 
-    const delimiter = params.delimiter || ',';
+    const delimiter = params.delimiter ?? ',';
+    if (!isValidDelimiter(delimiter)) {
+      return { success: false, error: 'CSV分隔符必须是单个非换行字符' };
+    }
     const records = splitCSVRecords(params.csvContent.trim());
     const startIdx = params.hasHeader ? 1 : 0;
     const db = await getDatabase();
@@ -202,6 +205,10 @@ function parseCSVLine(line: string, delimiter: string): string[] {
   }
   result.push(current.trim());
   return result;
+}
+
+function isValidDelimiter(delimiter: string): boolean {
+  return delimiter.length === 1 && delimiter !== '\n' && delimiter !== '\r';
 }
 
 function splitCSVRecords(content: string): { text: string; line: number }[] {
