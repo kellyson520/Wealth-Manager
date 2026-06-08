@@ -337,24 +337,35 @@ export async function refund_bill(params: {
     const id = uuidv4();
     const now = new Date().toISOString();
 
-    await db.runAsync(
-      `INSERT INTO bills (id, amount, type, category, tags, merchant, raw_description, date, note, source, created_at)
-       VALUES (?, ?, 'refund', ?, '[]', ?, ?, ?, ?, 'manual', ?)`,
-      [
-        id, refundAmount, original.category,
-        original.merchant,
-        `退款: ${original.merchant} (原账单ID: ${original.id})`,
-        new Date().toISOString().split('T')[0],
-        params.note || `退款 ${refundAmount}`,
-        now,
-      ]
-    );
+    let refundBill: BillRecord | null = null;
+    try {
+      await db.execAsync('BEGIN IMMEDIATE TRANSACTION');
+      await db.runAsync(
+        `INSERT INTO bills (id, amount, type, category, tags, merchant, raw_description, date, note, source, created_at)
+         VALUES (?, ?, 'refund', ?, '[]', ?, ?, ?, ?, 'manual', ?)`,
+        [
+          id, refundAmount, original.category,
+          original.merchant,
+          `退款: ${original.merchant} (原账单ID: ${original.id})`,
+          new Date().toISOString().split('T')[0],
+          params.note || `退款 ${refundAmount}`,
+          now,
+        ]
+      );
 
-    await generateHashForBill(id);
+      const hashGenerated = await generateHashForBill(id);
+      if (!hashGenerated) {
+        throw new Error('Failed to generate bill hash');
+      }
 
-    const refundBill = await db.getFirstAsync<BillRecord>(
-      'SELECT * FROM bills WHERE id = ?', [id]
-    );
+      refundBill = await db.getFirstAsync<BillRecord>(
+        'SELECT * FROM bills WHERE id = ?', [id]
+      );
+      await db.execAsync('COMMIT');
+    } catch (e) {
+      await db.execAsync('ROLLBACK').catch(() => undefined);
+      throw e;
+    }
 
     return {
       success: true,
