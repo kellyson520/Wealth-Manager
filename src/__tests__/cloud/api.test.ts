@@ -330,6 +330,7 @@ describe('Cloud LLM API - Safety Chain', () => {
       expect(global.fetch).toHaveBeenCalledWith(
         'https://token-plan-cn.xiaomimimo.com/v1/chat/completions',
         expect.objectContaining({
+          redirect: 'error',
           body: expect.stringContaining('"max_completion_tokens":100'),
         })
       );
@@ -409,6 +410,10 @@ describe('Cloud LLM API - Safety Chain', () => {
       expect(chunks.filter((chunk) => chunk.type === 'done')).toHaveLength(1);
       expect(chunks).toContainEqual({ type: 'token', content: 'hello' });
       expect(global.fetch).toHaveBeenCalledTimes(1);
+      expect(global.fetch).toHaveBeenCalledWith(
+        'https://api.openai.com/v1/chat/completions',
+        expect.objectContaining({ redirect: 'error' })
+      );
     });
   });
 

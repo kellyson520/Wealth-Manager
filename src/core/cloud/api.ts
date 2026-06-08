@@ -137,6 +137,7 @@ export async function callCloudLLM(
 
     const fetchResponse = await fetch(chatCompletionsUrl, {
       method: 'POST',
+      redirect: 'error',
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${apiKey}`,
@@ -377,13 +378,14 @@ export async function* callCloudLLMStream(
     }
 
     const fetchResponse = await fetch(chatCompletionsUrl, {
-	      method: 'POST',
-	      headers: {
-	        'Content-Type': 'application/json',
-	        Authorization: `Bearer ${apiKey}`,
-	      },
-	      body: JSON.stringify(body),
-	    });
+      method: 'POST',
+      redirect: 'error',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify(body),
+    });
 
     if (!fetchResponse.ok) {
       recordFailure(breaker);
