@@ -128,6 +128,12 @@ describe('add_bill Tool', () => {
       expect(result.success).toBe(false);
     });
 
+    test('rejects infinite amount', async () => {
+      const result = await add_bill({ amount: Infinity, type: 'expense', merchant: '测试' });
+      expect(result.success).toBe(false);
+      expect(result.errorCode).toBe('1002');
+    });
+
     test('defaults category to "其他"', async () => {
       const mockBill = { id: 'test-id', amount: 100, type: 'expense' as const };
       const mockDb = await getMockDb();

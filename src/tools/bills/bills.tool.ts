@@ -13,7 +13,7 @@ export async function add_bill(params: {
   note?: string;
   date?: string;
 }): Promise<ToolResult> {
-  if (!params.amount || params.amount <= 0) {
+  if (!Number.isFinite(params.amount) || params.amount <= 0) {
     return { success: false, error: '金额不正确', errorCode: '1002' };
   }
 
