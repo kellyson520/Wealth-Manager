@@ -8,6 +8,24 @@ const EVAL_PATTERN = /\beval\s*\(/gi;
 const FUNCTION_CONSTRUCTOR = /new\s+Function\s*\(/gi;
 const SET_TIMEOUT_PATTERN = /setTimeout\s*\(/gi;
 const SET_INTERVAL_PATTERN = /setInterval\s*\(/gi;
+const INJECTION_PATTERNS = [
+  SCRIPT_PATTERN,
+  JS_URI_PATTERN,
+  EVENT_HANDLER_PATTERN,
+  EVAL_PATTERN,
+  FUNCTION_CONSTRUCTOR,
+  SET_TIMEOUT_PATTERN,
+  SET_INTERVAL_PATTERN,
+];
+
+function hasPattern(pattern: RegExp, value: string): boolean {
+  pattern.lastIndex = 0;
+  return pattern.test(value);
+}
+
+function hasInjectionPattern(value: string): boolean {
+  return INJECTION_PATTERNS.some((pattern) => hasPattern(pattern, value));
+}
 
 export interface SanitizeResult {
   valid: boolean;
@@ -36,15 +54,7 @@ function scanForInjection(value: unknown, path: string): string | null {
     if (key === '__proto__' || key === 'constructor' || key === 'prototype') {
       return `Forbidden key at ${path}`;
     }
-    if (
-      SCRIPT_PATTERN.test(value) ||
-      JS_URI_PATTERN.test(value) ||
-      EVENT_HANDLER_PATTERN.test(value) ||
-      EVAL_PATTERN.test(value) ||
-      FUNCTION_CONSTRUCTOR.test(value) ||
-      SET_TIMEOUT_PATTERN.test(value) ||
-      SET_INTERVAL_PATTERN.test(value)
-    ) {
+    if (hasInjectionPattern(value)) {
       return `Suspicious pattern at ${path}`;
     }
   }
@@ -92,7 +102,7 @@ export function sanitizeChartConfig(raw: unknown): SanitizeResult {
     return { valid: false, config: {}, error: `Config size ${jsonStr.length} exceeds limit of ${MAX_CONFIG_SIZE}` };
   }
 
-  if (SCRIPT_PATTERN.test(jsonStr)) {
+  if (hasPattern(SCRIPT_PATTERN, jsonStr)) {
     return { valid: false, config: {}, error: 'Config contains script tags' };
   }
 

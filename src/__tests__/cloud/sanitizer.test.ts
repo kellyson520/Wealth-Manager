@@ -67,6 +67,22 @@ describe('Cloud Data Sanitizer', () => {
       });
       expect(result.category).toBe('***');
     });
+
+    test('masks repeated sensitive values across consecutive calls', () => {
+      const first = sanitizeForCloud({ category: '4111111111111111' });
+      const second = sanitizeForCloud({ category: '4111111111111111' });
+
+      expect(first.category).toBe('***');
+      expect(second.category).toBe('***');
+    });
+
+    test('masks every occurrence inside an allowed field', () => {
+      const result = sanitizeForCloud({
+        category: 'cards 4111111111111111 and 5555555555554444',
+      });
+
+      expect(result.category).toBe('cards *** and ***');
+    });
   });
 
   describe('sanitizeTextForCloud', () => {

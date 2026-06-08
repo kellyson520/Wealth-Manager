@@ -3,11 +3,11 @@ export type CloudField = 'date' | 'amount' | 'category' | 'type' | 'period';
 const ALLOWED_CLOUD_FIELDS: CloudField[] = ['date', 'amount', 'category', 'type', 'period'];
 
 const SENSITIVE_PATTERNS = [
-  /\b\d{16,19}\b/g,
-  /\b\d{3}-\d{2}-\d{4}\b/g,
-  /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/g,
-  /\b1[3-9]\d{9}\b/g,
-  /\b\d{6}(?:19|20)\d{2}(?:0[1-9]|1[0-2])(?:0[1-9]|[12]\d|3[01])\d{3}[\dXx]\b/g,
+  /\b\d{16,19}\b/,
+  /\b\d{3}-\d{2}-\d{4}\b/,
+  /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/,
+  /\b1[3-9]\d{9}\b/,
+  /\b\d{6}(?:19|20)\d{2}(?:0[1-9]|1[0-2])(?:0[1-9]|[12]\d|3[01])\d{3}[\dXx]\b/,
 ];
 
 export function sanitizeForCloud(data: Record<string, unknown>): Record<string, unknown> {
@@ -32,7 +32,7 @@ export function sanitizeTextForCloud(text: string): string {
 function maskIfSensitive(value: string): string {
   for (const pattern of SENSITIVE_PATTERNS) {
     if (pattern.test(value)) {
-      return value.replace(pattern, '***');
+      return value.replace(new RegExp(pattern.source, `${pattern.flags}g`), '***');
     }
   }
   return value;
