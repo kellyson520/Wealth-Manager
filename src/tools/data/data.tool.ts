@@ -67,6 +67,9 @@ export async function export_csv(params?: {
     const now = new Date();
     const filename = `wealth_manager_export_${now.getFullYear()}${(now.getMonth() + 1).toString().padStart(2, '0')}${now.getDate().toString().padStart(2, '0')}.csv`;
     const filePath = await saveFile(filename, csv);
+    if (!filePath) {
+      return { success: false, error: '保存CSV文件失败' };
+    }
 
     return {
       success: true,
@@ -102,6 +105,9 @@ export async function export_json(params?: {
     const exportData = { exportedAt: now.toISOString(), appVersion: '0.1.0', billCount: sanitizedBills.length, bills: sanitizedBills };
     const jsonContent = JSON.stringify(exportData, null, 2);
     const filePath = await saveFile(filename, jsonContent);
+    if (!filePath) {
+      return { success: false, error: '保存JSON文件失败' };
+    }
 
     return {
       success: true,
@@ -136,6 +142,9 @@ export async function create_backup(): Promise<ToolResult> {
 
     const jsonContent = JSON.stringify(backup);
     const filePath = await saveFile(filename, jsonContent);
+    if (!filePath) {
+      return { success: false, error: '保存备份文件失败' };
+    }
 
     return {
       success: true,

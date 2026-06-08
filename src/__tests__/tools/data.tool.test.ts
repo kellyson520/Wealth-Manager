@@ -76,6 +76,17 @@ describe('data export tools', () => {
       expect(query).toContain('SELECT date, type, category, amount FROM bills');
       expect(mockDb.getAllAsync.mock.calls[0][1]).toEqual(['2026-06-01', '2026-06-30']);
     });
+
+    test('returns failure when CSV file cannot be saved', async () => {
+      const mockDb = await getMockDb();
+      mockDb.getAllAsync.mockResolvedValue([]);
+      (FileSystem.writeAsStringAsync as jest.Mock).mockRejectedValueOnce(new Error('disk full'));
+
+      const result = await export_csv();
+
+      expect(result.success).toBe(false);
+      expect(result.error).toBe('保存CSV文件失败');
+    });
   });
 
   describe('export_json', () => {
@@ -112,6 +123,17 @@ describe('data export tools', () => {
       expect(getLastSavedContent()).not.toContain('公司名称');
       expect(getLastSavedContent()).not.toContain('银行卡');
       expect(getLastSavedContent()).not.toContain('secret-hash');
+    });
+
+    test('returns failure when JSON file cannot be saved', async () => {
+      const mockDb = await getMockDb();
+      mockDb.getAllAsync.mockResolvedValue([]);
+      (FileSystem.writeAsStringAsync as jest.Mock).mockRejectedValueOnce(new Error('disk full'));
+
+      const result = await export_json();
+
+      expect(result.success).toBe(false);
+      expect(result.error).toBe('保存JSON文件失败');
     });
   });
 
@@ -159,6 +181,17 @@ describe('data export tools', () => {
       expect(backupText).not.toContain('13800138000');
       expect(backupText).not.toContain('6222020000000000000');
       expect(backupText).not.toContain('hash');
+    });
+
+    test('returns failure when backup file cannot be saved', async () => {
+      const mockDb = await getMockDb();
+      mockDb.getAllAsync.mockResolvedValue([]);
+      (FileSystem.writeAsStringAsync as jest.Mock).mockRejectedValueOnce(new Error('disk full'));
+
+      const result = await create_backup();
+
+      expect(result.success).toBe(false);
+      expect(result.error).toBe('保存备份文件失败');
     });
   });
 });
