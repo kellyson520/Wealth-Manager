@@ -1,6 +1,12 @@
 import { handleIntent } from '../../agents/guardian/guardian.agent';
 import { sanitizeText, sanitizeCloudData } from '../../agents/guardian/guardian.agent';
 
+const mockSyncUploadHandler = jest.fn().mockResolvedValue({ success: true });
+const mockGetSyncStatusHandler = jest.fn().mockResolvedValue({
+  success: true,
+  data: { configured: true, enabled: true, lastSync: null },
+});
+
 jest.mock('../../tools/security/security.tool', () => ({
   run_safety_check: jest.fn().mockResolvedValue({
     success: true,
@@ -69,6 +75,15 @@ jest.mock('../../agents/_shared', () => ({
     maxPermissionLevel: 2,
   }),
   canCallTool: jest.fn().mockReturnValue({ allowed: true, reason: '' }),
+  getTool: jest.fn((name: string) => {
+    if (name === 'get_sync_status') {
+      return { handler: mockGetSyncStatusHandler };
+    }
+    if (name === 'sync_upload') {
+      return { handler: mockSyncUploadHandler };
+    }
+    return undefined;
+  }),
   rememberThis: jest.fn().mockResolvedValue(undefined),
   rememberMoment: jest.fn().mockResolvedValue(undefined),
 }));
@@ -207,6 +222,30 @@ describe('Guardian Agent', () => {
 
       expect(reply).toContain('通知');
       expect(reply).toContain('granted');
+    });
+
+    test('requires explicit confirmation before WebDAV upload', async () => {
+      const reply = await handleIntent({
+        intent: 'sync_webdav',
+        params: { upload: true },
+        confidence: 0.8,
+        agent: 'guardian',
+      });
+
+      expect(reply).toContain('需要明确确认');
+      expect(mockSyncUploadHandler).not.toHaveBeenCalled();
+    });
+
+    test('uploads to WebDAV only after confirmation', async () => {
+      const reply = await handleIntent({
+        intent: 'sync_webdav',
+        params: { upload: true, confirmed: true },
+        confidence: 0.8,
+        agent: 'guardian',
+      });
+
+      expect(mockSyncUploadHandler).toHaveBeenCalledWith({ confirmed: true });
+      expect(reply).toContain('数据已成功上传');
     });
 
     test('handles unknown intent with help message', async () => {

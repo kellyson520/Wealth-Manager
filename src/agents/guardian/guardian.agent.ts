@@ -431,9 +431,18 @@ async function handleSyncWebDAV(params: Record<string, unknown>): Promise<string
   }
 
   if (params.upload) {
+    if (params.confirmed !== true) {
+      return '上传会将数据同步到 WebDAV 服务器，需要明确确认。请回复“确认同步上传”后再执行。';
+    }
+
+    const toolCheck = canCallTool(AGENT_ID, 'sync_upload');
+    if (!toolCheck.allowed) {
+      return `操作被拒绝：${toolCheck.reason}`;
+    }
+
     const uploadTool = getTool('sync_upload');
     if (!uploadTool) return '上传功能暂不可用。';
-    const result = await uploadTool.handler();
+    const result = await uploadTool.handler({ confirmed: true });
     if (result.success) return '数据已成功上传到服务器。';
     return `上传失败: ${result.error}`;
   }
