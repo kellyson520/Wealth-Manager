@@ -79,6 +79,9 @@ export async function modify_bill(params: {
 }): Promise<ToolResult> {
   try {
     if (!params.billId) return { success: false, error: '账单ID不能为空' };
+    if (params.amount !== undefined && (!Number.isFinite(params.amount) || params.amount <= 0)) {
+      return { success: false, error: '金额不正确', errorCode: '1002' };
+    }
     const db = await getDatabase();
 
     const existing = await db.getFirstAsync<BillRecord>(

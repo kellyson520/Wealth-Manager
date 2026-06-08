@@ -27,7 +27,7 @@ jest.mock('../../core/database/database', () => {
   };
 });
 
-import { add_bill, search_bills } from '../../tools/bills/bills.tool';
+import { add_bill, modify_bill, search_bills } from '../../tools/bills/bills.tool';
 import * as db from '../../core/database/database';
 
 function getMockDb() {
@@ -246,5 +246,31 @@ describe('search_bills Tool', () => {
       expect(result.success).toBe(false);
       expect(result.errorCode).toBe('1000');
     });
+  });
+});
+
+describe('modify_bill Tool', () => {
+  beforeEach(async () => {
+    jest.clearAllMocks();
+  });
+
+  test('rejects negative amount updates before querying the database', async () => {
+    const mockDb = await getMockDb();
+
+    const result = await modify_bill({ billId: 'bill-1', amount: -1 });
+
+    expect(result.success).toBe(false);
+    expect(result.errorCode).toBe('1002');
+    expect(mockDb.getFirstAsync).not.toHaveBeenCalled();
+  });
+
+  test('rejects NaN amount updates before querying the database', async () => {
+    const mockDb = await getMockDb();
+
+    const result = await modify_bill({ billId: 'bill-1', amount: NaN });
+
+    expect(result.success).toBe(false);
+    expect(result.errorCode).toBe('1002');
+    expect(mockDb.getFirstAsync).not.toHaveBeenCalled();
   });
 });
