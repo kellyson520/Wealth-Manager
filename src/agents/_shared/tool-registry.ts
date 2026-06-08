@@ -3,9 +3,13 @@ import {
   ToolDefinition,
 } from '../../shared/types';
 
+export interface ToolExecutionContext {
+  agentId: AgentId;
+}
+
 export interface ToolEntry {
   definition: ToolDefinition;
-  handler: (...args: any[]) => Promise<any>;
+  handler: (params?: any, context?: ToolExecutionContext) => Promise<any>;
   allowedAgents: AgentId[];
 }
 

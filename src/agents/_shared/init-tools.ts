@@ -1,4 +1,4 @@
-import { registerTool } from './tool-registry';
+import { registerTool, type ToolExecutionContext } from './tool-registry';
 import { PermissionLevel } from '../../shared/types';
 
 import { add_bill, search_bills, get_bill, modify_bill, delete_bill, split_bill, refund_bill } from '../../tools/bills/bills.tool';
@@ -1658,7 +1658,10 @@ export function initToolRegistry(): void {
       retryable: true,
       idempotent: false,
     },
-    handler: async (params: any) => create_link(params),
+    handler: async (params: any, context?: ToolExecutionContext) => create_link({
+      ...params,
+      ownerId: context?.agentId,
+    }),
     allowedAgents: ['guardian', 'coach'],
   });
 
@@ -1675,7 +1678,10 @@ export function initToolRegistry(): void {
       retryable: true,
       idempotent: true,
     },
-    handler: async (params: any) => leave_shared(params),
+    handler: async (params: any, context?: ToolExecutionContext) => leave_shared({
+      ...params,
+      callerId: context?.agentId,
+    }),
     allowedAgents: ['analyst', 'coach'],
   });
 
@@ -1692,7 +1698,10 @@ export function initToolRegistry(): void {
       retryable: false,
       idempotent: false,
     },
-    handler: async (params: any) => delete_link(params),
+    handler: async (params: any, context?: ToolExecutionContext) => delete_link({
+      ...params,
+      callerId: context?.agentId,
+    }),
     allowedAgents: ['guardian'],
   });
 

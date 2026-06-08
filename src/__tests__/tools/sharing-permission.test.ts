@@ -33,6 +33,9 @@ jest.mock('../../core/database/database', () => {
   };
 });
 
+import { initToolRegistry } from '../../agents/_shared/init-tools';
+import { getTool } from '../../agents/_shared/tool-registry';
+import { executeTool } from '../../tools/_pipeline/tool-executor';
 import { create_link, leave_shared, delete_link } from '../../tools/sharing/sharing.tool';
 
 describe('Sharing permission bypass fix (Fix #3)', () => {
@@ -97,6 +100,31 @@ describe('Sharing permission bypass fix (Fix #3)', () => {
 
       expect(result.success).toBe(false);
       expect(result.error).toBe('无效的分享令牌');
+    });
+  });
+
+  describe('executor identity enforcement', () => {
+    test('uses executor agentId instead of caller-supplied owner fields', async () => {
+      initToolRegistry();
+      const createTool = getTool('create_link')!;
+      const leaveTool = getTool('leave_shared')!;
+
+      const createResult = await executeTool(
+        createTool,
+        { ownerId: 'coach', startDate: '2026-06-01', endDate: '2026-06-30' },
+        { agentId: 'guardian' }
+      );
+      expect(createResult.success).toBe(true);
+
+      const token = (createResult.data as any).token;
+      const accessResult = await executeTool(
+        leaveTool,
+        { token, callerId: 'guardian' },
+        { agentId: 'coach' }
+      );
+
+      expect(accessResult.success).toBe(false);
+      expect(accessResult.errorCode).toBe('PERMISSION_DENIED');
     });
   });
 

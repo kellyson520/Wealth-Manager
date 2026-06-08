@@ -52,7 +52,7 @@ export async function executeTool(
 
   try {
     const result = await Promise.race([
-      entry.handler(params),
+      entry.handler(params, { agentId }),
       new Promise<never>((_, reject) =>
         setTimeout(
           () => reject(new Error(`Tool ${entry.definition.name} timed out after ${entry.definition.timeout}ms`)),
