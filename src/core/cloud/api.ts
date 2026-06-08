@@ -100,6 +100,17 @@ export async function callCloudLLM(
     };
   }
 
+  let chatCompletionsUrl: string;
+  try {
+    chatCompletionsUrl = resolveChatCompletionsUrl(request.baseUrl);
+  } catch (e) {
+    return {
+      success: false,
+      error: e instanceof Error ? e.message : '云端 API 地址无效',
+      degraded: true,
+    };
+  }
+
   try {
     const body: Record<string, unknown> = {
       model: request.model || 'gpt-4o',
@@ -124,7 +135,7 @@ export async function callCloudLLM(
       }
     }
 
-    const fetchResponse = await fetch(resolveChatCompletionsUrl(request.baseUrl), {
+    const fetchResponse = await fetch(chatCompletionsUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -177,10 +188,59 @@ function sanitizeContent(content: string): string {
 }
 
 function resolveChatCompletionsUrl(baseUrl?: string): string {
-  const normalized = (baseUrl || 'https://api.openai.com/v1').replace(/\/$/, '');
+  const normalized = validateCloudBaseUrl(baseUrl || 'https://api.openai.com/v1').replace(/\/$/, '');
   return normalized.endsWith('/chat/completions')
     ? normalized
     : `${normalized}/chat/completions`;
+}
+
+function validateCloudBaseUrl(baseUrl: string): string {
+  let url: URL;
+  try {
+    url = new URL(baseUrl);
+  } catch {
+    throw new Error('云端 API 地址无效');
+  }
+
+  if (url.protocol !== 'https:') {
+    throw new Error('云端 API 地址必须使用 HTTPS');
+  }
+
+  const hostname = url.hostname.toLowerCase();
+  if (
+    hostname === 'localhost' ||
+    hostname.endsWith('.localhost') ||
+    hostname === '0.0.0.0' ||
+    hostname === '127.0.0.1' ||
+    hostname === '::1' ||
+    hostname.startsWith('127.')
+  ) {
+    throw new Error('云端 API 地址不能指向本机地址');
+  }
+
+  if (isPrivateIPv4(hostname)) {
+    throw new Error('云端 API 地址不能指向私网地址');
+  }
+
+  return url.toString();
+}
+
+function isPrivateIPv4(hostname: string): boolean {
+  const parts = hostname.split('.');
+  if (parts.length !== 4) return false;
+
+  const octets = parts.map((part) => Number(part));
+  if (octets.some((octet, index) => !/^\d+$/.test(parts[index]) || octet < 0 || octet > 255)) {
+    return false;
+  }
+
+  const [a, b] = octets;
+  return (
+    a === 10 ||
+    (a === 172 && b >= 16 && b <= 31) ||
+    (a === 192 && b === 168) ||
+    (a === 169 && b === 254)
+  );
 }
 
 function normalizeToolChoice(
@@ -246,6 +306,14 @@ export async function* callCloudLLMStream(
     return;
   }
 
+  let chatCompletionsUrl: string;
+  try {
+    chatCompletionsUrl = resolveChatCompletionsUrl(request.baseUrl);
+  } catch (e) {
+    yield { type: 'error', error: e instanceof Error ? e.message : '云端 API 地址无效' };
+    return;
+  }
+
   try {
     const body: Record<string, unknown> = {
       model: request.model || 'gpt-4o',
@@ -271,7 +339,7 @@ export async function* callCloudLLMStream(
       }
     }
 
-    const fetchResponse = await fetch(resolveChatCompletionsUrl(request.baseUrl), {
+    const fetchResponse = await fetch(chatCompletionsUrl, {
 	      method: 'POST',
 	      headers: {
 	        'Content-Type': 'application/json',

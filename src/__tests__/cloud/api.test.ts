@@ -259,6 +259,45 @@ describe('Cloud LLM API - Safety Chain', () => {
   });
 
   describe('OpenAI-compatible provider options', () => {
+    test('rejects insecure custom base URL before sending API key', async () => {
+      const result = await callCloudLLM(
+        {
+          baseUrl: 'http://token-plan-cn.xiaomimimo.com/v1',
+          messages: [{ role: 'user', content: 'clean text' }],
+        },
+        'test-key'
+      );
+
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('HTTPS');
+      expect(result.degraded).toBe(true);
+      expect(global.fetch).not.toHaveBeenCalled();
+    });
+
+    test('rejects local or private custom base URL before sending API key', async () => {
+      const blockedUrls = [
+        'https://localhost:11434/v1',
+        'https://127.0.0.1:11434/v1',
+        'https://10.0.0.5/v1',
+        'https://172.16.0.5/v1',
+        'https://192.168.1.5/v1',
+      ];
+
+      for (const baseUrl of blockedUrls) {
+        const result = await callCloudLLM(
+          {
+            baseUrl,
+            messages: [{ role: 'user', content: 'clean text' }],
+          },
+          'test-key'
+        );
+
+        expect(result.success).toBe(false);
+        expect(result.degraded).toBe(true);
+      }
+      expect(global.fetch).not.toHaveBeenCalled();
+    });
+
     test('uses custom base URL, model, max_completion_tokens and thinking config', async () => {
       (global.fetch as jest.Mock).mockResolvedValue({
         ok: true,
