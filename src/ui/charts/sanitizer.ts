@@ -97,7 +97,13 @@ export function sanitizeChartConfig(raw: unknown): SanitizeResult {
     return { valid: false, config: {}, error: `Config exceeds max depth of ${MAX_CONFIG_DEPTH}` };
   }
 
-  const jsonStr = JSON.stringify(config);
+  let jsonStr: string;
+  try {
+    jsonStr = JSON.stringify(config);
+  } catch {
+    return { valid: false, config: {}, error: 'Config must be JSON serializable' };
+  }
+
   if (jsonStr.length > MAX_CONFIG_SIZE) {
     return { valid: false, config: {}, error: `Config size ${jsonStr.length} exceeds limit of ${MAX_CONFIG_SIZE}` };
   }
