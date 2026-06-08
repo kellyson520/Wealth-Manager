@@ -27,8 +27,14 @@ jest.mock('../../core/database/database', () => {
   };
 });
 
+jest.mock('../../core/hashchain/hashchain', () => ({
+  generateHashForBill: jest.fn().mockResolvedValue('hash'),
+  rebuildHashChain: jest.fn().mockResolvedValue({ valid: true }),
+}));
+
 import { add_bill, modify_bill, search_bills, split_bill } from '../../tools/bills/bills.tool';
 import * as db from '../../core/database/database';
+import { generateHashForBill, rebuildHashChain } from '../../core/hashchain/hashchain';
 
 function getMockDb() {
   return db.getDatabase() as any;
@@ -72,10 +78,7 @@ describe('add_bill Tool', () => {
         expect.stringContaining('INSERT INTO bills'),
         expect.any(Array)
       );
-      expect(mockDb.runAsync).toHaveBeenCalledWith(
-        expect.stringContaining('UPDATE bills SET hash'),
-        expect.any(Array)
-      );
+      expect(generateHashForBill).toHaveBeenCalledWith(expect.any(String));
     });
 
     test('creates an income bill successfully', async () => {
@@ -294,5 +297,61 @@ describe('split_bill Tool', () => {
     expect(result.success).toBe(false);
     expect(result.error).toBe('拆分金额必须全部大于0');
     expect(mockDb.getFirstAsync).not.toHaveBeenCalled();
+  });
+
+  test('splits bills inside a transaction and rebuilds the hash chain', async () => {
+    const mockDb = await getMockDb();
+    mockDb.getFirstAsync.mockResolvedValue({
+      id: 'bill-1',
+      amount: 100,
+      type: 'expense',
+      category: '餐饮',
+      merchant: '午饭',
+      date: '2024-01-15',
+    });
+    mockDb.runAsync.mockResolvedValue({ changes: 1 });
+
+    const result = await split_bill({
+      billId: 'bill-1',
+      splits: [
+        { amount: 40, category: '餐饮' },
+        { amount: 60, category: '交通' },
+      ],
+    });
+
+    expect(result.success).toBe(true);
+    expect(mockDb.execAsync).toHaveBeenNthCalledWith(1, 'BEGIN IMMEDIATE TRANSACTION');
+    expect(mockDb.execAsync).toHaveBeenNthCalledWith(2, 'COMMIT');
+    expect(mockDb.runAsync).toHaveBeenCalledTimes(3);
+    expect(rebuildHashChain).toHaveBeenCalled();
+  });
+
+  test('rolls back when creating a split bill fails', async () => {
+    const mockDb = await getMockDb();
+    mockDb.getFirstAsync.mockResolvedValue({
+      id: 'bill-1',
+      amount: 100,
+      type: 'expense',
+      category: '餐饮',
+      merchant: '午饭',
+      date: '2024-01-15',
+    });
+    mockDb.runAsync
+      .mockResolvedValueOnce({ changes: 1 })
+      .mockRejectedValueOnce(new Error('insert failed'));
+
+    const result = await split_bill({
+      billId: 'bill-1',
+      splits: [
+        { amount: 40, category: '餐饮' },
+        { amount: 60, category: '交通' },
+      ],
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.errorCode).toBe('1000');
+    expect(mockDb.execAsync).toHaveBeenNthCalledWith(1, 'BEGIN IMMEDIATE TRANSACTION');
+    expect(mockDb.execAsync).toHaveBeenNthCalledWith(2, 'ROLLBACK');
+    expect(rebuildHashChain).not.toHaveBeenCalled();
   });
 });

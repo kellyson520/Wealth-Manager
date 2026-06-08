@@ -219,27 +219,36 @@ export async function split_bill(params: {
     const now = new Date().toISOString();
     const created: { id: string; amount: number; category: string }[] = [];
 
-    for (const split of params.splits) {
-      const id = uuidv4();
-      await db.runAsync(
-        `INSERT INTO bills (id, amount, type, category, tags, merchant, raw_description, date, note, source, created_at)
-         VALUES (?, ?, ?, ?, '[]', ?, ?, ?, ?, 'manual', ?)`,
-        [
-          id, split.amount, original.type,
-          split.category || original.category,
-          split.merchant || original.merchant,
-          `${split.merchant || original.merchant} (拆分自 ${original.merchant})`,
-          original.date,
-          split.note || `拆分自: ${original.merchant} ¥${original.amount}`,
-          now,
-        ]
-      );
-      created.push({ id, amount: split.amount, category: split.category || original.category });
+    try {
+      await db.execAsync('BEGIN IMMEDIATE TRANSACTION');
+      for (const split of params.splits) {
+        const id = uuidv4();
+        await db.runAsync(
+          `INSERT INTO bills (id, amount, type, category, tags, merchant, raw_description, date, note, source, created_at)
+           VALUES (?, ?, ?, ?, '[]', ?, ?, ?, ?, 'manual', ?)`,
+          [
+            id, split.amount, original.type,
+            split.category || original.category,
+            split.merchant || original.merchant,
+            `${split.merchant || original.merchant} (拆分自 ${original.merchant})`,
+            original.date,
+            split.note || `拆分自: ${original.merchant} ¥${original.amount}`,
+            now,
+          ]
+        );
+        created.push({ id, amount: split.amount, category: split.category || original.category });
+      }
+
+      await db.runAsync('UPDATE bills SET note = note || ? WHERE id = ?', [
+        ` [已拆分为${params.splits.length}笔]`, params.billId,
+      ]);
+      await db.execAsync('COMMIT');
+    } catch (e) {
+      await db.execAsync('ROLLBACK').catch(() => undefined);
+      throw e;
     }
 
-    await db.runAsync('UPDATE bills SET note = note || ? WHERE id = ?', [
-      ` [已拆分为${params.splits.length}笔]`, params.billId,
-    ]);
+    await rebuildHashChain();
 
     return { success: true, data: { originalBillId: params.billId, originalAmount: original.amount, splits: created } };
   } catch (e) {
