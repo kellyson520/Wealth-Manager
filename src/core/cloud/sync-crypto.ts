@@ -5,7 +5,30 @@ const PBKDF2_ITERATIONS = 120000;
 const SALT_BYTES = 16;
 const IV_BYTES = 12;
 
+type WebCryptoApi = Crypto;
+
+function getWebCrypto(): WebCryptoApi | null {
+  if (typeof globalThis.crypto?.subtle !== 'undefined') {
+    return globalThis.crypto;
+  }
+
+  try {
+    const nodeCrypto = require('crypto') as { webcrypto?: WebCryptoApi };
+    if (nodeCrypto.webcrypto?.subtle) {
+      return nodeCrypto.webcrypto;
+    }
+  } catch {
+    // Ignore missing Node crypto fallback in runtime environments that do not expose require().
+  }
+
+  return null;
+}
+
 function bytesToBase64(bytes: Uint8Array): string {
+  if (typeof Buffer !== 'undefined') {
+    return Buffer.from(bytes).toString('base64');
+  }
+
   let binary = '';
   for (let i = 0; i < bytes.length; i++) {
     binary += String.fromCharCode(bytes[i]);
@@ -14,6 +37,10 @@ function bytesToBase64(bytes: Uint8Array): string {
 }
 
 function base64ToBytes(b64: string): Uint8Array {
+  if (typeof Buffer !== 'undefined') {
+    return new Uint8Array(Buffer.from(b64, 'base64'));
+  }
+
   const binary = atob(b64);
   const bytes = new Uint8Array(binary.length);
   for (let i = 0; i < binary.length; i++) {
@@ -22,12 +49,16 @@ function base64ToBytes(b64: string): Uint8Array {
   return bytes;
 }
 
-function randomBytes(length: number): Uint8Array {
-  return crypto.getRandomValues(new Uint8Array(length));
+function randomBytes(webCrypto: WebCryptoApi, length: number): Uint8Array {
+  return webCrypto.getRandomValues(new Uint8Array(length));
 }
 
-async function deriveKey(passphrase: string, salt: Uint8Array): Promise<CryptoKey> {
-  const keyMaterial = await crypto.subtle.importKey(
+async function deriveKey(
+  webCrypto: WebCryptoApi,
+  passphrase: string,
+  salt: Uint8Array
+): Promise<CryptoKey> {
+  const keyMaterial = await webCrypto.subtle.importKey(
     'raw',
     encoder.encode(passphrase),
     'PBKDF2',
@@ -35,7 +66,7 @@ async function deriveKey(passphrase: string, salt: Uint8Array): Promise<CryptoKe
     ['deriveKey']
   );
 
-  return crypto.subtle.deriveKey(
+  return webCrypto.subtle.deriveKey(
     {
       name: 'PBKDF2',
       salt,
@@ -54,12 +85,14 @@ export async function encryptPayload(
   passphrase: string
 ): Promise<{ ciphertext: string; salt: string } | null> {
   try {
-    if (!crypto.subtle) return null;
-    const salt = randomBytes(SALT_BYTES);
-    const iv = randomBytes(IV_BYTES);
-    const key = await deriveKey(passphrase, salt);
+    const webCrypto = getWebCrypto();
+    if (!webCrypto?.subtle) return null;
+
+    const salt = randomBytes(webCrypto, SALT_BYTES);
+    const iv = randomBytes(webCrypto, IV_BYTES);
+    const key = await deriveKey(webCrypto, passphrase, salt);
     const encrypted = new Uint8Array(
-      await crypto.subtle.encrypt(
+      await webCrypto.subtle.encrypt(
         { name: 'AES-GCM', iv },
         key,
         encoder.encode(plaintext)
@@ -85,16 +118,18 @@ export async function decryptPayload(
   saltBase64: string
 ): Promise<string | null> {
   try {
-    if (!crypto.subtle) return null;
+    const webCrypto = getWebCrypto();
+    if (!webCrypto?.subtle) return null;
+
     const combined = base64ToBytes(encryptedBase64);
     if (combined.length <= IV_BYTES) return null;
 
     const iv = combined.slice(0, IV_BYTES);
     const ciphertext = combined.slice(IV_BYTES);
     const salt = base64ToBytes(saltBase64);
-    const key = await deriveKey(passphrase, salt);
+    const key = await deriveKey(webCrypto, passphrase, salt);
 
-    const decrypted = await crypto.subtle.decrypt(
+    const decrypted = await webCrypto.subtle.decrypt(
       { name: 'AES-GCM', iv },
       key,
       ciphertext

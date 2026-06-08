@@ -23,6 +23,11 @@ async function getConfig(db: Awaited<ReturnType<typeof getDatabase>>): Promise<W
     );
     if (!row) return null;
     const config = JSON.parse(row.value) as WebDAVConfig;
+    if (config.password && !config.passwordCiphertext) {
+      logger.warn('WebDAV', 'Found legacy plaintext WebDAV password; refusing to use insecure config');
+      delete config.password;
+      return config;
+    }
     if (!config.password && config.passwordCiphertext && config.passwordSalt) {
       const password = await decryptPayload(
         config.passwordCiphertext,
@@ -45,11 +50,13 @@ async function saveConfig(
   const storedConfig: WebDAVConfig = { ...config };
   if (config.password) {
     const encrypted = await encryptPayload(config.password, getPasswordStorageKey(config));
-    if (encrypted) {
-      storedConfig.passwordCiphertext = encrypted.ciphertext;
-      storedConfig.passwordSalt = encrypted.salt;
-      delete storedConfig.password;
+    if (!encrypted) {
+      throw new Error('credential encryption unavailable');
     }
+
+    storedConfig.passwordCiphertext = encrypted.ciphertext;
+    storedConfig.passwordSalt = encrypted.salt;
+    delete storedConfig.password;
   }
   await db.runAsync(
     "INSERT OR REPLACE INTO sync_state (key, value, updated_at) VALUES ('webdav_config', ?, ?)",
