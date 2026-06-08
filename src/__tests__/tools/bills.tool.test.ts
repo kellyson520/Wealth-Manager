@@ -171,6 +171,18 @@ describe('add_bill Tool', () => {
       expect(result.success).toBe(false);
       expect(result.errorCode).toBe('1000');
     });
+
+    test('rolls back when hash generation fails', async () => {
+      const mockDb = await getMockDb();
+      mockDb.getFirstAsync.mockResolvedValue({ id: 'test-id', amount: 50 });
+      (generateHashForBill as jest.Mock).mockResolvedValue(false);
+
+      const result = await add_bill({ amount: 50, type: 'expense', merchant: '测试' });
+
+      expect(result.success).toBe(false);
+      expect(result.errorCode).toBe('1000');
+      expect(mockDb.execAsync).toHaveBeenCalledWith('ROLLBACK');
+    });
   });
 });
 

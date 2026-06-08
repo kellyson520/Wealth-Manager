@@ -23,6 +23,7 @@ export async function add_bill(params: {
   const date = params.date || now.split('T')[0];
 
   try {
+    await db.execAsync('BEGIN IMMEDIATE TRANSACTION');
     await db.runAsync(
       `INSERT INTO bills (id, amount, type, category, tags, merchant, raw_description, date, note, source, created_at)
        VALUES (?, ?, ?, ?, '[]', ?, ?, ?, ?, 'manual', ?)`,
@@ -39,15 +40,20 @@ export async function add_bill(params: {
       ]
     );
 
+    const hashGenerated = await generateHashForBill(id);
+    if (!hashGenerated) {
+      throw new Error('Failed to generate bill hash');
+    }
+
     const bill = await db.getFirstAsync<BillRecord>(
       'SELECT * FROM bills WHERE id = ?',
       [id]
     );
 
-	    await generateHashForBill(id);
-
+    await db.execAsync('COMMIT');
     return { success: true, data: bill };
   } catch (e) {
+    await db.execAsync('ROLLBACK').catch(() => undefined);
     captureError('BillsTool.add_bill', e, 'Failed to insert bill');
     return { success: false, error: '记账失败', errorCode: '1000' };
   }
