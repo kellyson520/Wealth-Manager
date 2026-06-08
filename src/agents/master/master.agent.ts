@@ -360,13 +360,13 @@ async function executeToolCall(
   rawArgs: string
 ): Promise<string | null> {
   const entry = getTool(toolName);
-  if (!entry) return null;
+  if (!entry) return `工具 ${toolName} 不存在或不可用`;
 
   let args: Record<string, unknown>;
   try {
     args = JSON.parse(rawArgs);
   } catch {
-    return null;
+    return `工具 ${toolName} 参数格式无效`;
   }
 
   try {

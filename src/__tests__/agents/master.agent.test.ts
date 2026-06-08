@@ -30,6 +30,12 @@ jest.mock('../../agents/_shared', () => ({
   rememberMoment: jest.fn().mockResolvedValue(undefined),
   recallRecentContext: jest.fn().mockResolvedValue([]),
   initToolRegistry: jest.fn(),
+  getTool: jest.fn().mockReturnValue(undefined),
+  listToolsForAgent: jest.fn().mockReturnValue([]),
+  executeTool: jest.fn(),
+}));
+jest.mock('../../agents/_shared/memory', () => ({
+  recallRecentContext: jest.fn().mockResolvedValue(''),
 }));
 jest.mock('../../agents/guardian/guardian.agent', () => ({
   sanitizeText: jest.fn((t: string) => t),
@@ -47,8 +53,24 @@ jest.mock('../../tools/bills/bills.tool', () => ({
   add_bill: jest.fn(),
   search_bills: jest.fn(),
 }));
+jest.mock('../../core/cloud/api', () => ({
+  callCloudLLM: jest.fn(),
+  callCloudLLMStream: jest.fn(),
+}));
+jest.mock('../../core/cloud/prompts/agent-prompts', () => ({
+  getAgentSystemPrompt: jest.fn().mockResolvedValue(''),
+}));
+jest.mock('../../core/memory/adaptive-context', () => ({
+  buildAdaptiveContextPrompt: jest.fn().mockResolvedValue(''),
+}));
+jest.mock('../../core/persona/persona-engine', () => ({
+  generatePersonaPrompt: jest.fn().mockReturnValue(''),
+  updateMood: jest.fn().mockResolvedValue(undefined),
+  loadPersona: jest.fn().mockResolvedValue(undefined),
+}));
 
-import { processMessage } from '../../agents/master/master.agent';
+import { processMessage, processMessageStream, setCloudApiKey } from '../../agents/master/master.agent';
+import { callCloudLLMStream } from '../../core/cloud/api';
 import { IntentResult } from '../../shared/types';
 
 describe('Master Agent - processMessage', () => {
@@ -84,5 +106,29 @@ describe('Master Agent - processMessage', () => {
     const result = await processMessage('午饭花了35块');
     expect(result.reply).toBeDefined();
     expect(result.reply.role).toBe('assistant');
+  });
+
+  test('reports unknown streamed tool calls as unavailable', async () => {
+    setCloudApiKey('test-key');
+    (callCloudLLMStream as jest.Mock).mockImplementationOnce(async function* () {
+      yield {
+        type: 'function_call',
+        functionCall: { name: 'unknown_tool', arguments: '{}' },
+      };
+      yield { type: 'done' };
+    });
+
+    const events = [];
+    for await (const event of processMessageStream('调用未知工具')) {
+      events.push(event);
+    }
+    setCloudApiKey(undefined);
+
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: 'tool_result',
+        content: '工具 unknown_tool 不存在或不可用',
+      })
+    );
   });
 });
