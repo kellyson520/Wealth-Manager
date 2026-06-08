@@ -28,6 +28,7 @@ export default function ChatScreen() {
   const [messages, setMessages] = useState<ChatMessage[]>([WELCOME_MESSAGE]);
   const [isProcessing, setIsProcessing] = useState(false);
   const flatListRef = useRef<FlatList>(null);
+  const processingRef = useRef(false);
   const router = useRouter();
 
   useEffect(() => {
@@ -55,6 +56,12 @@ export default function ChatScreen() {
 
   const handleSend = useCallback(
     async (text: string) => {
+      if (processingRef.current) {
+        return;
+      }
+
+      processingRef.current = true;
+
       const userMsg: ChatMessage = {
         id: `u_${Date.now()}`,
         role: 'user',
@@ -78,6 +85,7 @@ export default function ChatScreen() {
           timestamp: new Date().toISOString(),
         });
       } finally {
+        processingRef.current = false;
         setIsProcessing(false);
       }
     },
