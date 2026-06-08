@@ -58,4 +58,19 @@ describe('task scheduler cron matching', () => {
       }), now)
     ).toBe(false);
   });
+
+  test('rejects cron intervals outside the field range', () => {
+    const now = new Date(2026, 5, 5, 8, 0);
+    expect(shouldExecuteNow(task({ cron: '*/90 * * * *' }), now)).toBe(false);
+  });
+
+  test('rejects cron ranges outside the field range', () => {
+    const now = new Date(2026, 5, 5, 8, 30);
+    expect(shouldExecuteNow(task({ cron: '0-90 8 * * *' }), now)).toBe(false);
+  });
+
+  test('rejects cron values outside the field range', () => {
+    const now = new Date(2026, 5, 5, 8, 30);
+    expect(shouldExecuteNow(task({ cron: '30 25 * * *' }), now)).toBe(false);
+  });
 });

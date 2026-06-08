@@ -102,20 +102,48 @@ function cronFieldMatches(
     const [base, rawInterval] = field.split('/');
     const interval = parseInt(rawInterval, 10);
     if (!interval || interval <= 0) return false;
+    if (interval > getCronMax(type)) return false;
     return (base === '*' || cronFieldMatches(base, value, type)) && value % interval === 0;
   }
   if (field.includes('-')) {
     const [rawStart, rawEnd] = field.split('-');
     const start = normalizeCronValue(parseInt(rawStart, 10), type);
     const end = normalizeCronValue(parseInt(rawEnd, 10), type);
+    if (!isValidCronValue(start, type) || !isValidCronValue(end, type) || start > end) return false;
     return value >= start && value <= end;
   }
-  return normalizeCronValue(parseInt(field, 10), type) === value;
+  const normalized = normalizeCronValue(parseInt(field, 10), type);
+  return isValidCronValue(normalized, type) && normalized === value;
 }
 
 function normalizeCronValue(value: number, type: 'minute' | 'hour' | 'dayOfMonth' | 'month' | 'dayOfWeek'): number {
   if (type === 'dayOfWeek' && value === 7) return 0;
   return value;
+}
+
+function isValidCronValue(value: number, type: 'minute' | 'hour' | 'dayOfMonth' | 'month' | 'dayOfWeek'): boolean {
+  return Number.isInteger(value) && value >= getCronMin(type) && value <= getCronMax(type);
+}
+
+function getCronMin(type: 'minute' | 'hour' | 'dayOfMonth' | 'month' | 'dayOfWeek'): number {
+  return type === 'dayOfMonth' || type === 'month' ? 1 : 0;
+}
+
+function getCronMax(type: 'minute' | 'hour' | 'dayOfMonth' | 'month' | 'dayOfWeek'): number {
+  switch (type) {
+    case 'minute':
+      return 59;
+    case 'hour':
+      return 23;
+    case 'dayOfMonth':
+      return 31;
+    case 'month':
+      return 12;
+    case 'dayOfWeek':
+      return 7;
+    default:
+      return 0;
+  }
 }
 
 async function executeTask(task: RecurringTask): Promise<void> {
