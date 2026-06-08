@@ -172,4 +172,41 @@ describe('WebDAV sync path validation', () => {
       expect.objectContaining({ method: 'PROPFIND' })
     );
   });
+
+  test('skips malformed downloaded rows instead of inserting partial records', async () => {
+    await mockStoredConfig();
+    const encrypted = await encryptPayload(JSON.stringify({
+      bills: [
+        { id: 'bill-1', amount: 12, type: 'expense', category: '餐饮', date: '2026-06-08' },
+        { amount: 99, type: 'expense', category: '异常', date: '2026-06-08' },
+      ],
+    }), 'backup-passphrase');
+    expect(encrypted).not.toBeNull();
+
+    (globalThis as any).fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: jest.fn().mockResolvedValue(encrypted!.ciphertext),
+    });
+
+    const result = await sync_download({
+      filename: 'sync_20260608_1200.json',
+      decrypt: true,
+      passphrase: 'backup-passphrase',
+      salt: encrypted!.salt,
+    });
+
+    const mockDb = await getMockDb();
+    expect(result.success).toBe(true);
+    expect((result.data as any).billsImported).toBe(1);
+    expect((result.data as any).errors).toBe(1);
+    expect(mockDb.runAsync).toHaveBeenCalledWith(
+      expect.stringContaining('INSERT OR REPLACE INTO bills'),
+      expect.arrayContaining(['bill-1'])
+    );
+    expect(mockDb.runAsync).not.toHaveBeenCalledWith(
+      expect.stringContaining('INSERT OR REPLACE INTO bills'),
+      expect.arrayContaining([99])
+    );
+  });
 });

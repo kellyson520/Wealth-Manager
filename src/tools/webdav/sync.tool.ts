@@ -472,6 +472,10 @@ async function mergeData(
         const allowedColumns = TABLE_COLUMNS[table] || [];
         const columns = Object.keys(row)
           .filter((k) => allowedColumns.includes(k) && isPrimitiveDbValue(row[k]));
+        if (!hasRequiredColumns(table, row)) {
+          errors++;
+          continue;
+        }
         if (columns.length === 0) continue;
 
           const placeholders = columns.map(() => '?').join(', ');
@@ -519,6 +523,11 @@ function isPrimitiveDbValue(value: unknown): boolean {
   return value === null || typeof value === 'string' || typeof value === 'number';
 }
 
+function hasRequiredColumns(table: string, row: Record<string, unknown>): boolean {
+  const required = REQUIRED_TABLE_COLUMNS[table] || ['id'];
+  return required.every((column) => isPrimitiveDbValue(row[column]) && row[column] !== '');
+}
+
 const TABLE_COLUMNS: Record<string, string[]> = {
   bills: ['id', 'amount', 'type', 'category', 'tags', 'merchant', 'raw_description', 'date', 'note', 'source', 'created_at', 'hash', 'prev_hash'],
   debts: ['id', 'title', 'type', 'principal', 'remaining', 'counterparty', 'interest_rate', 'start_date', 'due_date', 'status', 'note', 'created_at', 'updated_at'],
@@ -529,6 +538,18 @@ const TABLE_COLUMNS: Record<string, string[]> = {
   classification_rules: ['id', 'name', 'description', 'priority', 'enabled', 'conditions', 'actions', 'hit_count', 'last_hit_at', 'created_at', 'updated_at', 'created_by'],
   recurring_tasks: ['id', 'name', 'type', 'cron', 'enabled', 'last_triggered', 'created_at'],
   reimbursement_tasks: ['id', 'title', 'amount', 'category', 'status', 'merchant', 'date', 'note', 'created_at', 'updated_at'],
+};
+
+const REQUIRED_TABLE_COLUMNS: Record<string, string[]> = {
+  bills: ['id', 'amount', 'type', 'category', 'date'],
+  debts: ['id'],
+  repayments: ['id', 'debt_id'],
+  assets: ['id'],
+  savings_goals: ['id'],
+  achievements: ['id'],
+  classification_rules: ['id'],
+  recurring_tasks: ['id'],
+  reimbursement_tasks: ['id'],
 };
 
 export async function list_sync_files(params?: {
