@@ -338,8 +338,8 @@ export async function searchRules(
   }
 
   const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
-  const limit = Math.min(params.limit || 50, 200);
-  const offset = params.offset || 0;
+  const limit = Math.min(Math.max(params.limit || 50, 1), 200);
+  const offset = Math.max(params.offset || 0, 0);
 
   try {
     const rows = await db.getAllAsync<{
