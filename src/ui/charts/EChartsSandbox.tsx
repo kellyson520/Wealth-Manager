@@ -122,6 +122,7 @@ export default function EChartsSandbox({ config, height = 200, onError }: EChart
   const [html, setHtml] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [sanitizeResult, setSanitizeResult] = useState<SanitizeResult | null>(null);
+  const [webViewReady, setWebViewReady] = useState(false);
   const webViewRef = useRef<WebView>(null);
   const configRef = useRef<string>('');
 
@@ -143,6 +144,8 @@ export default function EChartsSandbox({ config, height = 200, onError }: EChart
       try {
         const js = await loadEChartsBundle();
         if (!cancelled) {
+          setWebViewReady(false);
+          configRef.current = '';
           setHtml(buildHTMLTemplate(js));
         }
       } catch (e) {
@@ -158,7 +161,7 @@ export default function EChartsSandbox({ config, height = 200, onError }: EChart
   }, [onError]);
 
   useEffect(() => {
-    if (!html || !webViewRef.current || !sanitizeResult?.valid) return;
+    if (!html || !webViewReady || !webViewRef.current || !sanitizeResult?.valid) return;
 
     const configStr = JSON.stringify(sanitizeResult.config);
     if (configStr === configRef.current) return;
@@ -172,7 +175,7 @@ export default function EChartsSandbox({ config, height = 200, onError }: EChart
     webViewRef.current.injectJavaScript(
       `try { renderChart('${escaped}'); true; } catch(e) { window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'error', message: e.message })); true; }`
     );
-  }, [html, sanitizeResult]);
+  }, [html, webViewReady, sanitizeResult]);
 
   const handleMessage = (event: WebViewMessageEvent) => {
     try {
@@ -217,6 +220,7 @@ export default function EChartsSandbox({ config, height = 200, onError }: EChart
         showsVerticalScrollIndicator={false}
         showsHorizontalScrollIndicator={false}
         onMessage={handleMessage}
+        onLoadEnd={() => setWebViewReady(true)}
         onError={(syntheticEvent) => {
           const { nativeEvent } = syntheticEvent;
           onError?.(`WebView error: ${nativeEvent.description}`);
