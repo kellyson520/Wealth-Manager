@@ -1,6 +1,7 @@
+import * as SecureStore from 'expo-secure-store';
 import { getDatabase } from '../../core/database/database';
 import { captureError, logger } from '../../core/logger/logger';
-import { encryptPayload, decryptPayload } from '../../core/cloud/sync-crypto';
+import { decryptPayload, encryptPayload, generateSecureSecret } from '../../core/cloud/sync-crypto';
 import type { ToolResult } from '../../shared/types';
 
 interface WebDAVConfig {
@@ -14,7 +15,22 @@ interface WebDAVConfig {
   lastSyncStatus?: 'success' | 'error' | 'conflict';
 }
 
-const SECRET_STORAGE_KEY = 'wealth-manager-webdav-config-secret-v1';
+const SECRET_STORAGE_KEY = 'wealth-manager-webdav-config-secret-v2';
+const LEGACY_SECRET_STORAGE_KEY = 'wealth-manager-webdav-config-secret-v1';
+async function getPasswordStorageKey(): Promise<string> {
+  const existing = await SecureStore.getItemAsync(SECRET_STORAGE_KEY);
+  if (existing) return existing;
+
+  const secret = generateSecureSecret();
+  await SecureStore.setItemAsync(SECRET_STORAGE_KEY, secret, {
+    keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY,
+  });
+  return secret;
+}
+
+function getLegacyPasswordStorageKey(config: Pick<WebDAVConfig, 'url' | 'username'>): string {
+  return `${LEGACY_SECRET_STORAGE_KEY}:${config.url}:${config.username}`;
+}
 
 async function getConfig(db: Awaited<ReturnType<typeof getDatabase>>): Promise<WebDAVConfig | null> {
   try {
@@ -31,10 +47,22 @@ async function getConfig(db: Awaited<ReturnType<typeof getDatabase>>): Promise<W
     if (!config.password && config.passwordCiphertext && config.passwordSalt) {
       const password = await decryptPayload(
         config.passwordCiphertext,
-        getPasswordStorageKey(config),
+        await getPasswordStorageKey(),
         config.passwordSalt
       );
-      if (password) config.password = password;
+      if (password) {
+        config.password = password;
+      } else {
+        const legacyPassword = await decryptPayload(
+          config.passwordCiphertext,
+          getLegacyPasswordStorageKey(config),
+          config.passwordSalt
+        );
+        if (legacyPassword) {
+          config.password = legacyPassword;
+          await saveConfig(db, config);
+        }
+      }
     }
     return config;
   } catch {
@@ -49,7 +77,7 @@ async function saveConfig(
   const now = new Date().toISOString();
   const storedConfig: WebDAVConfig = { ...config };
   if (config.password) {
-    const encrypted = await encryptPayload(config.password, getPasswordStorageKey(config));
+    const encrypted = await encryptPayload(config.password, await getPasswordStorageKey());
     if (!encrypted) {
       throw new Error('credential encryption unavailable');
     }
@@ -62,10 +90,6 @@ async function saveConfig(
     "INSERT OR REPLACE INTO sync_state (key, value, updated_at) VALUES ('webdav_config', ?, ?)",
     [JSON.stringify(storedConfig), now]
   );
-}
-
-function getPasswordStorageKey(config: Pick<WebDAVConfig, 'url' | 'username'>): string {
-  return `${SECRET_STORAGE_KEY}:${config.url}:${config.username}`;
 }
 
 async function updateLastSync(

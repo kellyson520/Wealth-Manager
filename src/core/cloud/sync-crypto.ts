@@ -4,6 +4,7 @@ const decoder = new TextDecoder();
 const PBKDF2_ITERATIONS = 120000;
 const SALT_BYTES = 16;
 const IV_BYTES = 12;
+const SECRET_BYTES = 32;
 
 type WebCryptoApi = Crypto;
 
@@ -51,6 +52,18 @@ function base64ToBytes(b64: string): Uint8Array {
 
 function randomBytes(webCrypto: WebCryptoApi, length: number): Uint8Array {
   return webCrypto.getRandomValues(new Uint8Array(length));
+}
+
+function getRandomBytes(length: number): Uint8Array {
+  const webCrypto = getWebCrypto();
+  if (!webCrypto?.getRandomValues) {
+    throw new Error('secure random unavailable');
+  }
+  return randomBytes(webCrypto, length);
+}
+
+export function generateSecureSecret(): string {
+  return bytesToBase64(getRandomBytes(SECRET_BYTES));
 }
 
 async function deriveKey(
