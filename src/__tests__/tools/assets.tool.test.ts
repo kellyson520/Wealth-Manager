@@ -70,7 +70,7 @@ describe('assets tool', () => {
     });
 
     expect(result.success).toBe(false);
-    expect(result.error).toBe('资产金额不能为负');
+    expect(result.error).toBe('资产金额必须为非负数');
     expect(db.runAsync).not.toHaveBeenCalled();
   });
 });
