@@ -54,9 +54,10 @@ export class MemoryCache {
   }
 
   set<T>(key: string, value: T, ttlMs?: number): void {
-    this.evictIfNeeded();
-
     const existing = this.cache.get(key);
+    if (!existing) {
+      this.evictIfNeeded();
+    }
     const hitCount = existing ? existing.hitCount + 1 : 0;
 
     this.cache.set(key, {

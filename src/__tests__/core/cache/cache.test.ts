@@ -55,6 +55,17 @@ describe('MemoryCache', () => {
     expect(smallCache.get('d')).toBe(4);
   });
 
+  it('should not evict another entry when updating an existing key at capacity', () => {
+    const smallCache = new MemoryCache(2, 10000);
+    smallCache.set('a', 1);
+    smallCache.set('b', 2);
+    smallCache.set('a', 3);
+
+    expect(smallCache.get('a')).toBe(3);
+    expect(smallCache.get('b')).toBe(2);
+    expect(smallCache.getStats().evictions).toBe(0);
+  });
+
   it('should reject non-positive max sizes', () => {
     expect(() => new MemoryCache(0)).toThrow('MemoryCache maxSize must be a positive integer');
     expect(() => new MemoryCache(-1)).toThrow('MemoryCache maxSize must be a positive integer');
