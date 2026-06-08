@@ -24,6 +24,15 @@ function getDatabaseKey(): string {
   return env?.EXPO_PUBLIC_WEALTH_MANAGER_DB_KEY || 'development-only-wealth-manager-db-key';
 }
 
+function parseJsonOrDefault<T>(value: string | null | undefined, fallback: T): T {
+  if (!value) return fallback;
+  try {
+    return JSON.parse(value) as T;
+  } catch {
+    return fallback;
+  }
+}
+
 async function initTables(db: SQLite.SQLiteDatabase): Promise<void> {
   await db.execAsync(`
     CREATE TABLE IF NOT EXISTS bills (
@@ -384,9 +393,9 @@ export async function getUserProfile(db: SQLite.SQLiteDatabase): Promise<{
   }>("SELECT persona_params, budget_limits, preferences FROM user_profile WHERE id = 'singleton'");
 
   return {
-    personaParams: JSON.parse(row?.persona_params || '{"rigor":5,"humor":5,"proactivity":5}'),
-    budgetLimits: JSON.parse(row?.budget_limits || '[]'),
-    preferences: JSON.parse(row?.preferences || '{"currency":"CNY","language":"zh-Hans","theme":"dark","firstDayOfWeek":1}'),
+    personaParams: parseJsonOrDefault(row?.persona_params, { rigor: 5, humor: 5, proactivity: 5 }),
+    budgetLimits: parseJsonOrDefault(row?.budget_limits, []),
+    preferences: parseJsonOrDefault(row?.preferences, { currency: 'CNY', language: 'zh-Hans', theme: 'dark', firstDayOfWeek: 1 }),
   };
 }
 
