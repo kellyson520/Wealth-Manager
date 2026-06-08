@@ -26,6 +26,10 @@ export class MemoryCache {
   private defaultTTL: number;
 
   constructor(maxSize: number = 500, defaultTTLMs: number = 30 * 60 * 1000) {
+    if (!Number.isInteger(maxSize) || maxSize < 1) {
+      throw new Error('MemoryCache maxSize must be a positive integer');
+    }
+
     this.maxSize = maxSize;
     this.defaultTTL = defaultTTLMs;
   }

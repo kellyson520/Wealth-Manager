@@ -55,6 +55,11 @@ describe('MemoryCache', () => {
     expect(smallCache.get('d')).toBe(4);
   });
 
+  it('should reject non-positive max sizes', () => {
+    expect(() => new MemoryCache(0)).toThrow('MemoryCache maxSize must be a positive integer');
+    expect(() => new MemoryCache(-1)).toThrow('MemoryCache maxSize must be a positive integer');
+  });
+
   it('should track hit/miss statistics', () => {
     cache.set('k1', 'v1');
     cache.get('k1');
