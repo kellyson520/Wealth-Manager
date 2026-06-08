@@ -9,7 +9,7 @@ jest.mock('../../core/database/database', () => {
   };
 });
 
-import { get_aggregation } from '../../tools/stats/stats.tool';
+import { get_aggregation, get_net_balance } from '../../tools/stats/stats.tool';
 import * as db from '../../core/database/database';
 
 function getMockDb() {
@@ -57,6 +57,8 @@ describe('get_aggregation Tool', () => {
       expect(data.totalIncome).toBe(5000);
       expect(data.totalExpense).toBe(150);
       expect(data.billCount).toBe(4);
+      expect(mockDb.getFirstAsync.mock.calls[1][0]).toContain("type IN ('expense', 'refund')");
+      expect(mockDb.getFirstAsync.mock.calls[1][0]).toContain("WHEN type = 'refund' THEN -amount");
     });
 
     test('returns category breakdown', async () => {
@@ -73,6 +75,8 @@ describe('get_aggregation Tool', () => {
       const result = await get_aggregation({ period: 'month' });
       const data = result.data as any;
       expect(data.byCategory).toEqual({ '餐饮': 200, '交通': 100 });
+      expect(mockDb.getAllAsync.mock.calls[0][0]).toContain("type IN ('expense', 'refund')");
+      expect(mockDb.getAllAsync.mock.calls[0][0]).toContain("WHEN type = 'refund' THEN -amount");
     });
   });
 
@@ -152,5 +156,30 @@ describe('get_aggregation Tool', () => {
       expect(result.success).toBe(false);
       expect(result.error).toBe('统计失败');
     });
+  });
+});
+
+describe('get_net_balance Tool', () => {
+  beforeEach(async () => {
+    jest.clearAllMocks();
+  });
+
+  test('counts refunds as reversed expenses in balances', async () => {
+    const mockDb = await getMockDb();
+    mockDb.getFirstAsync
+      .mockResolvedValueOnce({ total: 5000 })
+      .mockResolvedValueOnce({ total: 260 });
+
+    const result = await get_net_balance();
+
+    expect(result.success).toBe(true);
+    expect(result.data).toEqual({
+      totalAssets: 5000,
+      totalDebt: 260,
+      netWorth: 4740,
+      cashBalance: 4740,
+    });
+    expect(mockDb.getFirstAsync.mock.calls[1][0]).toContain("type IN ('expense', 'refund')");
+    expect(mockDb.getFirstAsync.mock.calls[1][0]).toContain("WHEN type = 'refund' THEN -amount");
   });
 });

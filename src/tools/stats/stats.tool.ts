@@ -23,7 +23,7 @@ export async function get_aggregation(params: {
     );
 
     const expenseResult = await db.getFirstAsync<{ total: number }>(
-      `SELECT COALESCE(SUM(amount), 0) as total FROM bills WHERE type = 'expense' AND date >= ?`,
+      `SELECT COALESCE(SUM(CASE WHEN type = 'expense' THEN amount WHEN type = 'refund' THEN -amount ELSE 0 END), 0) as total FROM bills WHERE type IN ('expense', 'refund') AND date >= ?`,
       [startDate]
     );
 
@@ -33,7 +33,7 @@ export async function get_aggregation(params: {
     );
 
     const categoryRows = await db.getAllAsync<{ category: string; total: number }>(
-      `SELECT category, SUM(amount) as total FROM bills WHERE type = 'expense' AND date >= ? GROUP BY category ORDER BY total DESC`,
+      `SELECT category, SUM(CASE WHEN type = 'expense' THEN amount WHEN type = 'refund' THEN -amount ELSE 0 END) as total FROM bills WHERE type IN ('expense', 'refund') AND date >= ? GROUP BY category ORDER BY total DESC`,
       [startDate]
     );
 
@@ -83,7 +83,7 @@ export async function get_budget_status(params: {
       if (params.category && limit.category !== params.category) continue;
 
       const expenseRow = await db.getFirstAsync<{ total: number }>(
-        `SELECT COALESCE(SUM(amount), 0) as total FROM bills WHERE type = 'expense' AND category = ? AND date >= ?`,
+        `SELECT COALESCE(SUM(CASE WHEN type = 'expense' THEN amount WHEN type = 'refund' THEN -amount ELSE 0 END), 0) as total FROM bills WHERE type IN ('expense', 'refund') AND category = ? AND date >= ?`,
         [limit.category, monthStart]
       );
 
@@ -111,7 +111,7 @@ export async function get_net_balance(): Promise<ToolResult> {
       `SELECT COALESCE(SUM(amount), 0) as total FROM bills WHERE type = 'income'`
     );
     const expenseRow = await db.getFirstAsync<{ total: number }>(
-      `SELECT COALESCE(SUM(amount), 0) as total FROM bills WHERE type = 'expense'`
+      `SELECT COALESCE(SUM(CASE WHEN type = 'expense' THEN amount WHEN type = 'refund' THEN -amount ELSE 0 END), 0) as total FROM bills WHERE type IN ('expense', 'refund')`
     );
 
     const result: NetBalance = {
@@ -146,7 +146,7 @@ export async function generate_chart_config(params: {
 
     if (params.chartType === 'pie') {
       const rows = await db.getAllAsync<{ category: string; total: number }>(
-        `SELECT category, SUM(amount) as total FROM bills WHERE type = 'expense' AND date >= ? GROUP BY category ORDER BY total DESC`,
+        `SELECT category, SUM(CASE WHEN type = 'expense' THEN amount WHEN type = 'refund' THEN -amount ELSE 0 END) as total FROM bills WHERE type IN ('expense', 'refund') AND date >= ? GROUP BY category ORDER BY total DESC`,
         [startDate]
       );
       config.series = {
@@ -166,7 +166,7 @@ export async function generate_chart_config(params: {
           [mStart, mEnd]
         );
         const exp = await db.getFirstAsync<{ total: number }>(
-          `SELECT COALESCE(SUM(amount), 0) as total FROM bills WHERE type = 'expense' AND date >= ? AND date <= ?`,
+          `SELECT COALESCE(SUM(CASE WHEN type = 'expense' THEN amount WHEN type = 'refund' THEN -amount ELSE 0 END), 0) as total FROM bills WHERE type IN ('expense', 'refund') AND date >= ? AND date <= ?`,
           [mStart, mEnd]
         );
         months.push({
@@ -185,7 +185,7 @@ export async function generate_chart_config(params: {
       };
     } else if (params.chartType === 'line') {
       const rows = await db.getAllAsync<{ date: string; total: number }>(
-        `SELECT date, SUM(amount) as total FROM bills WHERE type = 'expense' AND date >= ? GROUP BY date ORDER BY date`,
+        `SELECT date, SUM(CASE WHEN type = 'expense' THEN amount WHEN type = 'refund' THEN -amount ELSE 0 END) as total FROM bills WHERE type IN ('expense', 'refund') AND date >= ? GROUP BY date ORDER BY date`,
         [startDate]
       );
       config.series = {
@@ -196,7 +196,7 @@ export async function generate_chart_config(params: {
     } else if (params.chartType === 'gauge') {
       const category = params.category || '餐饮';
       const expenseRow = await db.getFirstAsync<{ total: number }>(
-        `SELECT COALESCE(SUM(amount), 0) as total FROM bills WHERE type = 'expense' AND category = ? AND date >= ?`,
+        `SELECT COALESCE(SUM(CASE WHEN type = 'expense' THEN amount WHEN type = 'refund' THEN -amount ELSE 0 END), 0) as total FROM bills WHERE type IN ('expense', 'refund') AND category = ? AND date >= ?`,
         [category, startDate]
       );
       const profileRow = await db.getFirstAsync<{ budget_limits: string }>(
@@ -229,7 +229,7 @@ export async function get_category_trend(params: {
 
   try {
     const rows = await db.getAllAsync<{ category: string; total: number }>(
-      `SELECT category, SUM(amount) as total FROM bills WHERE type = 'expense' AND date >= ? GROUP BY category`,
+      `SELECT category, SUM(CASE WHEN type = 'expense' THEN amount WHEN type = 'refund' THEN -amount ELSE 0 END) as total FROM bills WHERE type IN ('expense', 'refund') AND date >= ? GROUP BY category`,
       [thisMonthStart]
     );
 
@@ -238,7 +238,7 @@ export async function get_category_trend(params: {
       if (params.category && row.category !== params.category) continue;
 
       const prevRow = await db.getFirstAsync<{ total: number }>(
-        `SELECT COALESCE(SUM(amount), 0) as total FROM bills WHERE type = 'expense' AND category = ? AND date >= ? AND date <= ?`,
+        `SELECT COALESCE(SUM(CASE WHEN type = 'expense' THEN amount WHEN type = 'refund' THEN -amount ELSE 0 END), 0) as total FROM bills WHERE type IN ('expense', 'refund') AND category = ? AND date >= ? AND date <= ?`,
         [row.category, lastMonthStart, lastMonthEnd]
       );
 
@@ -328,8 +328,8 @@ export async function get_merchant_summary(params: {
       count: number;
       last_date: string;
     }>(
-      `SELECT merchant, SUM(amount) as total_amount, COUNT(*) as count, MAX(date) as last_date
-       FROM bills WHERE type = 'expense' AND date >= ? AND merchant != ''
+      `SELECT merchant, SUM(CASE WHEN type = 'expense' THEN amount WHEN type = 'refund' THEN -amount ELSE 0 END) as total_amount, COUNT(*) as count, MAX(date) as last_date
+       FROM bills WHERE type IN ('expense', 'refund') AND date >= ? AND merchant != ''
        GROUP BY merchant ORDER BY total_amount DESC LIMIT ?`,
       [startDate, params.limit || 20]
     );
@@ -372,7 +372,7 @@ export async function get_yearly_comparison(params: {
         [start, end]
       );
       const exp = await db.getFirstAsync<{ total: number }>(
-        `SELECT COALESCE(SUM(amount), 0) as total FROM bills WHERE type = 'expense' AND date >= ? AND date <= ?`,
+        `SELECT COALESCE(SUM(CASE WHEN type = 'expense' THEN amount WHEN type = 'refund' THEN -amount ELSE 0 END), 0) as total FROM bills WHERE type IN ('expense', 'refund') AND date >= ? AND date <= ?`,
         [start, end]
       );
 
