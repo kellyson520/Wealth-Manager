@@ -479,8 +479,8 @@ async function handleShareBills(_params: Record<string, unknown>): Promise<strin
   if (!tool) return '分享功能暂不可用。';
   const result = await tool.handler({});
   if (result.success && result.data) {
-    const data = result.data as { token: string; summary: { billCount: number; totalExpense: number } };
-    return `已生成分享链接!\nToken: ${data.token}\n包含 ${data.summary.billCount} 条账单，总支出 ¥${data.summary.totalExpense}`;
+    const data = result.data as { summary: { billCount: number; totalExpense: number } };
+    return `已生成分享链接!\n包含 ${data.summary.billCount} 条账单，总支出 ¥${data.summary.totalExpense}`;
   }
   return `创建分享失败: ${result.error}`;
 }
