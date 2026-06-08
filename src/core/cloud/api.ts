@@ -218,7 +218,7 @@ function validateCloudBaseUrl(baseUrl: string): string {
     throw new Error('云端 API 地址不能指向本机地址');
   }
 
-  if (isPrivateIPv4(hostname)) {
+  if (isPrivateIPv4(hostname) || isPrivateIPv6(hostname)) {
     throw new Error('云端 API 地址不能指向私网地址');
   }
 
@@ -241,6 +241,11 @@ function isPrivateIPv4(hostname: string): boolean {
     (a === 192 && b === 168) ||
     (a === 169 && b === 254)
   );
+}
+
+function isPrivateIPv6(hostname: string): boolean {
+  const normalized = hostname.replace(/^\[|\]$/g, '').toLowerCase();
+  return normalized === '::1' || normalized.startsWith('fc') || normalized.startsWith('fd') || normalized.startsWith('fe80:');
 }
 
 function normalizeToolChoice(
