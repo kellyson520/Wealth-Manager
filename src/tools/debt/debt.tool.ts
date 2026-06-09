@@ -263,7 +263,7 @@ export async function add_credit_card(params: {
 
     await db.runAsync(
       `INSERT INTO assets (id, name, type, amount, currency, note, created_at, updated_at)
-       VALUES (?, ?, '信用卡', ?, 'CNY', ?, ?, ?)`,
+       VALUES (?, ?, '其他', ?, 'CNY', ?, ?, ?)`,
       [
         id,
         `${params.name}(${params.bank})`,
