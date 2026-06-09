@@ -12,12 +12,28 @@ jest.mock('../../core/logger/logger', () => ({
   captureError: jest.fn(),
 }));
 
-import { update_reimbursement_status } from '../../tools/reimbursement/reimbursement.tool';
+import { create_reimbursement, update_reimbursement_status } from '../../tools/reimbursement/reimbursement.tool';
 import { getDatabase } from '../../core/database/database';
 
 async function getMockDb() {
   return getDatabase() as any;
 }
+
+describe('create_reimbursement', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  test('rejects non-finite reimbursement amounts', async () => {
+    const mockDb = await getMockDb();
+
+    const result = await create_reimbursement({ title: '测试报销', amount: Infinity });
+
+    expect(result.success).toBe(false);
+    expect(result.error).toBe('报销金额必须大于0');
+    expect(mockDb.runAsync).not.toHaveBeenCalled();
+  });
+});
 
 describe('update_reimbursement_status', () => {
   beforeEach(() => {

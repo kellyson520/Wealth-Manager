@@ -28,7 +28,7 @@ export async function create_reimbursement(params: {
     if (!params.title || params.title.trim().length === 0) {
       return { success: false, error: '报销标题不能为空' };
     }
-    if (!params.amount || params.amount <= 0) {
+    if (!Number.isFinite(params.amount) || params.amount <= 0) {
       return { success: false, error: '报销金额必须大于0' };
     }
 
