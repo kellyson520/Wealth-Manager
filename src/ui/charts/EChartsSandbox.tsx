@@ -206,7 +206,8 @@ export default function EChartsSandbox({ config, height = 200, onError }: EChart
         ref={webViewRef}
         source={{ html }}
         style={styles.webview}
-        originWhitelist={['*']}
+        originWhitelist={['about:blank']}
+        onShouldStartLoadWithRequest={(request) => request.url === 'about:blank'}
         javaScriptEnabled={true}
         domStorageEnabled={false}
         cacheEnabled={false}
