@@ -102,7 +102,7 @@ export async function callCloudLLM(
 
   let chatCompletionsUrl: string;
   try {
-    chatCompletionsUrl = resolveChatCompletionsUrl(request.baseUrl);
+    chatCompletionsUrl = await resolveChatCompletionsUrl(request.baseUrl);
   } catch (e) {
     return {
       success: false,
@@ -188,14 +188,14 @@ function sanitizeContent(content: string): string {
   return sanitizeTextForCloud(content);
 }
 
-function resolveChatCompletionsUrl(baseUrl?: string): string {
-  const normalized = validateCloudBaseUrl(baseUrl || 'https://api.openai.com/v1').replace(/\/$/, '');
+async function resolveChatCompletionsUrl(baseUrl?: string): Promise<string> {
+  const normalized = (await validateCloudBaseUrl(baseUrl || 'https://api.openai.com/v1')).replace(/\/$/, '');
   return normalized.endsWith('/chat/completions')
     ? normalized
     : `${normalized}/chat/completions`;
 }
 
-function validateCloudBaseUrl(baseUrl: string): string {
+async function validateCloudBaseUrl(baseUrl: string): Promise<string> {
   let url: URL;
   try {
     url = new URL(baseUrl);
@@ -222,7 +222,15 @@ function validateCloudBaseUrl(baseUrl: string): string {
     throw new Error('云端 API 地址不能指向私网地址');
   }
 
+  if (!parseIPv4Octets(hostname) && !hostname.includes(':') && !isAllowedCloudHostname(hostname)) {
+    throw new Error('云端 API 地址域名不在允许列表');
+  }
+
   return url.toString();
+}
+
+function isAllowedCloudHostname(hostname: string): boolean {
+  return hostname === 'api.openai.com' || hostname === 'token-plan-cn.xiaomimimo.com';
 }
 
 function parseIPv4Octets(hostname: string): number[] | undefined {
@@ -346,7 +354,7 @@ export async function* callCloudLLMStream(
 
   let chatCompletionsUrl: string;
   try {
-    chatCompletionsUrl = resolveChatCompletionsUrl(request.baseUrl);
+    chatCompletionsUrl = await resolveChatCompletionsUrl(request.baseUrl);
   } catch (e) {
     yield { type: 'error', error: e instanceof Error ? e.message : '云端 API 地址无效' };
     return;

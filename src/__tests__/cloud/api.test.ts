@@ -303,6 +303,21 @@ describe('Cloud LLM API - Safety Chain', () => {
       expect(global.fetch).not.toHaveBeenCalled();
     });
 
+    test('rejects untrusted custom base URL host before sending API key', async () => {
+      const result = await callCloudLLM(
+        {
+          baseUrl: 'https://attacker-controlled.example/v1',
+          messages: [{ role: 'user', content: 'clean text' }],
+        },
+        'test-key'
+      );
+
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('允许列表');
+      expect(result.degraded).toBe(true);
+      expect(global.fetch).not.toHaveBeenCalled();
+    });
+
     test('uses custom base URL, model, max_completion_tokens and thinking config', async () => {
       (global.fetch as jest.Mock).mockResolvedValue({
         ok: true,
