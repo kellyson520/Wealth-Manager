@@ -1,5 +1,6 @@
 jest.mock('../../core/database/database', () => {
   const mockDb = {
+    execAsync: jest.fn().mockResolvedValue(undefined),
     runAsync: jest.fn().mockResolvedValue({ changes: 1 }),
   };
 
@@ -24,7 +25,9 @@ describe('import_csv Tool', () => {
   beforeEach(async () => {
     jest.clearAllMocks();
     const mockDb = await getMockDb();
+    mockDb.execAsync.mockResolvedValue(undefined);
     mockDb.runAsync.mockResolvedValue({ changes: 1 });
+    (generateHashForBill as jest.Mock).mockResolvedValue(true);
   });
 
   test('rejects partial and non-finite amount values', async () => {
@@ -50,6 +53,29 @@ describe('import_csv Tool', () => {
     expect(mockDb.runAsync.mock.calls[0][1][1]).toBe(12.5);
     expect(generateHashForBill).toHaveBeenCalledTimes(1);
     expect(generateHashForBill).toHaveBeenCalledWith(expect.any(String));
+  });
+
+  test('rolls back CSV record when hash generation fails', async () => {
+    (generateHashForBill as jest.Mock).mockResolvedValue(false);
+
+    const result = await import_csv({
+      csvContent: [
+        '商户,金额,类型,分类,日期',
+        '咖啡店,32.5,支出,餐饮,2026-06-08',
+      ].join('\n'),
+      hasHeader: true,
+    });
+
+    const mockDb = await getMockDb();
+    expect(result.success).toBe(true);
+    expect((result.data as any).importedCount).toBe(0);
+    expect((result.data as any).errorCount).toBe(1);
+    expect((result.data as any).errors).toEqual([
+      expect.objectContaining({ line: 2, error: 'Failed to generate bill hash' }),
+    ]);
+    expect(mockDb.execAsync).toHaveBeenCalledWith('BEGIN IMMEDIATE TRANSACTION');
+    expect(mockDb.execAsync).toHaveBeenCalledWith('ROLLBACK');
+    expect(mockDb.execAsync).not.toHaveBeenCalledWith('COMMIT');
   });
 
   test('imports quoted records that contain newlines in a field', async () => {

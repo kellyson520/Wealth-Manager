@@ -62,14 +62,24 @@ export async function import_csv(params: {
         const date = cols.length > 4 && cols[4] ? cols[4] : now.split('T')[0];
         const note = cols.length > 5 ? cols[5] : '';
 
-        await db.runAsync(
-          `INSERT INTO bills (id, amount, type, category, tags, merchant, raw_description, date, note, source, created_at)
-           VALUES (?, ?, ?, ?, '[]', ?, ?, ?, ?, 'import', ?)`,
-          [billId, amount, type, category, merchant, line, date, note, now]
-        );
-        await generateHashForBill(billId);
+        try {
+          await db.execAsync('BEGIN IMMEDIATE TRANSACTION');
+          await db.runAsync(
+            `INSERT INTO bills (id, amount, type, category, tags, merchant, raw_description, date, note, source, created_at)
+             VALUES (?, ?, ?, ?, '[]', ?, ?, ?, ?, 'import', ?)`,
+            [billId, amount, type, category, merchant, line, date, note, now]
+          );
+          const hashGenerated = await generateHashForBill(billId);
+          if (!hashGenerated) {
+            throw new Error('Failed to generate bill hash');
+          }
+          await db.execAsync('COMMIT');
 
-        imported.push({ id: billId, merchant, amount });
+          imported.push({ id: billId, merchant, amount });
+        } catch (e) {
+          await db.execAsync('ROLLBACK').catch(() => undefined);
+          throw e;
+        }
       } catch (e) {
         errors.push({ line: record.line, raw: line, error: e instanceof Error ? e.message : '解析错误' });
       }
