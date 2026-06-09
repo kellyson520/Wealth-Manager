@@ -9,6 +9,7 @@ import {
 } from '../_shared';
 
 const AGENT_ID: AgentId = 'guardian';
+const BILL_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 export async function handleIntent(intent: IntentResult): Promise<string> {
   switch (intent.intent) {
@@ -205,10 +206,14 @@ async function handleSubscriptions(): Promise<string> {
 }
 
 async function handleDeleteBill(params: Record<string, unknown>): Promise<string> {
-  const billId = params.billId as string | undefined;
+  const billId = typeof params.billId === 'string' ? params.billId.trim() : '';
   const confirmed = params.confirmed === true;
 
   if (billId) {
+    if (!BILL_ID_PATTERN.test(billId)) {
+      return '账单ID格式不正确。请先搜索账单，并从结果中复制完整账单ID。';
+    }
+
     if (!confirmed) {
       return `删除账单是不可恢复操作。请确认后再执行：确认删除账单 ${billId}`;
     }
@@ -462,7 +467,7 @@ async function handleSyncWebDAV(params: Record<string, unknown>): Promise<string
   const statusTool = getTool('get_sync_status');
   if (!statusTool) return '同步功能暂不可用。';
 
-  const statusResult = await statusTool.handler();
+  const statusResult = await executeTool(statusTool, {}, { agentId: AGENT_ID });
   if (!statusResult.success || !statusResult.data) {
     return '无法获取同步状态。';
   }
@@ -475,7 +480,7 @@ async function handleSyncWebDAV(params: Record<string, unknown>): Promise<string
 
   if (params.upload) {
     if (params.confirmed !== true) {
-      return '上传会将数据同步到 WebDAV 服务器，需要明确确认。请回复“确认同步上传”后再执行。';
+      return '上传会将数据同步到 WebDAV 服务器，需要明确确认。请回复”确认同步上传”后再执行。';
     }
 
     const toolCheck = canCallTool(AGENT_ID, 'sync_upload');
@@ -485,15 +490,19 @@ async function handleSyncWebDAV(params: Record<string, unknown>): Promise<string
 
     const uploadTool = getTool('sync_upload');
     if (!uploadTool) return '上传功能暂不可用。';
-    const result = await uploadTool.handler({ confirmed: true });
+    const result = await executeTool(
+      uploadTool,
+      { confirmed: true },
+      { agentId: AGENT_ID, userConfirmed: true }
+    );
     if (result.success) return '数据已成功上传到服务器。';
     return `上传失败: ${result.error}`;
   }
 
   if (status.lastSync) {
-    return `最近同步: ${status.lastSync.timestamp} (${status.lastSync.status})。你可以说"同步上传"或"同步下载"来手动同步。`;
+    return `最近同步: ${status.lastSync.timestamp} (${status.lastSync.status})。你可以说”同步上传”或”同步下载”来手动同步。`;
   }
-  return 'WebDAV 已配置但尚未同步。你可以说"同步上传"开始首次同步。';
+  return 'WebDAV 已配置但尚未同步。你可以说”同步上传”开始首次同步。';
 }
 
 export function sanitizeText(text: string): string {

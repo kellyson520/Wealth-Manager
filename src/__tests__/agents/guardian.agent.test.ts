@@ -282,6 +282,11 @@ describe('Guardian Agent', () => {
     });
 
     test('requires explicit confirmation before WebDAV upload', async () => {
+      mockExecuteTool.mockResolvedValueOnce({
+        success: true,
+        data: { configured: true, enabled: true, lastSync: null },
+      });
+
       const reply = await handleIntent({
         intent: 'sync_webdav',
         params: { upload: true },
@@ -293,7 +298,14 @@ describe('Guardian Agent', () => {
       expect(mockSyncUploadHandler).not.toHaveBeenCalled();
     });
 
-    test('uploads to WebDAV only after confirmation', async () => {
+    test('uploads to WebDAV through the tool execution boundary after confirmation', async () => {
+      mockExecuteTool
+        .mockResolvedValueOnce({
+          success: true,
+          data: { configured: true, enabled: true, lastSync: null },
+        })
+        .mockResolvedValueOnce({ success: true });
+
       const reply = await handleIntent({
         intent: 'sync_webdav',
         params: { upload: true, confirmed: true },
@@ -301,7 +313,19 @@ describe('Guardian Agent', () => {
         agent: 'guardian',
       });
 
-      expect(mockSyncUploadHandler).toHaveBeenCalledWith({ confirmed: true });
+      expect(mockExecuteTool).toHaveBeenNthCalledWith(
+        1,
+        { handler: mockGetSyncStatusHandler },
+        {},
+        { agentId: 'guardian' }
+      );
+      expect(mockExecuteTool).toHaveBeenNthCalledWith(
+        2,
+        { handler: mockSyncUploadHandler },
+        { confirmed: true },
+        { agentId: 'guardian', userConfirmed: true }
+      );
+      expect(mockSyncUploadHandler).not.toHaveBeenCalled();
       expect(reply).toContain('数据已成功上传');
     });
 
