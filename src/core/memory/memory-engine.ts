@@ -249,6 +249,78 @@ export async function getMemoryStats(): Promise<MemoryStats> {
   }
 }
 
+/**
+ * Get total memory entry count for an agent across all layers.
+ */
+export async function getTotalMemoryCount(agentId: AgentId): Promise<number> {
+  try {
+    const db = await getDatabase();
+    await ensureMemoryTable(db);
+    const row = await db.getFirstAsync<{ cnt: number }>(
+      'SELECT COUNT(*) as cnt FROM memory_engine WHERE agent_id = ?',
+      [agentId]
+    );
+    return row?.cnt ?? 0;
+  } catch (e) {
+    captureError('MemoryEngine.getTotalMemoryCount', e, 'Failed to count memories');
+    return 0;
+  }
+}
+
+/**
+ * Get total content size in bytes for an agent's memories.
+ */
+export async function getTotalMemorySize(agentId: AgentId): Promise<number> {
+  try {
+    const db = await getDatabase();
+    await ensureMemoryTable(db);
+    const row = await db.getFirstAsync<{ total: number }>(
+      'SELECT COALESCE(SUM(LENGTH(content)), 0) as total FROM memory_engine WHERE agent_id = ?',
+      [agentId]
+    );
+    return row?.total ?? 0;
+  } catch (e) {
+    captureError('MemoryEngine.getTotalMemorySize', e, 'Failed to measure memory size');
+    return 0;
+  }
+}
+
+/**
+ * Evict oldest/least-important entries (LRU) to bring count under the limit.
+ * Returns number of entries removed.
+ */
+export async function evictLRU(
+  agentId: AgentId,
+  targetCount: number
+): Promise<number> {
+  try {
+    const db = await getDatabase();
+    await ensureMemoryTable(db);
+
+    const row = await db.getFirstAsync<{ cnt: number }>(
+      'SELECT COUNT(*) as cnt FROM memory_engine WHERE agent_id = ?',
+      [agentId]
+    );
+    const current = row?.cnt ?? 0;
+    if (current <= targetCount) return 0;
+
+    const excess = current - targetCount;
+    const result = await db.runAsync(
+      `DELETE FROM memory_engine WHERE id IN (
+        SELECT id FROM memory_engine
+        WHERE agent_id = ?
+        ORDER BY importance ASC, access_count ASC, last_accessed_at ASC
+        LIMIT ?
+      )`,
+      [agentId, excess]
+    );
+    return result?.changes ?? 0;
+  } catch (e) {
+    captureError('MemoryEngine.evictLRU', e, 'Failed to evict LRU entries');
+    return 0;
+  }
+}
+
 function safeParse(str: string): any {
   try { return JSON.parse(str); } catch { return str; }
 }

@@ -5,9 +5,23 @@ import { indexMemory, searchIndex, getIndexStats, IndexEntry } from './retrieval
 import { hybridSearch, HybridSearchOptions, SearchResult } from './retrieval/hybrid-search';
 import { autoConsolidate, deepClean, cleanupExpired, ConsolidationResult, DeepCleanResult } from './consolidation/auto-refresh';
 import { summarizeSession, generateDailyDigest, SessionSummary } from './consolidation/summarizer';
-import { storeMemory, recallMemory, forgetMemory, getMemoryStats, MemoryEntry, MemoryLayer, MemoryType, MemoryQueryParams } from './memory-engine';
+import {
+  storeMemory, recallMemory, forgetMemory, getMemoryStats,
+  getTotalMemoryCount, getTotalMemorySize, evictLRU,
+  MemoryEntry, MemoryLayer, MemoryType, MemoryQueryParams,
+} from './memory-engine';
 import { deleteVector, getVectorStats } from '../vector/vector-store';
+import { captureError } from '../logger/logger';
 import type { AgentId } from '../../shared/types';
+
+/** Maximum total entries per agent */
+const MAX_TOTAL_ENTRIES = 10_000;
+/** Maximum total content size per agent (bytes) */
+const MAX_TOTAL_SIZE_BYTES = 10 * 1024 * 1024; // 10 MB
+/** Sliding-window write limit: max writes per window */
+const RATE_LIMIT_MAX_WRITES = 30;
+/** Sliding-window duration in milliseconds */
+const RATE_LIMIT_WINDOW_MS = 60_000; // 1 minute
 
 export {
   MemoryEntry, MemoryLayer, MemoryType, MemoryQueryParams,
@@ -20,6 +34,8 @@ export class MemoryManager {
   public readonly episodic: EpisodicBuffer;
   private agentId: AgentId;
   private sessionId: string;
+  /** Timestamps of recent write operations (sliding window) */
+  private writeTimestamps: number[] = [];
 
   constructor(sessionId: string, agentId: AgentId = 'master') {
     this.sessionId = sessionId;
@@ -27,10 +43,71 @@ export class MemoryManager {
     this.episodic = new EpisodicBuffer(sessionId, agentId);
   }
 
+  // ── Quota & rate-limit helpers ──────────────────────────────────
+
+  /**
+   * Sliding-window rate limiter.
+   * Returns true if the write is allowed, false if rate-limited.
+   */
+  private allowWrite(): boolean {
+    const now = Date.now();
+    // Prune timestamps outside the window
+    this.writeTimestamps = this.writeTimestamps.filter(
+      (t) => now - t < RATE_LIMIT_WINDOW_MS
+    );
+    if (this.writeTimestamps.length >= RATE_LIMIT_MAX_WRITES) {
+      return false;
+    }
+    this.writeTimestamps.push(now);
+    return true;
+  }
+
+  /**
+   * Enforce global capacity (count + size) by running LRU eviction.
+   * Called before every write to guarantee limits.
+   */
+  private async enforceCapacity(): Promise<void> {
+    try {
+      // 1. Enforce total entry count
+      const count = await getTotalMemoryCount(this.agentId);
+      if (count >= MAX_TOTAL_ENTRIES) {
+        const targetCount = Math.floor(MAX_TOTAL_ENTRIES * 0.9); // evict to 90 %
+        await evictLRU(this.agentId, targetCount);
+      }
+
+      // 2. Enforce total size
+      const size = await getTotalMemorySize(this.agentId);
+      if (size >= MAX_TOTAL_SIZE_BYTES) {
+        // Estimate how many entries to remove (rough heuristic: size/count)
+        const currentCount = await getTotalMemoryCount(this.agentId);
+        const avgSize = currentCount > 0 ? size / currentCount : 500;
+        const bytesToFree = size - Math.floor(MAX_TOTAL_SIZE_BYTES * 0.9);
+        const entriesToFree = Math.max(1, Math.ceil(bytesToFree / avgSize));
+        const targetCount = Math.max(0, currentCount - entriesToFree);
+        await evictLRU(this.agentId, targetCount);
+      }
+    } catch (e) {
+      captureError('MemoryManager.enforceCapacity', e, 'Capacity enforcement failed');
+    }
+  }
+
+  /**
+   * Pre-write guard: rate-limit check + capacity enforcement.
+   * Returns true if the write should proceed, false if blocked.
+   */
+  private async preWrite(): Promise<boolean> {
+    if (!this.allowWrite()) {
+      return false;
+    }
+    await this.enforceCapacity();
+    return true;
+  }
+
   async remember(
     role: 'user' | 'assistant' | 'system',
     content: string
-  ): Promise<BufferItem> {
+  ): Promise<BufferItem | null> {
+    if (!(await this.preWrite())) return null;
     const item = await this.episodic.add(role, content);
 
     if (role === 'user') {
@@ -123,6 +200,7 @@ export class MemoryManager {
     importance: number = 0.5,
     tags: string[] = []
   ): Promise<LongtermEntry | null> {
+    if (!(await this.preWrite())) return null;
     const entry = await storeLongterm({
       content,
       type: 'fact',
@@ -153,6 +231,7 @@ export class MemoryManager {
     content: string,
     importance: number = 0.7
   ): Promise<MemoryEntry | null> {
+    if (!(await this.preWrite())) return null;
     const entry = await storeMemory({
       layer: 'long_term',
       type: 'preference',
@@ -169,6 +248,7 @@ export class MemoryManager {
     content: string,
     importance: number = 0.8
   ): Promise<SemanticEntry | null> {
+    if (!(await this.preWrite())) return null;
     return storeSemantic({
       content,
       agentId: this.agentId,
