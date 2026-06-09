@@ -59,8 +59,6 @@ export async function matchRules(
       confidence: condRatio,
     };
 
-    matchResult.confidence = Math.max(matchResult.confidence, 0.8);
-
     if (matchResult.confidence >= effectiveConfig.minConfidence) {
       results.push(matchResult);
       recordRuleHit(rule.id).catch(() => {});

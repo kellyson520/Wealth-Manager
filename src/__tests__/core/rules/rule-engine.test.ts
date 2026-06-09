@@ -65,7 +65,7 @@ describe('rule-engine matchRules', () => {
     const results = await matchRules({ merchant: '咖啡店', amount: 35 });
 
     expect(results).toHaveLength(1);
-    expect(results[0].confidence).toBeGreaterThanOrEqual(0.8);
+    expect(results[0].confidence).toBe(0.5);
   });
 
   test('does not match comparison rules when the fact is missing', async () => {
