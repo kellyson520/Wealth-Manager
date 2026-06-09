@@ -122,7 +122,8 @@ export async function recallMemory(params: MemoryQueryParams): Promise<MemoryEnt
       values.push(params.minImportance);
     }
 
-    conditions.push("(expires_at IS NULL OR expires_at > datetime('now'))");
+    conditions.push('(expires_at IS NULL OR expires_at > ?)');
+    values.push(new Date().toISOString());
 
     const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
     const limit = Math.min(params.limit || 20, 100);
