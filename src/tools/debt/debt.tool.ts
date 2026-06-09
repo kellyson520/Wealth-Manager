@@ -172,7 +172,7 @@ export async function record_repayment(params: {
         return { success: false, error: '还款金额不能超过剩余金额' };
       }
 
-      newRemaining = debt.remaining - params.amount;
+      newRemaining = Math.round((debt.remaining - params.amount) * 100) / 100;
       newStatus = newRemaining === 0 ? 'cleared' : 'active';
 
       await db.runAsync(

@@ -77,6 +77,17 @@ describe('record_repayment Tool', () => {
     expect(mockDb.runAsync).toHaveBeenCalledTimes(2);
   });
 
+  test('clears debt when repayment exactly matches remaining (floating-point edge)', async () => {
+    const mockDb = await getMockDb();
+    mockDb.getFirstAsync.mockResolvedValue({ remaining: 100.10, principal: 200 });
+
+    const result = await record_repayment({ debtId: 'debt-1', amount: 100.10 });
+
+    expect(result.success).toBe(true);
+    expect((result.data as any).newRemaining).toBe(0);
+    expect((result.data as any).status).toBe('cleared');
+  });
+
   test('rolls back when updating debt balance fails', async () => {
     const mockDb = await getMockDb();
     mockDb.runAsync
