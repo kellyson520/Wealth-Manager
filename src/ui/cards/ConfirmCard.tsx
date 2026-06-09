@@ -23,21 +23,33 @@ export default function ConfirmCard({ data, onConfirm, onCancel }: ConfirmCardPr
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+
     if (!data.cooldownSeconds || data.cooldownSeconds <= 0) {
       setCooldownRemaining(0);
       return;
     }
+
     setCooldownRemaining(data.cooldownSeconds);
-    timerRef.current = setInterval(() => {
+    const intervalId = setInterval(() => {
       setCooldownRemaining((prev) => {
         if (prev <= 1) {
-          if (timerRef.current) clearInterval(timerRef.current);
+          clearInterval(intervalId);
+          if (timerRef.current === intervalId) timerRef.current = null;
           return 0;
         }
         return prev - 1;
       });
     }, 1000);
-    return () => { if (timerRef.current) clearInterval(timerRef.current); };
+    timerRef.current = intervalId;
+
+    return () => {
+      clearInterval(intervalId);
+      if (timerRef.current === intervalId) timerRef.current = null;
+    };
   }, [data.actionId, data.cooldownSeconds]);
 
   const handleConfirm = () => {
