@@ -99,19 +99,12 @@ describe('Rate Limiter', () => {
     }
   });
 
-  test('blocks calls over the per-minute limit', () => {
+  test('blocks calls at the per-minute limit', () => {
+    const limit = { maxCallsPerMinute: 10, maxCallsPerHour: 100, windowMs: 60000 };
     for (let i = 0; i < 10; i++) {
-      checkRateLimit('test', {
-        maxCallsPerMinute: 10,
-        maxCallsPerHour: 100,
-        windowMs: 60000,
-      });
+      checkRateLimit('test', limit);
     }
-    const result = checkRateLimit('test', {
-      maxCallsPerMinute: 10,
-      maxCallsPerHour: 100,
-      windowMs: 60000,
-    });
+    const result = checkRateLimit('test', limit);
     expect(result.allowed).toBe(false);
     expect(result.reason).toContain('频率超限');
   });

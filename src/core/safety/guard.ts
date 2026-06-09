@@ -94,15 +94,15 @@ export function checkRateLimit(key: string, limit: RateLimit): {
     dual.hour = { count: 0, resetAt: now + 3600000 };
   }
 
+  if (dual.minute.count >= limit.maxCallsPerMinute) {
+    return { allowed: false, reason: '调用频率超限，请稍后再试' };
+  }
   dual.minute.count++;
-  if (dual.minute.count > limit.maxCallsPerMinute) {
-    return { allowed: false, reason: '调用频率超限，请稍后再试' };
-  }
 
-  dual.hour.count++;
-  if (dual.hour.count > limit.maxCallsPerHour) {
+  if (dual.hour.count >= limit.maxCallsPerHour) {
     return { allowed: false, reason: '调用频率超限，请稍后再试' };
   }
+  dual.hour.count++;
 
   return { allowed: true };
 }
