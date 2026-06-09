@@ -289,7 +289,7 @@ async function processWithLLM(
   intent: IntentResult
 ): Promise<string> {
   const context = await recallRecentContext('master', 5);
-  const masterTools = listToolsForAgent('master');
+  const masterTools = listToolsForAgent('master').filter((tool) => canCallTool('master', tool.definition.name).allowed);
   const adaptiveContext = await buildAdaptiveContextPrompt('master');
 
   const functions = toolsToOpenAIFunctions(masterTools);
