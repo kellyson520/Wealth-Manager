@@ -72,10 +72,14 @@ export async function update_reimbursement_status(params: {
     const db = await getDatabase();
     const now = new Date().toISOString();
 
-    await db.runAsync(
+    const result = await db.runAsync(
       'UPDATE reimbursement_tasks SET status = ?, updated_at = ? WHERE id = ?',
       [params.status, now, params.taskId]
     );
+
+    if (result.changes !== 1) {
+      return { success: false, error: '报销任务不存在' };
+    }
 
     return { success: true, data: { taskId: params.taskId, status: params.status, updatedAt: now } };
   } catch (e) {
