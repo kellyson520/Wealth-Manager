@@ -217,7 +217,10 @@ export default function EChartsSandbox({ config, height = 200, onError }: EChart
         showsVerticalScrollIndicator={false}
         showsHorizontalScrollIndicator={false}
         onMessage={handleMessage}
-        onLoadEnd={() => setWebViewReady(true)}
+        onLoadEnd={() => {
+          configRef.current = '';
+          setWebViewReady(true);
+        }}
         onError={(syntheticEvent) => {
           const { nativeEvent } = syntheticEvent;
           onError?.(`WebView error: ${nativeEvent.description}`);
