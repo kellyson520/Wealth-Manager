@@ -234,6 +234,11 @@ async function handleDeleteBill(params: Record<string, unknown>): Promise<string
     return `删除账单失败：${result.error}`;
   }
 
+  const toolCheck = canCallTool(AGENT_ID, 'search_bills');
+  if (!toolCheck.allowed) {
+    return `操作被拒绝：${toolCheck.reason}`;
+  }
+
   const searchTool = getTool('search_bills');
   if (!searchTool) return '账单搜索功能暂不可用，无法定位要删除的记录。';
 
@@ -244,7 +249,7 @@ async function handleDeleteBill(params: Record<string, unknown>): Promise<string
     searchParams.endDate = params.date;
   }
 
-  const result = await searchTool.handler(searchParams);
+  const result = await executeTool(searchTool, searchParams, { agentId: AGENT_ID });
   if (!result.success || !Array.isArray(result.data)) {
     return `定位账单失败：${result.error || '请重试'}`;
   }

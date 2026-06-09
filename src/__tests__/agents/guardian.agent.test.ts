@@ -4,6 +4,7 @@ import { sanitizeText, sanitizeCloudData } from '../../agents/guardian/guardian.
 const mockSyncUploadHandler = jest.fn().mockResolvedValue({ success: true });
 const mockRevokeCloudTool = { handler: jest.fn().mockResolvedValue({ success: true }) };
 const mockRepairHashChainTool = { handler: jest.fn().mockResolvedValue({ success: true }) };
+const mockSearchBillsTool = { handler: jest.fn().mockResolvedValue({ success: true, data: [] }) };
 const mockExecuteTool = jest.fn().mockResolvedValue({ success: true });
 const mockGetSyncStatusHandler = jest.fn().mockResolvedValue({
   success: true,
@@ -90,6 +91,9 @@ jest.mock('../../agents/_shared', () => ({
     }
     if (name === 'repair_hash_chain') {
       return mockRepairHashChainTool;
+    }
+    if (name === 'search_bills') {
+      return mockSearchBillsTool;
     }
     return undefined;
   }),
@@ -299,6 +303,30 @@ describe('Guardian Agent', () => {
 
       expect(mockSyncUploadHandler).toHaveBeenCalledWith({ confirmed: true });
       expect(reply).toContain('数据已成功上传');
+    });
+
+    test('locates bills for deletion through the tool execution boundary', async () => {
+      mockExecuteTool.mockResolvedValueOnce({
+        success: true,
+        data: [
+          { id: 'bill-1', merchant: '测试商户', amount: 12.5, type: 'expense', date: '2026-06-09' },
+        ],
+      });
+
+      const reply = await handleIntent({
+        intent: 'delete_bill',
+        params: { keyword: '测试商户' },
+        confidence: 0.8,
+        agent: 'guardian',
+      });
+
+      expect(mockExecuteTool).toHaveBeenCalledWith(
+        mockSearchBillsTool,
+        { limit: 5, keyword: '测试商户' },
+        { agentId: 'guardian' }
+      );
+      expect(mockSearchBillsTool.handler).not.toHaveBeenCalled();
+      expect(reply).toContain('bill-1');
     });
 
     test('requires explicit confirmation before revoking cloud access', async () => {
