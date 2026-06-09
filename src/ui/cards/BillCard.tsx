@@ -59,8 +59,8 @@ export default function BillCard({ data }: BillCardProps) {
       ) : null}
       {bill.tags.length > 0 ? (
         <View style={styles.tagRow}>
-          {bill.tags.map((tag) => (
-            <View key={tag} style={styles.tag}>
+          {bill.tags.map((tag, index) => (
+            <View key={`${tag}-${index}`} style={styles.tag}>
               <Text style={styles.tagText}>{tag}</Text>
             </View>
           ))}
