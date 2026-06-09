@@ -14,6 +14,8 @@ export interface AssetRecord {
   updatedAt: string;
 }
 
+const ASSET_TYPES: AssetRecord['type'][] = ['现金', '银行账户', '股票', '基金', '房产', '车辆', '债权', '其他'];
+
 export async function add_asset(params: {
   name: string;
   type?: string;
@@ -27,6 +29,9 @@ export async function add_asset(params: {
     }
     if (!Number.isFinite(params.amount) || params.amount < 0) {
       return { success: false, error: '资产金额必须为非负数' };
+    }
+    if (params.type && !ASSET_TYPES.includes(params.type as AssetRecord['type'])) {
+      return { success: false, error: '资产类型无效' };
     }
 
     const db = await getDatabase();

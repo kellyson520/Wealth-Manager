@@ -12,7 +12,7 @@ jest.mock('../../core/database/database', () => {
 });
 
 import { getDatabase } from '../../core/database/database';
-import { transfer_asset, update_asset_value, list_assets } from '../../tools/assets/assets.tool';
+import { add_asset, transfer_asset, update_asset_value, list_assets } from '../../tools/assets/assets.tool';
 
 async function getMockDb() {
   return getDatabase() as any;
@@ -76,6 +76,20 @@ describe('assets tool', () => {
     expect(db.execAsync).toHaveBeenNthCalledWith(1, 'BEGIN IMMEDIATE TRANSACTION');
     expect(db.execAsync).toHaveBeenNthCalledWith(2, 'ROLLBACK');
     expect(db.runAsync).toHaveBeenCalledTimes(1);
+  });
+
+  test('rejects invalid asset types before inserting', async () => {
+    const db = await getMockDb();
+
+    const result = await add_asset({
+      name: 'BTC',
+      type: 'crypto',
+      amount: 1,
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.error).toBe('资产类型无效');
+    expect(db.runAsync).not.toHaveBeenCalled();
   });
 
   test('rejects negative asset value updates', async () => {
