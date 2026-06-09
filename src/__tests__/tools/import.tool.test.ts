@@ -15,7 +15,7 @@ jest.mock('../../core/hashchain/hashchain', () => ({
 
 import { getDatabase } from '../../core/database/database';
 import { generateHashForBill } from '../../core/hashchain/hashchain';
-import { import_csv } from '../../tools/import/import.tool';
+import { import_alipay, import_csv, import_wechat } from '../../tools/import/import.tool';
 
 async function getMockDb() {
   return getDatabase() as any;
@@ -131,5 +131,31 @@ describe('import_csv Tool', () => {
     const mockDb = await getMockDb();
     expect(mockDb.runAsync).not.toHaveBeenCalled();
     expect(generateHashForBill).not.toHaveBeenCalled();
+  });
+
+  test('rolls back WeChat import when hash generation fails', async () => {
+    (generateHashForBill as jest.Mock).mockResolvedValue(false);
+
+    const result = await import_wechat({ rawText: '咖啡店 - ¥32.5' });
+
+    const mockDb = await getMockDb();
+    expect(result.success).toBe(false);
+    expect(result.error).toBe('导入微信账单时发生异常');
+    expect(mockDb.execAsync).toHaveBeenCalledWith('BEGIN IMMEDIATE TRANSACTION');
+    expect(mockDb.execAsync).toHaveBeenCalledWith('ROLLBACK');
+    expect(mockDb.execAsync).not.toHaveBeenCalledWith('COMMIT');
+  });
+
+  test('rolls back Alipay import when hash generation fails', async () => {
+    (generateHashForBill as jest.Mock).mockResolvedValue(false);
+
+    const result = await import_alipay({ rawText: '咖啡店 - ¥32.5' });
+
+    const mockDb = await getMockDb();
+    expect(result.success).toBe(false);
+    expect(result.error).toBe('导入支付宝账单时发生异常');
+    expect(mockDb.execAsync).toHaveBeenCalledWith('BEGIN IMMEDIATE TRANSACTION');
+    expect(mockDb.execAsync).toHaveBeenCalledWith('ROLLBACK');
+    expect(mockDb.execAsync).not.toHaveBeenCalledWith('COMMIT');
   });
 });

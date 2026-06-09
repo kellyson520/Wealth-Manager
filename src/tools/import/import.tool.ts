@@ -115,13 +115,24 @@ export async function import_wechat(params: {
 
     for (const bill of bills) {
       const billId = uuidv4();
-      await db.runAsync(
-        `INSERT INTO bills (id, amount, type, category, tags, merchant, raw_description, date, note, source, created_at)
-         VALUES (?, ?, ?, ?, '[]', ?, ?, ?, ?, 'import', ?)`,
-        [billId, bill.amount, bill.type, bill.category, bill.merchant, bill.raw, bill.date, bill.note, now]
-      );
-      await generateHashForBill(billId);
-      imported.push({ id: billId, merchant: bill.merchant, amount: bill.amount, type: bill.type });
+      try {
+        await db.execAsync('BEGIN IMMEDIATE TRANSACTION');
+        await db.runAsync(
+          `INSERT INTO bills (id, amount, type, category, tags, merchant, raw_description, date, note, source, created_at)
+           VALUES (?, ?, ?, ?, '[]', ?, ?, ?, ?, 'import', ?)`,
+          [billId, bill.amount, bill.type, bill.category, bill.merchant, bill.raw, bill.date, bill.note, now]
+        );
+        const hashGenerated = await generateHashForBill(billId);
+        if (!hashGenerated) {
+          throw new Error('Failed to generate bill hash');
+        }
+        await db.execAsync('COMMIT');
+
+        imported.push({ id: billId, merchant: bill.merchant, amount: bill.amount, type: bill.type });
+      } catch (e) {
+        await db.execAsync('ROLLBACK').catch(() => undefined);
+        throw e;
+      }
     }
 
     return {
@@ -149,13 +160,24 @@ export async function import_alipay(params: {
 
     for (const bill of bills) {
       const billId = uuidv4();
-      await db.runAsync(
-        `INSERT INTO bills (id, amount, type, category, tags, merchant, raw_description, date, note, source, created_at)
-         VALUES (?, ?, ?, ?, '[]', ?, ?, ?, ?, 'import', ?)`,
-        [billId, bill.amount, bill.type, bill.category, bill.merchant, bill.raw, bill.date, bill.note, now]
-      );
-      await generateHashForBill(billId);
-      imported.push({ id: billId, merchant: bill.merchant, amount: bill.amount, type: bill.type });
+      try {
+        await db.execAsync('BEGIN IMMEDIATE TRANSACTION');
+        await db.runAsync(
+          `INSERT INTO bills (id, amount, type, category, tags, merchant, raw_description, date, note, source, created_at)
+           VALUES (?, ?, ?, ?, '[]', ?, ?, ?, ?, 'import', ?)`,
+          [billId, bill.amount, bill.type, bill.category, bill.merchant, bill.raw, bill.date, bill.note, now]
+        );
+        const hashGenerated = await generateHashForBill(billId);
+        if (!hashGenerated) {
+          throw new Error('Failed to generate bill hash');
+        }
+        await db.execAsync('COMMIT');
+
+        imported.push({ id: billId, merchant: bill.merchant, amount: bill.amount, type: bill.type });
+      } catch (e) {
+        await db.execAsync('ROLLBACK').catch(() => undefined);
+        throw e;
+      }
     }
 
     return {
