@@ -127,6 +127,11 @@ async function handleCreateSavingsGoal(params: Record<string, unknown>): Promise
     return '请告诉我目标金额，比如"创建储蓄目标 旅行的 50000"。';
   }
 
+  const toolCheck = canCallTool(AGENT_ID, 'create_savings_goal');
+  if (!toolCheck.allowed) {
+    return `操作被拒绝：${toolCheck.reason}`;
+  }
+
   const result = await create_savings_goal({
     name,
     targetAmount,
@@ -496,7 +501,8 @@ async function handleLevelStatus(_params: Record<string, unknown>): Promise<stri
     const result = await levelTool.handler();
     if (result.success && result.data) {
       const data = result.data as { level: number; title: string; experience: number; nextLevelExperience: number; progress: number };
-      const bar = '█'.repeat(Math.round(data.progress * 10)) + '░'.repeat(10 - Math.round(data.progress * 10));
+      const filled = Math.min(10, Math.max(0, Math.round(data.progress * 10)));
+      const bar = '█'.repeat(filled) + '░'.repeat(10 - filled);
       reply += `等级 ${data.level} - ${data.title}\n`;
       reply += `经验 ${data.experience}/${data.nextLevelExperience} [${bar}]\n\n`;
     }

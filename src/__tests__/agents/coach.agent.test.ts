@@ -71,4 +71,32 @@ describe('Coach Agent - handleIntent', () => {
     expect(reply).not.toContain('secret-share-token');
     expect(reply).not.toContain('Token:');
   });
+
+  test('level_status clamps progress > 1.0 instead of throwing RangeError', async () => {
+    const mockLevelHandler = jest.fn().mockResolvedValue({
+      success: true,
+      data: { level: 5, title: 'Gold', experience: 150, nextLevelExperience: 100, progress: 1.5 },
+    });
+    const mockChallengeHandler = jest.fn().mockResolvedValue({
+      success: true,
+      data: [{ title: 'Daily check-in', completed: false, reward: '+10 XP' }],
+    });
+
+    const { getTool } = require('../../agents/_shared');
+    (getTool as jest.Mock).mockImplementation((name: string) => {
+      if (name === 'get_level') return { handler: mockLevelHandler };
+      if (name === 'get_challenges') return { handler: mockChallengeHandler };
+      return undefined;
+    });
+
+    const reply = await handleIntent({
+      intent: 'level_status',
+      params: {},
+      confidence: 0.9,
+      agent: 'coach',
+    });
+
+    expect(reply).toContain('等级 5');
+    expect(reply).toContain('██████████');
+  });
 });
