@@ -57,11 +57,6 @@ export async function callCloudLLM(
   request: CloudRequest,
   apiKey?: string
 ): Promise<{ success: boolean; response?: CloudResponse; error?: string; degraded: boolean }> {
-  const rateCheck = checkRateLimit('cloud_llm', { maxCallsPerMinute: 10, maxCallsPerHour: 100, windowMs: 60000 });
-  if (!rateCheck.allowed) {
-    return { success: false, error: rateCheck.reason, degraded: false };
-  }
-
   const originalPromptText = request.messages.map((m) => m.content).join(' ');
   const piiCheck = detectPII(originalPromptText);
   if (piiCheck.hasPII) {
@@ -133,6 +128,11 @@ export async function callCloudLLM(
         body.functions = request.functions;
         body.function_call = request.functionCall || 'auto';
       }
+    }
+
+    const rateCheck = checkRateLimit('cloud_llm', { maxCallsPerMinute: 10, maxCallsPerHour: 100, windowMs: 60000 });
+    if (!rateCheck.allowed) {
+      return { success: false, error: rateCheck.reason, degraded: false };
     }
 
     const fetchResponse = await fetch(chatCompletionsUrl, {
@@ -320,12 +320,6 @@ export async function* callCloudLLMStream(
   functionCall?: { name: string; arguments: string };
   error?: string;
 }> {
-  const rateCheck = checkRateLimit('cloud_llm', { maxCallsPerMinute: 10, maxCallsPerHour: 100, windowMs: 60000 });
-  if (!rateCheck.allowed) {
-    yield { type: 'error', error: rateCheck.reason };
-    return;
-  }
-
   const originalPromptText = request.messages.map((m) => m.content).join(' ');
   const piiCheck = detectPII(originalPromptText);
   if (piiCheck.hasPII) {
@@ -387,6 +381,12 @@ export async function* callCloudLLMStream(
         body.functions = request.functions;
         body.function_call = request.functionCall || 'auto';
       }
+    }
+
+    const rateCheck = checkRateLimit('cloud_llm', { maxCallsPerMinute: 10, maxCallsPerHour: 100, windowMs: 60000 });
+    if (!rateCheck.allowed) {
+      yield { type: 'error', error: rateCheck.reason };
+      return;
     }
 
     const fetchResponse = await fetch(chatCompletionsUrl, {

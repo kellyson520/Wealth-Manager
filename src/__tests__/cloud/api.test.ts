@@ -21,12 +21,30 @@ describe('Cloud LLM API - Safety Chain', () => {
       expect(result.error).toContain('未配置云端 API 密钥');
     });
 
-    test('does not make network call without API key', async () => {
-      await callCloudLLM({
-        messages: [{ role: 'user', content: '分析消费趋势' }],
+    test('does not consume cloud rate limit without API key', async () => {
+      (global.fetch as jest.Mock).mockResolvedValue({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            choices: [{ message: { content: 'OK' } }],
+            model: 'gpt-4o',
+            usage: { total_tokens: 10 },
+          }),
       });
 
-      expect(global.fetch).not.toHaveBeenCalled();
+      for (let i = 0; i < 10; i++) {
+        await callCloudLLM({
+          messages: [{ role: 'user', content: '分析消费趋势' }],
+        });
+      }
+
+      const result = await callCloudLLM(
+        { messages: [{ role: 'user', content: 'clean text' }] },
+        'test-key'
+      );
+
+      expect(result.success).toBe(true);
+      expect(global.fetch).toHaveBeenCalledTimes(1);
     });
   });
 
