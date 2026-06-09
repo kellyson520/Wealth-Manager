@@ -444,7 +444,7 @@ export async function* processMessageStream(
   (yield { type: 'thinking' as const, content: '分析中...', messageId }) as void;
 
   const context = await recallRecentContext('master', 5);
-  const masterTools = listToolsForAgent('master');
+  const masterTools = listToolsForAgent('master').filter((tool) => canCallTool('master', tool.definition.name).allowed);
   const functions = toolsToOpenAIFunctions(masterTools);
   const adaptiveContext = await buildAdaptiveContextPrompt('master');
 
