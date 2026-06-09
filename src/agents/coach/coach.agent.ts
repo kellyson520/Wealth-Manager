@@ -3,6 +3,7 @@ import { set_budget, create_savings_goal, get_savings_progress } from '../../too
 import { get_streak_info, get_achievement } from '../../tools/gamification/gamification.tool';
 import { get_budget_status } from '../../tools/stats/stats.tool';
 import { run_proactive_check, get_proactive_insights, get_today_summary } from '../../tools/proactive/proactive.tool';
+import { executeTool } from '../../tools/_pipeline/tool-executor';
 import {
   canCallTool,
   rememberThis,
@@ -477,7 +478,7 @@ async function handleListTags(_params: Record<string, unknown>): Promise<string>
 async function handleShareBills(_params: Record<string, unknown>): Promise<string> {
   const tool = getTool('create_link');
   if (!tool) return '分享功能暂不可用。';
-  const result = await tool.handler({});
+  const result = await executeTool(tool, {}, { agentId: AGENT_ID });
   if (result.success && result.data) {
     const data = result.data as { summary: { billCount: number; totalExpense: number } };
     return `已生成分享链接!\n包含 ${data.summary.billCount} 条账单，总支出 ¥${data.summary.totalExpense}`;

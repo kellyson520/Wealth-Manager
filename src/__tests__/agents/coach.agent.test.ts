@@ -20,6 +20,7 @@ jest.mock('../../tools/proactive/proactive.tool', () => ({
 }));
 
 const mockCreateLinkHandler = jest.fn();
+const mockExecuteTool = jest.fn();
 
 jest.mock('../../agents/_shared', () => ({
   canCallTool: jest.fn().mockReturnValue({ allowed: true, reason: '' }),
@@ -27,10 +28,14 @@ jest.mock('../../agents/_shared', () => ({
   rememberMoment: jest.fn().mockResolvedValue(undefined),
   getTool: jest.fn((name: string) => {
     if (name === 'create_link') {
-      return { handler: mockCreateLinkHandler };
+      return { definition: { name: 'create_link' }, handler: mockCreateLinkHandler };
     }
     return undefined;
   }),
+}));
+
+jest.mock('../../tools/_pipeline/tool-executor', () => ({
+  executeTool: (...args: unknown[]) => mockExecuteTool(...args),
 }));
 
 import { handleIntent } from '../../agents/coach/coach.agent';
@@ -41,7 +46,7 @@ describe('Coach Agent - handleIntent', () => {
   });
 
   test('does not expose share token in share_bills reply', async () => {
-    mockCreateLinkHandler.mockResolvedValue({
+    mockExecuteTool.mockResolvedValue({
       success: true,
       data: {
         token: 'secret-share-token',
@@ -56,6 +61,11 @@ describe('Coach Agent - handleIntent', () => {
       agent: 'coach',
     });
 
+    expect(mockExecuteTool).toHaveBeenCalledWith(
+      expect.objectContaining({ handler: mockCreateLinkHandler }),
+      {},
+      { agentId: 'coach' }
+    );
     expect(reply).toContain('已生成分享链接');
     expect(reply).toContain('包含 2 条账单');
     expect(reply).not.toContain('secret-share-token');
