@@ -101,18 +101,17 @@ export async function searchSemantic(params: {
 
     const entries: SemanticEntry[] = [];
 
+    const memEntries = await recallMemory({
+      agentId: params.agentId,
+      layer: 'semantic',
+      limit: 100,
+    });
+    const contentById = new Map(memEntries.map((m) => [m.id, m.content]));
+
     for (const r of results) {
-      const memEntries = await recallMemory({
-        agentId: params.agentId,
-        layer: 'semantic',
-        limit: 1,
-      });
-
-      const matched = memEntries.find((m) => m.id === r.entry.sourceId);
-
       entries.push({
         id: r.entry.id,
-        content: matched?.content || r.entry.sourceId,
+        content: contentById.get(r.entry.sourceId) || r.entry.sourceId,
         embedding: r.entry.embedding,
         metadata: r.entry.metadata,
         sourceId: r.entry.sourceId,

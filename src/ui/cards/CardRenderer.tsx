@@ -120,6 +120,7 @@ export default function CardRenderer({
           data={data as RecordConfirmCardData}
           onConfirm={onConfirm}
           onCancel={onCancel}
+          isConsumed={isActionConsumed?.(data.actionId) || false}
         />
       );
 

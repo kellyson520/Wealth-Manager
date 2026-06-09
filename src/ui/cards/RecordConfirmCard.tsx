@@ -7,6 +7,7 @@ interface RecordConfirmCardProps {
   data: RecordConfirmCardData;
   onConfirm?: (actionId: string) => void;
   onCancel?: (actionId: string) => void;
+  isConsumed?: boolean;
 }
 
 const CATEGORY_ICONS: Record<string, string> = {
@@ -18,7 +19,7 @@ const CATEGORY_ICONS: Record<string, string> = {
 const TYPE_LABELS: Record<string, string> = { income: '收入', expense: '支出', refund: '退款' };
 const TYPE_COLORS: Record<string, string> = { income: colors.income, expense: colors.expense, refund: colors.purple };
 
-export default function RecordConfirmCard({ data, onConfirm, onCancel }: RecordConfirmCardProps) {
+export default function RecordConfirmCard({ data, onConfirm, onCancel, isConsumed = false }: RecordConfirmCardProps) {
   const { bill } = data;
   const icon = CATEGORY_ICONS[bill.category] || '📦';
   const typeLabel = TYPE_LABELS[bill.type] || bill.type;
@@ -79,16 +80,18 @@ export default function RecordConfirmCard({ data, onConfirm, onCancel }: RecordC
 
       <View style={styles.actions}>
         <TouchableOpacity
-          style={styles.cancelBtn}
+          style={[styles.cancelBtn, isConsumed && styles.btnDisabled]}
           onPress={() => onCancel?.(data.actionId)}
-          activeOpacity={0.7}
+          activeOpacity={isConsumed ? 1 : 0.7}
+          disabled={isConsumed}
         >
           <Text style={styles.cancelText}>修改</Text>
         </TouchableOpacity>
         <TouchableOpacity
-          style={styles.confirmBtn}
+          style={[styles.confirmBtn, isConsumed && styles.btnDisabled]}
           onPress={() => onConfirm?.(data.actionId)}
-          activeOpacity={0.7}
+          activeOpacity={isConsumed ? 1 : 0.7}
+          disabled={isConsumed}
         >
           <Text style={styles.confirmText}>确认记账</Text>
         </TouchableOpacity>
@@ -253,5 +256,8 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: colors.white,
     fontWeight: '700',
+  },
+  btnDisabled: {
+    opacity: 0.5,
   },
 });
