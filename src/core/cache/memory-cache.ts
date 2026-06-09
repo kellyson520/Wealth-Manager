@@ -103,7 +103,13 @@ export class MemoryCache {
   }
 
   getHitCount(key: string): number {
-    return this.cache.get(key)?.hitCount || 0;
+    const entry = this.cache.get(key);
+    if (!entry) return 0;
+    if (Date.now() >= entry.expiresAt) {
+      this.cache.delete(key);
+      return 0;
+    }
+    return entry.hitCount;
   }
 
   keys(): string[] {
