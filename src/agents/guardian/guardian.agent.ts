@@ -1,5 +1,5 @@
 import { IntentResult, AgentId } from '../../shared/types';
-import { run_safety_check, analyze_subscriptions, sanitize_input, sanitize_for_cloud, verify_hash_chain, repair_hash_chain, export_audit_package, get_privacy_report } from '../../tools/security/security.tool';
+import { run_safety_check, analyze_subscriptions, sanitize_input, sanitize_for_cloud, verify_hash_chain, export_audit_package, get_privacy_report } from '../../tools/security/security.tool';
 import { create_recurring_task, get_recurring_tasks, delete_recurring_task, register_shortcut, schedule_local_notification, get_notification_permission_status } from '../../tools/automation/automation.tool';
 import {
   canCallTool,
@@ -274,10 +274,27 @@ async function handleVerifyChain(): Promise<string> {
 }
 
 async function handleRepairChain(params: Record<string, unknown> = {}): Promise<string> {
-  const result = await repair_hash_chain({ confirmed: params.confirmed === true });
+  const confirmed = params.confirmed === true;
+  if (!confirmed) {
+    return `⚠️ 哈希链修复需要用户确认后才能执行，这是一项敏感操作。\n\n如需修复，请明确回复"确认修复哈希链"。`;
+  }
+
+  const toolCheck = canCallTool(AGENT_ID, 'repair_hash_chain');
+  if (!toolCheck.allowed) {
+    return `操作被拒绝：${toolCheck.reason}`;
+  }
+
+  const tool = getTool('repair_hash_chain');
+  if (!tool) return '哈希链修复功能暂不可用。';
+
+  const result = await executeTool(
+    tool,
+    { confirmed: true },
+    { agentId: AGENT_ID, userConfirmed: true }
+  );
 
   if (!result.success) {
-    return `⚠️ 哈希链修复需要用户确认后才能执行，这是一项敏感操作。\n\n如需修复，请明确回复"确认修复哈希链"。`;
+    return `哈希链修复失败：${result.error}`;
   }
 
   return '✅ 哈希链已修复。';

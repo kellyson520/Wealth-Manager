@@ -3,6 +3,7 @@ import { sanitizeText, sanitizeCloudData } from '../../agents/guardian/guardian.
 
 const mockSyncUploadHandler = jest.fn().mockResolvedValue({ success: true });
 const mockRevokeCloudTool = { handler: jest.fn().mockResolvedValue({ success: true }) };
+const mockRepairHashChainTool = { handler: jest.fn().mockResolvedValue({ success: true }) };
 const mockExecuteTool = jest.fn().mockResolvedValue({ success: true });
 const mockGetSyncStatusHandler = jest.fn().mockResolvedValue({
   success: true,
@@ -86,6 +87,9 @@ jest.mock('../../agents/_shared', () => ({
     }
     if (name === 'revoke_cloud_access') {
       return mockRevokeCloudTool;
+    }
+    if (name === 'repair_hash_chain') {
+      return mockRepairHashChainTool;
     }
     return undefined;
   }),
@@ -217,6 +221,37 @@ describe('Guardian Agent', () => {
       });
 
       expect(reply).toContain('哈希链');
+    });
+
+    test('requires explicit confirmation before repairing the hash chain', async () => {
+      const { repair_hash_chain } = require('../../tools/security/security.tool');
+
+      const reply = await handleIntent({
+        intent: 'repair_chain',
+        params: {},
+        confidence: 0.8,
+        agent: 'guardian',
+      });
+
+      expect(reply).toContain('需要用户确认');
+      expect(repair_hash_chain).not.toHaveBeenCalled();
+      expect(mockExecuteTool).not.toHaveBeenCalled();
+    });
+
+    test('repairs the hash chain through the tool execution boundary after confirmation', async () => {
+      const reply = await handleIntent({
+        intent: 'repair_chain',
+        params: { confirmed: true },
+        confidence: 0.8,
+        agent: 'guardian',
+      });
+
+      expect(mockExecuteTool).toHaveBeenCalledWith(
+        mockRepairHashChainTool,
+        { confirmed: true },
+        { agentId: 'guardian', userConfirmed: true }
+      );
+      expect(reply).toContain('哈希链已修复');
     });
 
     test('handles create_reminder intent', async () => {
