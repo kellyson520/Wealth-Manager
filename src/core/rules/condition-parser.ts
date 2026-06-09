@@ -215,6 +215,10 @@ function looseEquals(a: unknown, b: unknown): boolean {
 }
 
 function compareValues(a: unknown, b: unknown): number {
+  if (a == null || b == null) {
+    return Number.NaN;
+  }
+
   const numA = Number(a);
   const numB = Number(b);
   if (!isNaN(numA) && !isNaN(numB)) {

@@ -67,4 +67,19 @@ describe('rule-engine matchRules', () => {
     expect(results).toHaveLength(1);
     expect(results[0].confidence).toBeGreaterThanOrEqual(0.8);
   });
+
+  test('does not match comparison rules when the fact is missing', async () => {
+    mockedSearchRules.mockResolvedValue([
+      rule({
+        conditions: {
+          operator: 'and',
+          conditions: [{ field: 'amount', operator: 'gt', value: 100 }],
+        },
+      }),
+    ]);
+
+    const results = await matchRules({ merchant: '咖啡店' });
+
+    expect(results).toEqual([]);
+  });
 });
