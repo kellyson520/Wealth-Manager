@@ -62,6 +62,7 @@ class Logger {
 
   clear(): void {
     this.buffer = [];
+    this.listeners.forEach((fn) => fn());
   }
 
   exportString(): string {
