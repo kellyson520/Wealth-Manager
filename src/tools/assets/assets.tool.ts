@@ -260,11 +260,18 @@ export async function transfer_asset(params: {
       throw e;
     }
 
+    const committedFrom = await db.getFirstAsync<{ amount: number }>(
+      'SELECT amount FROM assets WHERE id = ?', [params.fromAssetId]
+    );
+    const committedTo = await db.getFirstAsync<{ amount: number }>(
+      'SELECT amount FROM assets WHERE id = ?', [params.toAssetId]
+    );
+
     return {
       success: true,
       data: {
-        from: { id: params.fromAssetId, name: fromAsset.name, newAmount: fromAsset.amount - params.amount },
-        to: { id: params.toAssetId, name: toAsset.name, newAmount: toAsset.amount + params.amount },
+        from: { id: params.fromAssetId, name: fromAsset.name, newAmount: committedFrom?.amount ?? fromAsset.amount - params.amount },
+        to: { id: params.toAssetId, name: toAsset.name, newAmount: committedTo?.amount ?? toAsset.amount + params.amount },
         amount: params.amount,
       },
     };
