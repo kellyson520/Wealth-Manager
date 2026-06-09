@@ -42,6 +42,10 @@ function validateChartValue(value: unknown, path: string, depth: number): string
     return hasInjectionPattern(value) ? `Suspicious pattern at ${path}` : null;
   }
 
+  if (typeof value === 'number' && !Number.isFinite(value)) {
+    return `Config contains non-finite number at ${path}`;
+  }
+
   if (typeof value === 'function' || typeof value === 'symbol' || typeof value === 'bigint') {
     return `Config contains non-JSON value at ${path}`;
   }

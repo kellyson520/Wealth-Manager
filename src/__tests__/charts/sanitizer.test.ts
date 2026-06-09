@@ -50,6 +50,15 @@ describe('Chart config sanitizer', () => {
     expect(toJSON).not.toHaveBeenCalled();
   });
 
+  test('rejects non-finite numbers before they serialize to null', () => {
+    const payload = { series: [{ data: [100, NaN, Infinity] }] };
+
+    const result = sanitizeChartConfig(payload);
+
+    expect(result.valid).toBe(false);
+    expect(result.error).toContain('non-finite number');
+  });
+
   test('rejects oversized sparse arrays before serialization', () => {
     const payload = { series: new Array(1_000_000) };
 
