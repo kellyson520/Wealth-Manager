@@ -45,7 +45,7 @@ describe('record_repayment Tool', () => {
     expect(result.success).toBe(false);
     expect(result.error).toBe('还款金额不能超过剩余金额');
     expect(mockDb.execAsync).toHaveBeenNthCalledWith(1, 'BEGIN IMMEDIATE TRANSACTION');
-    expect(mockDb.execAsync).toHaveBeenNthCalledWith(2, 'COMMIT');
+    expect(mockDb.execAsync).toHaveBeenNthCalledWith(2, 'ROLLBACK');
     expect(mockDb.runAsync).not.toHaveBeenCalled();
   });
 

@@ -114,7 +114,7 @@ export default function ChatScreen() {
       if (processingRef.current) return;
       if (!consumeAction(actionId)) return;
       logger.info('Chat', `Card confirmed: ${actionId}`);
-      handleSend(`确认操作 ${actionId}`);
+      handleSend('确认');
     },
     [consumeAction, handleSend]
   );

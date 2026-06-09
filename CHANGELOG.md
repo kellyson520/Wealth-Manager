@@ -39,6 +39,11 @@
 
 ### 修复
 
+#### 自动化工具 (`src/tools/automation/`)
+
+- **`register_shortcut` 返回虚假成功**：数据库插入失败时 catch 块返回 `success: true`，但没有任何内存存储来兜底，导致调用方认为快捷指令已注册、实际却被静默丢弃。修正为返回错误。
+- **`delete_recurring_task` 删除不存在的任务无报错**：对不存在的 taskId 执行 DELETE 后直接返回 `success: true`，未校验 `result.changes`。修正为检测零行变更时返回任务不存在。
+
 #### CI / 构建
 
 - `assembleDebug` → `assembleRelease`：debug APK 不含 JS bundle 导致白屏，改为 release 打包将 bundle 嵌入 assets

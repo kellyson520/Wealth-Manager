@@ -75,10 +75,13 @@ export async function delete_recurring_task(params: {
   const db = await getDatabase();
 
   try {
-    await db.runAsync(
+    const result = await db.runAsync(
       'DELETE FROM recurring_tasks WHERE id = ?',
       [params.taskId]
     );
+    if (result.changes === 0) {
+      return { success: false, error: '周期任务不存在' };
+    }
     return { success: true, data: { deletedId: params.taskId } };
   } catch (e) {
     captureError('AutomationTool.delete_recurring_task', e, 'Delete recurring task failed');
@@ -116,18 +119,9 @@ export async function register_shortcut(params: {
         registeredAt: now,
       },
     };
-  } catch {
-    return {
-      success: true,
-      data: {
-        name: params.name,
-        action: params.action,
-        icon: params.icon || '⚡',
-        registered: true,
-        registeredAt: new Date().toISOString(),
-        note: '快捷指令已注册（存储失败，仅内存有效）',
-      },
-    };
+  } catch (e) {
+    captureError('AutomationTool.register_shortcut', e, 'Register shortcut failed');
+    return { success: false, error: '注册快捷指令失败', errorCode: '1000' };
   }
 }
 

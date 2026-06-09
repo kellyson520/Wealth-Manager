@@ -370,8 +370,12 @@ async function handleModifyBill(params: Record<string, unknown>): Promise<string
   const category = params.category as string | undefined;
   if (!category) return '请告诉我要改成哪个分类，例如"把这笔改成餐饮"。';
 
-  const billId = params.billId as string | undefined;
+  const billId = typeof params.billId === 'string' ? params.billId.trim() : '';
   if (billId) {
+    if (params.confirmed !== true) {
+      return `修改账单需要确认。请回复“确认修改账单 ${billId} 改成 ${category}”执行修改。`;
+    }
+
     const toolCheck = canCallTool(AGENT_ID, 'modify_bill');
     if (!toolCheck.allowed) {
       return `操作被拒绝：${toolCheck.reason}`;
@@ -467,6 +471,10 @@ async function handleOCRImport(params: Record<string, unknown>): Promise<string>
   }
   return `OCR导入失败: ${result.error}`;
 }
+
+export const __testables = {
+  handleModifyBill,
+};
 
 function getCategoryEmoji(cat: string): string {
   const map: Record<string, string> = {
