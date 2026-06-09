@@ -111,6 +111,7 @@ export default function ChatScreen() {
 
   const handleCardConfirm = useCallback(
     (actionId: string) => {
+      if (processingRef.current) return;
       if (!consumeAction(actionId)) return;
       logger.info('Chat', `Card confirmed: ${actionId}`);
       handleSend(`确认操作 ${actionId}`);
