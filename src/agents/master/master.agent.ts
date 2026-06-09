@@ -394,8 +394,8 @@ async function executeToolCall(
       return `工具 ${toolName} 执行成功`;
     }
     return `工具 ${toolName} 执行失败: ${result?.error || '未知错误'}`;
-  } catch (e) {
-    return `工具 ${toolName} 执行异常: ${e instanceof Error ? e.message : 'Unknown'}`;
+  } catch {
+    return `工具 ${toolName} 执行异常，请稍后重试`;
   }
 }
 

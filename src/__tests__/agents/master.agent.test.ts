@@ -36,6 +36,7 @@ jest.mock('../../agents/_shared', () => ({
   getTool: jest.fn().mockReturnValue(undefined),
   listToolsForAgent: jest.fn().mockReturnValue([]),
   executeTool: jest.fn(),
+  canCallTool: jest.fn().mockReturnValue({ allowed: true }),
 }));
 jest.mock('../../agents/_shared/memory', () => ({
   recallRecentContext: jest.fn().mockResolvedValue(''),
@@ -75,6 +76,7 @@ jest.mock('../../core/persona/persona-engine', () => ({
 import { processMessage, processMessageStream, setCloudApiKey } from '../../agents/master/master.agent';
 import { classifyIntent } from '../../agents/master/nlu';
 import { callCloudLLM, callCloudLLMStream } from '../../core/cloud/api';
+import { getTool, executeTool } from '../../agents/_shared';
 import { IntentResult } from '../../shared/types';
 
 describe('Master Agent - processMessage', () => {
@@ -157,5 +159,26 @@ describe('Master Agent - processMessage', () => {
         content: '工具 unknown_tool 不存在或不可用',
       })
     );
+  });
+
+  test('does not expose raw tool exception details', async () => {
+    setCloudApiKey('test-key');
+    (getTool as jest.Mock).mockReturnValueOnce({
+      definition: { name: 'create_link', permissionLevel: 1 },
+      handler: jest.fn(),
+    });
+    (executeTool as jest.Mock).mockRejectedValueOnce(new Error('token=secret path=/tmp/private.db'));
+    (classifyIntent as jest.Mock).mockReturnValueOnce({ intent: 'unknown', params: {}, confidence: 0.1, agent: 'master' });
+    (callCloudLLM as jest.Mock).mockResolvedValueOnce({
+      success: true,
+      response: { functionCall: { name: 'create_link', arguments: '{}' } },
+    });
+
+    const result = await processMessage('创建分享链接');
+    setCloudApiKey(undefined);
+
+    expect(result.reply.content).toBe('工具 create_link 执行异常，请稍后重试');
+    expect(result.reply.content).not.toContain('secret');
+    expect(result.reply.content).not.toContain('/tmp/private.db');
   });
 });
