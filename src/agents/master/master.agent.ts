@@ -252,6 +252,11 @@ async function handleMasterControl(intent: IntentResult): Promise<string> {
   const entry = getTool(toolName);
   if (!entry) return 'AI 控制工具暂不可用。';
 
+  const toolCheck = canCallTool('master', toolName);
+  if (!toolCheck.allowed) {
+    return `操作被拒绝：${toolCheck.reason}`;
+  }
+
   const result = await executeTool(entry, intent.params, {
     agentId: 'master',
     userConfirmed: intent.params.confirmed === true,
