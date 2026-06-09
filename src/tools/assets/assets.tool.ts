@@ -203,27 +203,36 @@ export async function transfer_asset(params: {
 
     const db = await getDatabase();
     const now = new Date().toISOString();
-
-    const fromAsset = await db.getFirstAsync<{ id: string; amount: number; name: string; type: string }>(
-      'SELECT * FROM assets WHERE id = ?', [params.fromAssetId]
-    );
-    if (!fromAsset) return { success: false, error: '转出资产不存在' };
-
-    if (fromAsset.amount < params.amount) {
-      return { success: false, error: `${fromAsset.name} 余额不足 (当前: ${fromAsset.amount}, 需转: ${params.amount})` };
-    }
-
-    const toAsset = await db.getFirstAsync<{ id: string; amount: number; name: string }>(
-      'SELECT * FROM assets WHERE id = ?', [params.toAssetId]
-    );
-    if (!toAsset) return { success: false, error: '转入资产不存在' };
+    let fromAsset: { id: string; amount: number; name: string; type: string } | null = null;
+    let toAsset: { id: string; amount: number; name: string } | null = null;
 
     try {
       await db.execAsync('BEGIN IMMEDIATE TRANSACTION');
-      await db.runAsync(
-        'UPDATE assets SET amount = amount - ?, updated_at = ? WHERE id = ?',
-        [params.amount, now, params.fromAssetId]
+
+      fromAsset = await db.getFirstAsync<{ id: string; amount: number; name: string; type: string }>(
+        'SELECT * FROM assets WHERE id = ?', [params.fromAssetId]
       );
+      if (!fromAsset) {
+        await db.execAsync('ROLLBACK');
+        return { success: false, error: '转出资产不存在' };
+      }
+
+      toAsset = await db.getFirstAsync<{ id: string; amount: number; name: string }>(
+        'SELECT * FROM assets WHERE id = ?', [params.toAssetId]
+      );
+      if (!toAsset) {
+        await db.execAsync('ROLLBACK');
+        return { success: false, error: '转入资产不存在' };
+      }
+
+      const debit = await db.runAsync(
+        'UPDATE assets SET amount = amount - ?, updated_at = ? WHERE id = ? AND amount >= ?',
+        [params.amount, now, params.fromAssetId, params.amount]
+      );
+      if (debit.changes !== 1) {
+        await db.execAsync('ROLLBACK');
+        return { success: false, error: `${fromAsset.name} 余额不足 (当前: ${fromAsset.amount}, 需转: ${params.amount})` };
+      }
 
       await db.runAsync(
         'UPDATE assets SET amount = amount + ?, updated_at = ? WHERE id = ?',

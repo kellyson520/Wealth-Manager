@@ -61,6 +61,23 @@ describe('assets tool', () => {
     expect(db.execAsync).toHaveBeenNthCalledWith(2, 'ROLLBACK');
   });
 
+  test('rolls back and does not credit when debit cannot reserve funds', async () => {
+    const db = await getMockDb();
+    db.runAsync.mockResolvedValueOnce({ changes: 0 });
+
+    const result = await transfer_asset({
+      fromAssetId: 'asset-from',
+      toAssetId: 'asset-to',
+      amount: 150,
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.error).toBe('现金 余额不足 (当前: 500, 需转: 150)');
+    expect(db.execAsync).toHaveBeenNthCalledWith(1, 'BEGIN IMMEDIATE TRANSACTION');
+    expect(db.execAsync).toHaveBeenNthCalledWith(2, 'ROLLBACK');
+    expect(db.runAsync).toHaveBeenCalledTimes(1);
+  });
+
   test('rejects negative asset value updates', async () => {
     const db = await getMockDb();
 
