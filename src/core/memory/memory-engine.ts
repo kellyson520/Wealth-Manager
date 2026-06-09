@@ -126,7 +126,7 @@ export async function recallMemory(params: MemoryQueryParams): Promise<MemoryEnt
     values.push(new Date().toISOString());
 
     const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
-    const limit = Math.min(params.limit || 20, 100);
+    const limit = Math.min(Math.max(params.limit ?? 20, 1), 100);
 
     const rows = await db.getAllAsync<{
       id: string; layer: string; type: string; agent_id: string;
