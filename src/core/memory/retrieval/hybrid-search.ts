@@ -144,6 +144,10 @@ async function bm25Search(
   sourceType?: string
 ): Promise<SearchResult[]> {
   try {
+    if (sourceType && sourceType !== 'memory' && sourceType !== 'memory_engine') {
+      return [];
+    }
+
     const db = await getDatabase();
 
     const keywords = query
