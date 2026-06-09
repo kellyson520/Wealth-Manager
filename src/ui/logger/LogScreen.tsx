@@ -29,7 +29,7 @@ const LEVEL_BG: Record<LogLevel, string> = {
   fatal: colors.dangerSoft,
 };
 
-const FILTER_LEVELS: (LogLevel | 'all')[] = ['all', 'error', 'warn', 'info', 'debug'];
+const FILTER_LEVELS: (LogLevel | 'all')[] = ['all', 'fatal', 'error', 'warn', 'info', 'debug'];
 
 export default function LogScreen() {
   const [entries, setEntries] = useState<LogEntry[]>([]);
