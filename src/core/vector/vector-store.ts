@@ -115,7 +115,8 @@ export async function searchSimilar(params: {
 
     const queryEmbedding = simpleEmbed(params.query, params.dim || 128);
     const minSim = params.minSimilarity || 0.3;
-    const limit = Math.min(params.limit || 10, 50);
+    const requestedLimit = Number.isFinite(params.limit) ? Math.floor(params.limit as number) : 10;
+    const limit = Math.min(Math.max(requestedLimit, 1), 50);
 
     let where = '1=1';
     const values: string[] = [];
