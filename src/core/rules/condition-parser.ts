@@ -219,6 +219,13 @@ function compareValues(a: unknown, b: unknown): number {
     return Number.NaN;
   }
 
+  if (
+    (typeof a === 'string' && a.trim() === '') ||
+    (typeof b === 'string' && b.trim() === '')
+  ) {
+    return Number.NaN;
+  }
+
   const numA = Number(a);
   const numB = Number(b);
   if (!isNaN(numA) && !isNaN(numB)) {

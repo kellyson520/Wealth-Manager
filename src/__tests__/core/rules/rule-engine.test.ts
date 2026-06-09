@@ -82,4 +82,19 @@ describe('rule-engine matchRules', () => {
 
     expect(results).toEqual([]);
   });
+
+  test('does not treat blank string as zero for comparison rules', async () => {
+    mockedSearchRules.mockResolvedValue([
+      rule({
+        conditions: {
+          operator: 'and',
+          conditions: [{ field: 'amount', operator: 'lt', value: 100 }],
+        },
+      }),
+    ]);
+
+    const results = await matchRules({ merchant: '咖啡店', amount: '' });
+
+    expect(results).toEqual([]);
+  });
 });
