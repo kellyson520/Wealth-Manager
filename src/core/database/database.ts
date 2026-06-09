@@ -423,7 +423,7 @@ export async function writeAuditLog(
       entry.agent,
       entry.tool,
       entry.action,
-      null,
+      entry.params ? stableStringify(entry.params) : null,
       paramsHash,
       entry.resultStatus || 'success',
       entry.userConfirmed ? 1 : 0,
