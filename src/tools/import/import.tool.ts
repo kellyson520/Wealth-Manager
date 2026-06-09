@@ -35,6 +35,7 @@ export async function import_csv(params: {
 
     const imported: { id: string; merchant: string; amount: number }[] = [];
     const errors: { line: number; raw: string; error: string }[] = [];
+    const duplicates: { line: number; merchant: string; amount: number }[] = [];
 
     for (let i = startIdx; i < records.length; i++) {
       const record = records[i];
@@ -56,11 +57,22 @@ export async function import_csv(params: {
         }
 
         const type: BillType = cols.length > 2 && cols[2].includes('收入') ? 'income' : 'expense';
-        const billId = uuidv4();
         const merchant = cols[0] || '导入';
         const category = cols.length > 3 ? cols[3] : '其他';
         const date = cols.length > 4 && cols[4] ? cols[4] : now.split('T')[0];
         const note = cols.length > 5 ? cols[5] : '';
+
+        // Duplicate detection: check if a bill with same (date, amount, merchant, type) exists
+        const existing = await db.getFirstAsync<{ id: string }>(
+          `SELECT id FROM bills WHERE date = ? AND amount = ? AND merchant = ? AND type = ? LIMIT 1`,
+          [date, amount, merchant, type]
+        );
+        if (existing) {
+          duplicates.push({ line: record.line, merchant, amount });
+          continue;
+        }
+
+        const billId = uuidv4();
 
         try {
           await db.execAsync('BEGIN IMMEDIATE TRANSACTION');
@@ -89,8 +101,10 @@ export async function import_csv(params: {
       success: true,
       data: {
         importedCount: imported.length,
+        duplicateCount: duplicates.length,
         errorCount: errors.length,
         imported,
+        duplicates: duplicates.slice(0, 20),
         errors: errors.slice(0, 20),
       },
     };
@@ -112,8 +126,19 @@ export async function import_wechat(params: {
     const now = new Date().toISOString();
     const bills = parseWeChatText(params.rawText);
     const imported: { id: string; merchant: string; amount: number; type: string }[] = [];
+    const duplicates: { merchant: string; amount: number; date: string }[] = [];
 
     for (const bill of bills) {
+      // Duplicate detection: check if a bill with same (date, amount, merchant, type) exists
+      const existing = await db.getFirstAsync<{ id: string }>(
+        `SELECT id FROM bills WHERE date = ? AND amount = ? AND merchant = ? AND type = ? LIMIT 1`,
+        [bill.date, bill.amount, bill.merchant, bill.type]
+      );
+      if (existing) {
+        duplicates.push({ merchant: bill.merchant, amount: bill.amount, date: bill.date });
+        continue;
+      }
+
       const billId = uuidv4();
       try {
         await db.execAsync('BEGIN IMMEDIATE TRANSACTION');
@@ -137,7 +162,7 @@ export async function import_wechat(params: {
 
     return {
       success: true,
-      data: { importedCount: imported.length, imported },
+      data: { importedCount: imported.length, duplicateCount: duplicates.length, imported, duplicates: duplicates.slice(0, 20) },
     };
   } catch (e) {
     captureError('import_wechat', e, 'Failed to import WeChat bills');
@@ -157,8 +182,19 @@ export async function import_alipay(params: {
     const now = new Date().toISOString();
     const bills = parseAlipayText(params.rawText);
     const imported: { id: string; merchant: string; amount: number; type: string }[] = [];
+    const duplicates: { merchant: string; amount: number; date: string }[] = [];
 
     for (const bill of bills) {
+      // Duplicate detection: check if a bill with same (date, amount, merchant, type) exists
+      const existing = await db.getFirstAsync<{ id: string }>(
+        `SELECT id FROM bills WHERE date = ? AND amount = ? AND merchant = ? AND type = ? LIMIT 1`,
+        [bill.date, bill.amount, bill.merchant, bill.type]
+      );
+      if (existing) {
+        duplicates.push({ merchant: bill.merchant, amount: bill.amount, date: bill.date });
+        continue;
+      }
+
       const billId = uuidv4();
       try {
         await db.execAsync('BEGIN IMMEDIATE TRANSACTION');
@@ -182,7 +218,7 @@ export async function import_alipay(params: {
 
     return {
       success: true,
-      data: { importedCount: imported.length, imported },
+      data: { importedCount: imported.length, duplicateCount: duplicates.length, imported, duplicates: duplicates.slice(0, 20) },
     };
   } catch (e) {
     captureError('import_alipay', e, 'Failed to import Alipay bills');
