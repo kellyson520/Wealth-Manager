@@ -49,4 +49,13 @@ describe('Chart config sanitizer', () => {
     expect(result.error).toContain('non-JSON value');
     expect(toJSON).not.toHaveBeenCalled();
   });
+
+  test('rejects oversized sparse arrays before serialization', () => {
+    const payload = { series: new Array(1_000_000) };
+
+    const result = sanitizeChartConfig(payload);
+
+    expect(result.valid).toBe(false);
+    expect(result.error).toContain('exceeds max length');
+  });
 });

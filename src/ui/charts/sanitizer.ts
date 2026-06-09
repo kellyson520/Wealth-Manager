@@ -1,5 +1,6 @@
 const MAX_CONFIG_DEPTH = 10;
 const MAX_CONFIG_SIZE = 256 * 1024;
+const MAX_ARRAY_LENGTH = 10_000;
 
 const SCRIPT_PATTERN = /<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi;
 const JS_URI_PATTERN = /javascript\s*:/gi;
@@ -47,7 +48,11 @@ function validateChartValue(value: unknown, path: string, depth: number): string
 
   if (typeof value !== 'object' || value === null) return null;
 
-  if (!Array.isArray(value)) {
+  if (Array.isArray(value)) {
+    if (value.length > MAX_ARRAY_LENGTH) {
+      return `Array at ${path} exceeds max length of ${MAX_ARRAY_LENGTH}`;
+    }
+  } else {
     const prototype = Object.getPrototypeOf(value);
     if (prototype !== Object.prototype && prototype !== null) {
       return `Config contains unsupported object at ${path}`;
