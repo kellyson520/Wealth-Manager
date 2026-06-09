@@ -134,13 +134,7 @@ export function evaluateCondition(
         String(factValue).endsWith(String(expectedValue));
       break;
     case 'regex':
-      try {
-        result =
-          typeof factValue === 'string' &&
-          new RegExp(String(expectedValue), 'i').test(String(factValue));
-      } catch {
-        result = false;
-      }
+      result = safeRegexMatch(String(expectedValue), String(factValue));
       break;
     case 'in':
       result = Array.isArray(expectedValue) && expectedValue.some((v) => looseEquals(factValue, v));
@@ -202,6 +196,38 @@ export function countMatchedConditions(
     }
   }
   return count;
+}
+
+const REGEX_MAX_LENGTH = 100;
+
+const REDOS_SUSPECT_PATTERNS = [
+  /\([^)]*\+[^)]*\)\+/,   // (x+)+  nested quantifier on group
+  /\([^)]*\*[^)]*\)\*/,   // (x*)*  nested quantifier on group
+  /\([^)]*\+[^)]*\)\{/,   // (x+){m,n}
+  /\([^)]*\*[^)]*\)\{/,   // (x*){m,n}
+  /(.)\1{3,}\1\+/,        // aaaa+a backtracking trigger
+];
+
+function safeRegexMatch(pattern: string, input: string): boolean {
+  if (typeof input !== 'string') {
+    return false;
+  }
+
+  if (pattern.length > REGEX_MAX_LENGTH) {
+    return false;
+  }
+
+  for (const suspect of REDOS_SUSPECT_PATTERNS) {
+    if (suspect.test(pattern)) {
+      return false;
+    }
+  }
+
+  try {
+    return new RegExp(pattern, 'i').test(input);
+  } catch {
+    return false;
+  }
 }
 
 const FORBIDDEN_FIELD_NAMES = new Set([
