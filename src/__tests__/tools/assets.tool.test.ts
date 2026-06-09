@@ -12,7 +12,7 @@ jest.mock('../../core/database/database', () => {
 });
 
 import { getDatabase } from '../../core/database/database';
-import { transfer_asset, update_asset_value } from '../../tools/assets/assets.tool';
+import { transfer_asset, update_asset_value, list_assets } from '../../tools/assets/assets.tool';
 
 async function getMockDb() {
   return getDatabase() as any;
@@ -89,5 +89,15 @@ describe('assets tool', () => {
     expect(result.success).toBe(false);
     expect(result.error).toBe('资产金额必须为非负数');
     expect(db.runAsync).not.toHaveBeenCalled();
+  });
+
+  test('rejects invalid asset list limits', async () => {
+    const db = await getMockDb();
+
+    const result = await list_assets({ limit: -1 });
+
+    expect(result.success).toBe(false);
+    expect(result.error).toBe('查询数量必须为正整数');
+    expect(db.getAllAsync).not.toHaveBeenCalled();
   });
 });

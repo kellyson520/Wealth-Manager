@@ -78,7 +78,10 @@ export async function list_assets(params?: {
     }
 
     const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
-    const limit = params?.limit || 50;
+    const limit = params?.limit ?? 50;
+    if (!Number.isInteger(limit) || limit <= 0) {
+      return { success: false, error: '查询数量必须为正整数' };
+    }
 
     const rows = await db.getAllAsync<{
       id: string; name: string; type: string; amount: number;
