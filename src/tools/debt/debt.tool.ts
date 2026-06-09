@@ -164,11 +164,11 @@ export async function record_repayment(params: {
       );
 
       if (!debt) {
-        await db.execAsync('COMMIT');
+        await db.execAsync('ROLLBACK');
         return { success: false, error: '未找到该债务记录' };
       }
       if (params.amount > debt.remaining) {
-        await db.execAsync('COMMIT');
+        await db.execAsync('ROLLBACK');
         return { success: false, error: '还款金额不能超过剩余金额' };
       }
 
