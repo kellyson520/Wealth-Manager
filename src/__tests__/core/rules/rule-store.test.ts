@@ -1,5 +1,6 @@
 const mockDb = {
   getAllAsync: jest.fn(),
+  runAsync: jest.fn(),
 };
 
 jest.mock('../../../core/database/database', () => ({
@@ -7,7 +8,7 @@ jest.mock('../../../core/database/database', () => ({
 }));
 
 import { getDatabase } from '../../../core/database/database';
-import { searchRules } from '../../../core/rules/rule-store';
+import { deleteRule, searchRules, updateRule } from '../../../core/rules/rule-store';
 
 describe('rule-store searchRules', () => {
   beforeEach(() => {
@@ -23,5 +24,24 @@ describe('rule-store searchRules', () => {
       expect.stringContaining('LIMIT ? OFFSET ?'),
       [1, 0]
     );
+  });
+});
+
+describe('rule-store mutations', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    (getDatabase as jest.Mock).mockResolvedValue(mockDb);
+  });
+
+  test('returns false when updating a missing rule', async () => {
+    mockDb.runAsync.mockResolvedValue({ changes: 0 });
+
+    await expect(updateRule('missing-rule', { enabled: false })).resolves.toBe(false);
+  });
+
+  test('returns false when deleting a missing rule', async () => {
+    mockDb.runAsync.mockResolvedValue({ changes: 0 });
+
+    await expect(deleteRule('missing-rule')).resolves.toBe(false);
   });
 });

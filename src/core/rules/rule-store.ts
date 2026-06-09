@@ -429,11 +429,11 @@ export async function updateRule(
 
   try {
     values.push(id);
-    await db.runAsync(
+    const result = await db.runAsync(
       `UPDATE classification_rules SET ${setClauses.join(', ')} WHERE id = ?`,
       values
     );
-    return true;
+    return result.changes > 0;
   } catch (e) {
     captureError('RuleStore.updateRule', e, 'Failed to update rule');
     return false;
@@ -443,8 +443,8 @@ export async function updateRule(
 export async function deleteRule(id: string): Promise<boolean> {
   const db = await getDatabase();
   try {
-    await db.runAsync('DELETE FROM classification_rules WHERE id = ?', [id]);
-    return true;
+    const result = await db.runAsync('DELETE FROM classification_rules WHERE id = ?', [id]);
+    return result.changes > 0;
   } catch (e) {
     captureError('RuleStore.deleteRule', e, 'Failed to delete rule');
     return false;
