@@ -418,6 +418,45 @@ export async function* callCloudLLMStream(
     let isFunctionCall = false;
     let totalTokens = 0;
 
+    const parseStreamLine = (line: string): { type: 'token'; content: string } | undefined => {
+      const trimmed = line.trim();
+      if (!trimmed || !trimmed.startsWith('data: ')) return undefined;
+
+      const jsonStr = trimmed.slice(6);
+      if (jsonStr === '[DONE]') return undefined;
+
+      try {
+        const parsed = JSON.parse(jsonStr);
+        const delta = parsed.choices?.[0]?.delta;
+        const streamedToolCall = delta?.tool_calls?.[0]?.function;
+
+        if (delta?.function_call || streamedToolCall) {
+          isFunctionCall = true;
+          if (delta.function_call?.name) {
+            functionCallName = delta.function_call.name;
+          }
+          if (delta.function_call?.arguments) {
+            functionCallArgs += delta.function_call.arguments;
+          }
+          if (streamedToolCall?.name) {
+            functionCallName = streamedToolCall.name;
+          }
+          if (streamedToolCall?.arguments) {
+            functionCallArgs += streamedToolCall.arguments;
+          }
+        } else if (delta?.content) {
+          return { type: 'token', content: delta.content };
+        }
+
+        if (parsed.usage?.total_tokens) {
+          totalTokens = parsed.usage.total_tokens;
+        }
+      } catch {
+        // Skip malformed JSON chunks
+      }
+      return undefined;
+    };
+
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
@@ -427,45 +466,14 @@ export async function* callCloudLLMStream(
       buffer = lines.pop() || '';
 
       for (const line of lines) {
-        const trimmed = line.trim();
-        if (!trimmed || !trimmed.startsWith('data: ')) continue;
-
-        const jsonStr = trimmed.slice(6);
-        if (jsonStr === '[DONE]') {
-          continue;
-        }
-
-        try {
-          const parsed = JSON.parse(jsonStr);
-          const delta = parsed.choices?.[0]?.delta;
-
-	          const streamedToolCall = delta?.tool_calls?.[0]?.function;
-	          if (delta?.function_call || streamedToolCall) {
-	            isFunctionCall = true;
-	            if (delta.function_call?.name) {
-	              functionCallName = delta.function_call.name;
-	            }
-	            if (delta.function_call?.arguments) {
-	              functionCallArgs += delta.function_call.arguments;
-	            }
-	            if (streamedToolCall?.name) {
-	              functionCallName = streamedToolCall.name;
-	            }
-	            if (streamedToolCall?.arguments) {
-	              functionCallArgs += streamedToolCall.arguments;
-	            }
-	          } else if (delta?.content) {
-            yield { type: 'token', content: delta.content };
-          }
-
-          if (parsed.usage?.total_tokens) {
-            totalTokens = parsed.usage.total_tokens;
-          }
-        } catch {
-          // Skip malformed JSON chunks
-        }
+        const event = parseStreamLine(line);
+        if (event) yield event;
       }
     }
+
+    const finalLine = buffer + decoder.decode();
+    const finalEvent = parseStreamLine(finalLine);
+    if (finalEvent) yield finalEvent;
 
     if (isFunctionCall) {
       yield {

@@ -454,6 +454,32 @@ describe('Cloud LLM API - Safety Chain', () => {
         expect.objectContaining({ redirect: 'error' })
       );
     });
+
+    test('processes a final SSE frame without a trailing newline', async () => {
+      const encoder = new TextEncoder();
+      (global.fetch as jest.Mock).mockResolvedValue({
+        ok: true,
+        body: new ReadableStream({
+          start(controller) {
+            controller.enqueue(
+              encoder.encode('data: {"choices":[{"delta":{"content":"tail"}}],"usage":{"total_tokens":3}}')
+            );
+            controller.close();
+          },
+        }),
+      });
+
+      const chunks = [];
+      for await (const chunk of callCloudLLMStream(
+        { messages: [{ role: 'user', content: 'clean text' }] },
+        'test-key'
+      )) {
+        chunks.push(chunk);
+      }
+
+      expect(chunks).toContainEqual({ type: 'token', content: 'tail' });
+      expect(chunks.filter((chunk) => chunk.type === 'done')).toHaveLength(1);
+    });
   });
 
   describe('degradation indicator', () => {
