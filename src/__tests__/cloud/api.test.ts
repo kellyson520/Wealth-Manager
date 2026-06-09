@@ -327,6 +327,21 @@ describe('Cloud LLM API - Safety Chain', () => {
       expect(global.fetch).not.toHaveBeenCalled();
     });
 
+    test('rejects custom base URL credentials before sending API key', async () => {
+      const result = await callCloudLLM(
+        {
+          baseUrl: 'https://user:pass@token-plan-cn.xiaomimimo.com/v1',
+          messages: [{ role: 'user', content: 'clean text' }],
+        },
+        'test-key'
+      );
+
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('用户名或密码');
+      expect(result.degraded).toBe(true);
+      expect(global.fetch).not.toHaveBeenCalled();
+    });
+
     test('uses custom base URL, model, max_completion_tokens and thinking config', async () => {
       (global.fetch as jest.Mock).mockResolvedValue({
         ok: true,

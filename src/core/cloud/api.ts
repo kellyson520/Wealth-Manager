@@ -207,6 +207,10 @@ async function validateCloudBaseUrl(baseUrl: string): Promise<string> {
     throw new Error('云端 API 地址必须使用 HTTPS');
   }
 
+  if (url.username || url.password) {
+    throw new Error('云端 API 地址不能包含用户名或密码');
+  }
+
   const hostname = url.hostname.toLowerCase().replace(/\.+$/, '');
   if (
     hostname === 'localhost' ||
