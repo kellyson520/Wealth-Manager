@@ -19,6 +19,9 @@ jest.mock('../../core/database/database', () => ({
   closeDatabase: jest.fn(),
 }));
 
+jest.mock('../../agents/master/nlu', () => ({
+  classifyIntent: jest.fn().mockReturnValue({ intent: 'greeting', params: {}, confidence: 0.95, agent: 'coach' }),
+}));
 jest.mock('../../agents/ledger/ledger.agent', () => ({
   handleIntent: jest.fn(),
 }));
@@ -70,7 +73,8 @@ jest.mock('../../core/persona/persona-engine', () => ({
 }));
 
 import { processMessage, processMessageStream, setCloudApiKey } from '../../agents/master/master.agent';
-import { callCloudLLMStream } from '../../core/cloud/api';
+import { classifyIntent } from '../../agents/master/nlu';
+import { callCloudLLM, callCloudLLMStream } from '../../core/cloud/api';
 import { IntentResult } from '../../shared/types';
 
 describe('Master Agent - processMessage', () => {
@@ -106,6 +110,29 @@ describe('Master Agent - processMessage', () => {
     const result = await processMessage('午饭花了35块');
     expect(result.reply).toBeDefined();
     expect(result.reply.role).toBe('assistant');
+  });
+
+  test('does not send local NLU params to cloud fallback', async () => {
+    setCloudApiKey('test-key');
+    (classifyIntent as jest.Mock).mockReturnValueOnce({
+      intent: 'modify_bill',
+      params: { billId: '12345678-abcd-1234-abcd-123456789abc', category: '餐饮' },
+      confidence: 0.42,
+      agent: 'ledger',
+    });
+    (callCloudLLM as jest.Mock).mockResolvedValueOnce({
+      success: true,
+      response: { content: '好的' },
+    });
+
+    await processMessage('请帮我确认这笔账单分类');
+    setCloudApiKey(undefined);
+
+    const cloudRequest = (callCloudLLM as jest.Mock).mock.calls[0][0];
+    const promptText = cloudRequest.messages.map((message: { content: string }) => message.content).join('\n');
+    expect(promptText).toContain('本地NLU分析结果');
+    expect(promptText).not.toContain('参数=');
+    expect(promptText).not.toContain('12345678-abcd-1234-abcd-123456789abc');
   });
 
   test('reports unknown streamed tool calls as unavailable', async () => {

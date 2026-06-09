@@ -308,7 +308,7 @@ async function processWithLLM(
   if (intent.intent !== 'unknown') {
     messages.push({
       role: 'system',
-      content: `本地NLU分析结果: 意图=${intent.intent}, Agent=${intent.agent}, 参数=${JSON.stringify(intent.params)}, 置信度=${intent.confidence.toFixed(2)}`,
+      content: `本地NLU分析结果: 意图=${intent.intent}, Agent=${intent.agent}, 置信度=${intent.confidence.toFixed(2)}`,
     });
   }
 
