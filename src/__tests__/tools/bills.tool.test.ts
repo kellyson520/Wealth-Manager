@@ -431,6 +431,8 @@ describe('split_bill Tool', () => {
 describe('refund_bill Tool', () => {
   beforeEach(async () => {
     jest.clearAllMocks();
+    (generateHashForBill as jest.Mock).mockResolvedValue('hash');
+    (rebuildHashChain as jest.Mock).mockResolvedValue({ success: true });
   });
 
   test('generates a hash for the refund bill', async () => {
