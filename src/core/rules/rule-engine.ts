@@ -50,13 +50,12 @@ export async function matchRules(
 
     if (matchedCond === 0 || !groupResult) continue;
 
-    const condRatio = totalCond > 0 ? matchedCond / totalCond : 0;
     const matchResult: RuleMatchResult = {
       rule,
       matchedConditions: matchedCond,
       totalConditions: totalCond,
       actions: rule.actions,
-      confidence: condRatio,
+      confidence: 1,
     };
 
     if (matchResult.confidence >= effectiveConfig.minConfidence) {

@@ -65,7 +65,32 @@ describe('rule-engine matchRules', () => {
     const results = await matchRules({ merchant: '咖啡店', amount: 35 });
 
     expect(results).toHaveLength(1);
-    expect(results[0].confidence).toBe(0.5);
+    expect(results[0].confidence).toBe(1);
+  });
+
+  test('does not deflate confidence for large OR groups', async () => {
+    const orConditions = [
+      { field: 'merchant', operator: 'contains', value: '饭' } as const,
+      { field: 'merchant', operator: 'contains', value: '餐' } as const,
+      { field: 'merchant', operator: 'contains', value: '面' } as const,
+      { field: 'merchant', operator: 'contains', value: '菜' } as const,
+      { field: 'merchant', operator: 'contains', value: '奶茶' } as const,
+      { field: 'merchant', operator: 'contains', value: '咖啡' } as const,
+      { field: 'merchant', operator: 'contains', value: '外卖' } as const,
+    ];
+    mockedSearchRules.mockResolvedValue([
+      rule({
+        conditions: { operator: 'or', conditions: orConditions },
+      }),
+    ]);
+
+    const results = await matchRules(
+      { merchant: '瑞幸咖啡' },
+      { minConfidence: 0.3 },
+    );
+
+    expect(results).toHaveLength(1);
+    expect(results[0].confidence).toBe(1);
   });
 
   test('does not match comparison rules when the fact is missing', async () => {
