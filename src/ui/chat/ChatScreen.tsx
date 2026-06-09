@@ -29,6 +29,7 @@ export default function ChatScreen() {
   const [isProcessing, setIsProcessing] = useState(false);
   const flatListRef = useRef<FlatList>(null);
   const processingRef = useRef(false);
+  const messageIdSeqRef = useRef(0);
   const router = useRouter();
 
   useEffect(() => {
@@ -49,6 +50,11 @@ export default function ChatScreen() {
     };
   }, []);
 
+  const nextLocalMessageId = useCallback((prefix: string) => {
+    messageIdSeqRef.current += 1;
+    return `${prefix}_${Date.now()}_${messageIdSeqRef.current}`;
+  }, []);
+
   const addMessage = useCallback((msg: ChatMessage) => {
     setMessages((prev) => [...prev, msg]);
     setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
@@ -63,7 +69,7 @@ export default function ChatScreen() {
       processingRef.current = true;
 
       const userMsg: ChatMessage = {
-        id: `u_${Date.now()}`,
+        id: nextLocalMessageId('u'),
         role: 'user',
         content: text,
         timestamp: new Date().toISOString(),
@@ -79,7 +85,7 @@ export default function ChatScreen() {
       } catch (e) {
         captureError('Chat', e, 'processMessage failed');
         addMessage({
-          id: `err_${Date.now()}`,
+          id: nextLocalMessageId('err'),
           role: 'assistant',
           content: '处理您的消息时出错了，请重试。',
           timestamp: new Date().toISOString(),
@@ -89,7 +95,7 @@ export default function ChatScreen() {
         setIsProcessing(false);
       }
     },
-    [addMessage]
+    [addMessage, nextLocalMessageId]
   );
 
   const handleCardConfirm = useCallback(
@@ -104,13 +110,13 @@ export default function ChatScreen() {
     (actionId: string) => {
       logger.info('Chat', `Card cancelled: ${actionId}`);
       addMessage({
-        id: `sys_${Date.now()}`,
+        id: nextLocalMessageId('sys'),
         role: 'system',
         content: '操作已取消',
         timestamp: new Date().toISOString(),
       });
     },
-    [addMessage]
+    [addMessage, nextLocalMessageId]
   );
 
   const renderItem = useCallback(
