@@ -26,6 +26,17 @@ describe('record_repayment Tool', () => {
     mockDb.getFirstAsync.mockResolvedValue({ remaining: 100, principal: 200 });
   });
 
+  test('rejects non-numeric repayment amounts before writing', async () => {
+    const mockDb = await getMockDb();
+
+    const result = await record_repayment({ debtId: 'debt-1', amount: 'abc' as any });
+
+    expect(result.success).toBe(false);
+    expect(result.error).toBe('还款金额必须大于0');
+    expect(mockDb.execAsync).not.toHaveBeenCalled();
+    expect(mockDb.runAsync).not.toHaveBeenCalled();
+  });
+
   test('rejects repayments greater than the remaining debt', async () => {
     const mockDb = await getMockDb();
 

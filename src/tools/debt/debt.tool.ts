@@ -145,7 +145,7 @@ export async function record_repayment(params: {
     if (!params.debtId) {
       return { success: false, error: '债务ID不能为空' };
     }
-    if (!params.amount || params.amount <= 0) {
+    if (typeof params.amount !== 'number' || !Number.isFinite(params.amount) || params.amount <= 0) {
       return { success: false, error: '还款金额必须大于0' };
     }
 
