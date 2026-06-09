@@ -27,6 +27,12 @@ describe('MemoryCache', () => {
     expect(cache.get('key1')).toBeUndefined();
   });
 
+  it('should honor zero ttl entries', async () => {
+    cache.set('key1', 'value1', 0);
+    await new Promise((r) => setTimeout(r, 1));
+    expect(cache.get('key1')).toBeUndefined();
+  });
+
   it('should return undefined for missing keys', () => {
     expect(cache.get('missing')).toBeUndefined();
   });

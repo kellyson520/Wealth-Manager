@@ -63,7 +63,7 @@ export class MemoryCache {
     this.cache.set(key, {
       key,
       value,
-      expiresAt: Date.now() + (ttlMs || this.defaultTTL),
+      expiresAt: Date.now() + (ttlMs ?? this.defaultTTL),
       hitCount,
       createdAt: Date.now(),
     });
