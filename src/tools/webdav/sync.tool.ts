@@ -38,7 +38,12 @@ async function getConfig(db: Awaited<ReturnType<typeof getDatabase>>): Promise<W
       "SELECT value FROM sync_state WHERE key = 'webdav_config'"
     );
     if (!row) return null;
-    const config = JSON.parse(row.value) as WebDAVConfig;
+    const parsed = JSON.parse(row.value);
+    if (!parsed || typeof parsed !== 'object' || typeof parsed.url !== 'string' || typeof parsed.username !== 'string' || typeof parsed.enabled !== 'boolean') {
+      logger.warn('WebDAV', 'Stored WebDAV config has invalid shape; ignoring');
+      return null;
+    }
+    const config = parsed as WebDAVConfig;
     if (config.password && !config.passwordCiphertext) {
       logger.warn('WebDAV', 'Found legacy plaintext WebDAV password; refusing to use insecure config');
       delete config.password;
@@ -395,7 +400,12 @@ export async function get_sync_status(): Promise<ToolResult> {
     let lastSync: { timestamp: string; status: string } | null = null;
     if (lastSyncRow) {
       try {
-        lastSync = JSON.parse(lastSyncRow.value);
+        const parsed = JSON.parse(lastSyncRow.value);
+        if (parsed && typeof parsed === 'object' && typeof parsed.timestamp === 'string' && typeof parsed.status === 'string') {
+          lastSync = parsed;
+        } else {
+          lastSync = { timestamp: lastSyncRow.updated_at, status: 'unknown' };
+        }
       } catch {
         lastSync = { timestamp: lastSyncRow.updated_at, status: 'unknown' };
       }

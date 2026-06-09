@@ -134,7 +134,9 @@ export async function searchSimilar(params: {
 
     for (const row of rows) {
       try {
-        const stored = JSON.parse(row.embedding) as number[];
+        const parsed = JSON.parse(row.embedding);
+        if (!Array.isArray(parsed) || !parsed.every((v: unknown) => typeof v === 'number')) continue;
+        const stored = parsed as number[];
         const similarity = cosineSimilarity(queryEmbedding, stored);
 
         if (similarity >= minSim) {

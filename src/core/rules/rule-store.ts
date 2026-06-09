@@ -3,6 +3,7 @@ import { getDatabase } from '../database/database';
 import { captureError } from '../logger/logger';
 import {
   ClassificationRule,
+  RuleAction,
   RuleConditionGroup,
   RuleQueryParams,
 } from './rule-types';
@@ -360,20 +361,40 @@ export async function searchRules(
       [...values, limit, offset]
     );
 
-    return rows.map((row) => ({
-      id: row.id,
-      name: row.name,
-      description: row.description,
-      priority: row.priority,
-      enabled: row.enabled === 1,
-      conditions: JSON.parse(row.conditions),
-      actions: JSON.parse(row.actions),
-      hitCount: row.hit_count,
-      lastHitAt: row.last_hit_at || undefined,
-      createdAt: row.created_at,
-      updatedAt: row.updated_at,
-      createdBy: row.created_by as 'system' | 'user' | 'agent',
-    }));
+    return rows.map((row) => {
+      let conditions: RuleConditionGroup;
+      let actions: RuleAction[];
+      try {
+        conditions = JSON.parse(row.conditions);
+        if (!conditions || typeof conditions !== 'object' || !('operator' in conditions)) {
+          conditions = { operator: 'and', conditions: [] };
+        }
+      } catch {
+        conditions = { operator: 'and', conditions: [] };
+      }
+      try {
+        actions = JSON.parse(row.actions);
+        if (!Array.isArray(actions)) {
+          actions = [];
+        }
+      } catch {
+        actions = [];
+      }
+      return {
+        id: row.id,
+        name: row.name,
+        description: row.description,
+        priority: row.priority,
+        enabled: row.enabled === 1,
+        conditions,
+        actions,
+        hitCount: row.hit_count,
+        lastHitAt: row.last_hit_at || undefined,
+        createdAt: row.created_at,
+        updatedAt: row.updated_at,
+        createdBy: row.created_by as 'system' | 'user' | 'agent',
+      };
+    });
   } catch (e) {
     captureError('RuleStore.searchRules', e, 'Failed to search rules');
     return [];
