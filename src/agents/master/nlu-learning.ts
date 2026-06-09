@@ -114,7 +114,6 @@ export async function loadNluLearningSamples(): Promise<void> {
     }
     loaded = true;
   } catch (e) {
-    loaded = true;
     captureError('nlu_learning.load', e, 'Failed to load NLU learning samples');
   }
 }
