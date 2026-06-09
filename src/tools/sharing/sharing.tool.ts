@@ -43,7 +43,10 @@ export async function create_link(params: {
     const conditions: string[] = [];
     const values: (string | number)[] = [];
 
-    if (params.billIds && params.billIds.length > 0) {
+    if (params.billIds) {
+      if (params.billIds.length === 0) {
+        return { success: false, error: '分享账单ID列表不能为空', errorCode: 'INVALID_BILL_IDS' };
+      }
       conditions.push(`id IN (${params.billIds.map(() => '?').join(',')})`);
       values.push(...params.billIds);
     }

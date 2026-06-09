@@ -53,6 +53,16 @@ describe('Sharing permission bypass fix (Fix #3)', () => {
       expect((result.data as any).token).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
     });
 
+    test('rejects empty billIds instead of sharing all bills', async () => {
+      const result = await create_link({
+        ownerId: 'user-alice',
+        billIds: [],
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.errorCode).toBe('INVALID_BILL_IDS');
+    });
+
     test('rejects non-positive expiration hours', async () => {
       const result = await create_link({
         ownerId: 'user-alice',
