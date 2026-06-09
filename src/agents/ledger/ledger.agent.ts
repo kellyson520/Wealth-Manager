@@ -193,7 +193,7 @@ async function guessCategory(merchant: string): Promise<string> {
   try {
     const rulesTool = getTool('rules_guess');
     if (rulesTool) {
-      const result = await rulesTool.handler({ merchant });
+      const result = await executeTool(rulesTool, { merchant }, { agentId: AGENT_ID });
       if (result?.success && result.data) {
         const data = result.data as { category: string; confidence: number };
         if (data.confidence >= 0.3 && data.category !== '其他') {
@@ -224,7 +224,7 @@ async function guessCategory(merchant: string): Promise<string> {
 async function handleListAssets(params: Record<string, unknown>): Promise<string> {
   const tool = getTool('list_assets');
   if (!tool) return '资产查询功能暂不可用。';
-  const result = await tool.handler(params);
+  const result = await executeTool(tool, params, { agentId: AGENT_ID });
   if (!result.success || !result.data) {
     return '查询资产时出错，请重试。';
   }
@@ -242,7 +242,7 @@ async function handleListAssets(params: Record<string, unknown>): Promise<string
 async function handleListDebts(params: Record<string, unknown>): Promise<string> {
   const tool = getTool('list_debts');
   if (!tool) return '债务查询功能暂不可用。';
-  const result = await tool.handler(params);
+  const result = await executeTool(tool, params, { agentId: AGENT_ID });
   if (!result.success || !result.data) {
     return '查询债务时出错，请重试。';
   }
@@ -263,7 +263,7 @@ async function handleAddTag(params: Record<string, unknown>): Promise<string> {
   if (!tool) return '标签功能暂不可用。';
   const name = params.name;
   if (!name || typeof name !== 'string') return '请告诉我标签名称。';
-  const result = await tool.handler({ name });
+  const result = await executeTool(tool, { name }, { agentId: AGENT_ID });
   if (result.success) return `已创建标签 "${name}"`;
   return `创建标签失败: ${result.error}`;
 }
@@ -280,7 +280,7 @@ async function handleAddAsset(params: Record<string, unknown>): Promise<string> 
     const failures: string[] = [];
     for (const asset of assets) {
       if (!asset.name || !asset.amount || asset.amount <= 0) continue;
-      const result = await tool.handler({ name: asset.name, amount: asset.amount, type: asset.type });
+      const result = await executeTool(tool, { name: asset.name, amount: asset.amount, type: asset.type }, { agentId: AGENT_ID });
       if (result.success) successes.push({ name: asset.name, amount: asset.amount });
       else failures.push(`${asset.name}: ${result.error}`);
     }
@@ -294,7 +294,7 @@ async function handleAddAsset(params: Record<string, unknown>): Promise<string> 
   if (!params.name || !params.amount || Number(params.amount) <= 0) {
     return '请告诉我资产名称和金额，例如"添加资产 银行存款 50000"。';
   }
-  const result = await tool.handler({ name: params.name, amount: params.amount || 0, type: params.type });
+  const result = await executeTool(tool, { name: params.name, amount: params.amount || 0, type: params.type }, { agentId: AGENT_ID });
   if (result.success) return `已添加资产 "${params.name}" ${params.amount || ''}`;
   return `添加资产失败: ${result.error}`;
 }
@@ -303,14 +303,14 @@ async function handleAddDebt(params: Record<string, unknown>): Promise<string> {
   const tool = getTool('add_debt');
   if (!tool) return '债务功能暂不可用。';
   if (!params.title) return '请告诉我债务详情，例如"添加债务 借给张三 5000"。';
-  const result = await tool.handler({
+  const result = await executeTool(tool, {
     title: params.title,
     type: params.type || '借出',
     principal: params.principal || params.amount || 0,
     counterparty: params.counterparty || params.title,
     dueDate: params.dueDate,
     note: params.note,
-  });
+  }, { agentId: AGENT_ID });
   if (result.success) return `已记录债务 "${params.title}"`;
   return `记录债务失败: ${result.error}`;
 }
@@ -378,7 +378,7 @@ async function handleModifyBill(params: Record<string, unknown>): Promise<string
     }
     const tool = getTool('modify_bill');
     if (!tool) return '账单修改功能暂不可用。';
-    const result = await tool.handler({ billId, category });
+    const result = await executeTool(tool, { billId, category }, { agentId: AGENT_ID });
     if (result.success) return `已将账单 ${billId} 分类改为 ${category}。`;
     return `修改账单失败: ${result.error}`;
   }
@@ -410,11 +410,11 @@ async function handleReimbursement(params: Record<string, unknown>): Promise<str
   const tool = getTool('create_reimbursement');
   if (!tool) return '报销功能暂不可用。';
   if (!params.title) return '请告诉我报销内容，例如"创建报销 差旅费 1200"。';
-  const result = await tool.handler({
+  const result = await executeTool(tool, {
     title: params.title,
     amount: params.amount || 0,
     category: params.category,
-  });
+  }, { agentId: AGENT_ID });
   if (result.success) return `已创建报销 "${params.title}" ${params.amount ? `¥${params.amount}` : ''}`;
   return `创建报销失败: ${result.error}`;
 }
@@ -423,13 +423,13 @@ async function handleCreditCard(params: Record<string, unknown>): Promise<string
   const tool = getTool('add_credit_card');
   if (!tool) return '信用卡功能暂不可用。';
   if (!params.name || !params.bank) return '请告诉我信用卡名称和发卡行，如"添加信用卡 招行 50000"。';
-  const result = await tool.handler({
+  const result = await executeTool(tool, {
     name: params.name,
     bank: params.bank,
     creditLimit: params.creditLimit || params.amount || 0,
     billDay: params.billDay,
     paymentDay: params.paymentDay,
-  });
+  }, { agentId: AGENT_ID });
   if (result.success) return `已添加信用卡 "${params.bank} ${params.name}"`;
   return `添加信用卡失败: ${result.error}`;
 }
@@ -437,11 +437,11 @@ async function handleCreditCard(params: Record<string, unknown>): Promise<string
 async function handleTransferAsset(params: Record<string, unknown>): Promise<string> {
   const tool = getTool('transfer_asset');
   if (!tool) return '转账功能暂不可用。';
-  const result = await tool.handler({
+  const result = await executeTool(tool, {
     fromAssetId: params.fromAssetId || params.from,
     toAssetId: params.toAssetId || params.to,
     amount: params.amount,
-  });
+  }, { agentId: AGENT_ID });
   if (result.success) {
     const data = result.data as { from: { name: string }, to: { name: string }, amount: number };
     return `已从 "${data.from.name}" 转入 "${data.to.name}" ${data.amount}元`;
@@ -452,7 +452,7 @@ async function handleTransferAsset(params: Record<string, unknown>): Promise<str
 async function handleSettleReimbursement(params: Record<string, unknown>): Promise<string> {
   const tool = getTool('settle_reimbursement');
   if (!tool) return '报销结算功能暂不可用。';
-  const result = await tool.handler({ taskId: params.taskId || params.id });
+  const result = await executeTool(tool, { taskId: params.taskId || params.id }, { agentId: AGENT_ID });
   if (result.success) return `报销已结算`;
   return `结算失败: ${result.error}`;
 }
@@ -460,7 +460,7 @@ async function handleSettleReimbursement(params: Record<string, unknown>): Promi
 async function handleOCRImport(params: Record<string, unknown>): Promise<string> {
   const tool = getTool('ocr_import');
   if (!tool) return 'OCR导入功能暂不可用。';
-  const result = await tool.handler({ rawText: params.rawText || params.text, source: 'ocr' });
+  const result = await executeTool(tool, { rawText: params.rawText || params.text, source: 'ocr' }, { agentId: AGENT_ID });
   if (result.success) {
     const data = result.data as { importedCount: number };
     return `已从OCR文本导入 ${data.importedCount} 条账单`;

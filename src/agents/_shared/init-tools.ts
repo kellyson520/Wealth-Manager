@@ -1131,7 +1131,7 @@ export function initToolRegistry(): void {
       idempotent: true,
     },
     handler: async (params?: any) => list_assets(params),
-    allowedAgents: ['analyst', 'coach'],
+    allowedAgents: ['ledger', 'analyst', 'coach'],
   });
 
   registerTool({
@@ -1403,7 +1403,7 @@ export function initToolRegistry(): void {
       idempotent: true,
     },
     handler: async (params?: any) => get_import_history(params),
-    allowedAgents: ['analyst'],
+    allowedAgents: ['ledger', 'analyst'],
   });
 
   registerTool({
