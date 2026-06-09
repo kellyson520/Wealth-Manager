@@ -7,7 +7,7 @@ import {
   TokenBudget,
 } from '../../safety/guard';
 import { createCircuitBreaker, canCall, recordSuccess, recordFailure } from '../../safety/circuit-breaker';
-import { sanitizeForCloud } from '../../cloud/sanitizer';
+import { sanitizeTextForCloud } from '../../cloud/sanitizer';
 
 const DEFAULT_DIM = 384;
 const CLOUD_EMBED_MODEL = 'text-embedding-3-small';
@@ -64,8 +64,7 @@ export async function generateEmbedding(
   }
 
   try {
-    const sanitizedData = sanitizeForCloud({ content: text });
-    const safeText = (sanitizedData.content as string) || text;
+    const safeText = sanitizeTextForCloud(text);
 
     const response = await fetch(`${OPENAI_BASE_URL}/embeddings`, {
       method: 'POST',
