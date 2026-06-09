@@ -241,6 +241,10 @@ function buildEChartsConfig(data: ChartCardData): Record<string, unknown> {
 
     case 'heatmap': {
       const heatData = series as { xAxis?: string[]; yAxis?: string[]; data?: [number, number, number][] } | undefined;
+      const heatValues = heatData?.data;
+      const heatMax = heatValues?.length
+        ? Math.max(1, ...heatValues.map((d) => d[2]))
+        : 10;
       return {
         ...baseOption,
         grid: { top: 40, bottom: 60, left: 80, right: 20 },
@@ -262,7 +266,7 @@ function buildEChartsConfig(data: ChartCardData): Record<string, unknown> {
         },
         visualMap: {
           min: 0,
-          max: 10,
+          max: heatMax,
           calculable: true,
           orient: 'horizontal',
           left: 'center',
