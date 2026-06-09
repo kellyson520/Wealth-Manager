@@ -2,6 +2,7 @@ import { getDatabase } from '../database/database';
 import { v4 as uuidv4 } from 'uuid';
 import { captureError } from '../logger/logger';
 import { addRule, searchRules } from './rule-store';
+import { isValidFieldName } from './condition-parser';
 import type { RuleConditionGroup, RuleAction } from './rule-types';
 
 export async function recordCorrection(params: {
@@ -165,11 +166,12 @@ export async function applyLearnedRules(billId?: string): Promise<{
 
 function evaluateSimpleMatch(group: RuleConditionGroup, facts: Record<string, unknown>): boolean {
   for (const cond of group.conditions) {
-    if ('operator' in cond && 'conditions' in cond) {
+    if (Object.hasOwn(cond, 'operator') && Object.hasOwn(cond, 'conditions')) {
       if (evaluateSimpleMatch(cond as RuleConditionGroup, facts)) return true;
     } else {
       const c = cond as { field: string; operator: string; value: unknown };
-      const factVal = facts[c.field];
+      if (!isValidFieldName(c.field)) continue;
+      const factVal = Object.hasOwn(facts, c.field) ? facts[c.field] : undefined;
       if (c.operator === 'contains' && typeof factVal === 'string' && typeof c.value === 'string') {
         if (factVal.includes(c.value)) return true;
       }

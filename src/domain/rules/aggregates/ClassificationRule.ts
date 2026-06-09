@@ -47,7 +47,8 @@ export class ClassificationRule extends AggregateRoot {
   }
 
   private evaluate(cond: Condition, facts: Record<string, unknown>): number {
-    const actual = facts[cond.field];
+    if (['__proto__', 'constructor', 'prototype'].includes(cond.field)) return 0;
+    const actual = Object.hasOwn(facts, cond.field) ? facts[cond.field] : undefined;
     const expected = cond.value;
     let match: boolean;
     switch (cond.operator) {

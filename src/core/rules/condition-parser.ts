@@ -59,6 +59,10 @@ export function parseConditionExpr(expr: string): RuleCondition | null {
         value = trimmedValue;
       }
 
+      if (!isValidFieldName(field)) {
+        return null;
+      }
+
       return { field, operator, value };
     }
   }
@@ -159,7 +163,7 @@ export function evaluateConditionGroup(
   facts: Record<string, unknown>
 ): boolean {
   const results = group.conditions.map((c) => {
-    if ('operator' in c && 'conditions' in c) {
+    if (Object.hasOwn(c, 'operator') && Object.hasOwn(c, 'conditions')) {
       return evaluateConditionGroup(c as RuleConditionGroup, facts);
     }
     return evaluateCondition(c as RuleCondition, facts);
@@ -174,7 +178,7 @@ export function evaluateConditionGroup(
 export function countConditions(group: RuleConditionGroup): number {
   let count = 0;
   for (const c of group.conditions) {
-    if ('operator' in c && 'conditions' in c) {
+    if (Object.hasOwn(c, 'operator') && Object.hasOwn(c, 'conditions')) {
       count += countConditions(c as RuleConditionGroup);
     } else {
       count++;
@@ -189,7 +193,7 @@ export function countMatchedConditions(
 ): number {
   let count = 0;
   for (const c of group.conditions) {
-    if ('operator' in c && 'conditions' in c) {
+    if (Object.hasOwn(c, 'operator') && Object.hasOwn(c, 'conditions')) {
       count += countMatchedConditions(c as RuleConditionGroup, facts);
     } else {
       if (evaluateCondition(c as RuleCondition, facts)) {
@@ -200,11 +204,28 @@ export function countMatchedConditions(
   return count;
 }
 
+const FORBIDDEN_FIELD_NAMES = new Set([
+  '__proto__',
+  'constructor',
+  'prototype',
+  '__defineGetter__',
+  '__defineSetter__',
+  '__lookupGetter__',
+  '__lookupSetter__',
+]);
+
+export function isValidFieldName(field: string): boolean {
+  return !FORBIDDEN_FIELD_NAMES.has(field);
+}
+
 function getFieldValue(
   field: string,
   facts: Record<string, unknown>
 ): unknown {
-  return facts[field] ?? undefined;
+  if (!isValidFieldName(field)) {
+    return undefined;
+  }
+  return Object.hasOwn(facts, field) ? facts[field] : undefined;
 }
 
 function looseEquals(a: unknown, b: unknown): boolean {
