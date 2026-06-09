@@ -431,17 +431,21 @@ function extractLatestSyncFile(propfindXml: string): string | null {
   if (!files || files.length === 0) return null;
 
   const synclist = files
-    .map((f) => f.replace(/<D:href>/i, '').replace(/<\/D:href>/i, '').trim())
-    .filter((f) => f.endsWith('.json'))
+    .map((f) => {
+      const href = f.replace(/<D:href>/i, '').replace(/<\/D:href>/i, '').trim();
+      const parts = href.split('/');
+      return parts[parts.length - 1];
+    })
+    .filter((name) => {
+      // Sanitize against path traversal in server-returned filenames
+      if (!name || name === '.' || name === '..' || name.includes('..')) return false;
+      if (!/^[A-Za-z0-9._-]+\.json$/i.test(name)) return false;
+      return true;
+    })
     .sort()
     .reverse();
 
-  const latest = synclist[0];
-  if (latest) {
-    const parts = latest.split('/');
-    return parts[parts.length - 1];
-  }
-  return null;
+  return synclist[0] || null;
 }
 
 async function mergeData(
@@ -531,6 +535,22 @@ function sanitizeSyncFilename(filename: string): string | null {
   return trimmed;
 }
 
+/**
+ * Sanitize a filename returned from a WebDAV PROPFIND response.
+ * Prevents path traversal by extracting only the final path segment
+ * and rejecting any component that is or contains `.` / `..`.
+ */
+function sanitizeServerFilename(name: string): string | null {
+  const trimmed = name.trim();
+  if (!trimmed) return null;
+  // Take only the last path segment — discard any directory components
+  const parts = trimmed.split('/');
+  const last = parts[parts.length - 1];
+  if (!last || last === '.' || last === '..' || last.includes('..')) return null;
+  if (!/^[A-Za-z0-9._-]+$/.test(last)) return null;
+  return last;
+}
+
 function isPrimitiveDbValue(value: unknown): boolean {
   return value === null || typeof value === 'string' || typeof value === 'number';
 }
@@ -583,13 +603,15 @@ export async function list_sync_files(params?: {
     }
 
     const files: { name: string; path: string; lastModified?: string }[] = [];
-    const hrefMatches = result.body.matchAll(/<D:href>([^<]+\.json)<\/D:href>/gi);
+    const hrefMatches = result.body.matchAll(/<D:href>([^<]+)<\/D:href>/gi);
 
     for (const match of hrefMatches) {
-      const fullPath = match[1].replace(/<D:href>/i, '').replace(/<\/D:href>/i, '').trim();
-      const parts = fullPath.split('/');
-      const name = parts[parts.length - 1];
-      files.push({ name, path: fullPath });
+      const rawHref = match[1].trim();
+      // Extract the last path segment and sanitize against traversal
+      const lastSegment = rawHref.split('/').pop() || '';
+      const safeName = sanitizeServerFilename(lastSegment);
+      if (!safeName || !safeName.endsWith('.json')) continue;
+      files.push({ name: safeName, path: `${folder}/${safeName}` });
     }
 
     files.sort((a, b) => b.name.localeCompare(a.name));
