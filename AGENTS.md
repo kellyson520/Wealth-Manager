@@ -95,6 +95,12 @@ npx jest                  # 全量测试 (当前 366 通过 / 24 套件)
 - **测试**: 每个模块对应 `src/__tests__/` 下同名目录
 - **不引入新 npm 依赖**: 全部使用已有 expo/react-native 生态
 
+## CI/CD 规则
+
+- **普通提交**：只跑 Lint & Test（typecheck + jest），不要在 commit message 里加 `[build]`
+- **构建 APK**：仅在需要发版时手动在 commit message 中加 `[build]`，如 `feat: xxx [build]`
+- **Claude/AI Agent**：没有构建权限，提交代码时 **禁止** 使用 `[build]`
+
 ## 相关文档
 
 | 文档 | 路径 |

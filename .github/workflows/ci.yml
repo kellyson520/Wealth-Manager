@@ -1,19 +1,10 @@
 name: CI
 
 on:
-  pull_request:
-    branches: [main, master, develop]
   push:
     branches: [main, master, develop]
-    paths:
-      - 'src/**'
-      - 'app.json'
-      - 'metro.config.js'
-      - 'babel.config.js'
-      - 'eas.json'
-      - 'package.json'
-      - 'package-lock.json'
-      - 'tsconfig.json'
+  pull_request:
+    branches: [main, master, develop]
 
 jobs:
   lint-and-test:
@@ -32,7 +23,7 @@ jobs:
   build-android:
     name: Build Android APK
     needs: lint-and-test
-    if: github.event_name == 'pull_request'
+    if: contains(github.event.head_commit.message, '[build]')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
