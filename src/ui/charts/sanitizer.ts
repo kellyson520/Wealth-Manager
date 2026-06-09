@@ -9,7 +9,9 @@ const EVAL_PATTERN = /\beval\s*\(/gi;
 const FUNCTION_CONSTRUCTOR = /new\s+Function\s*\(/gi;
 const SET_TIMEOUT_PATTERN = /setTimeout\s*\(/gi;
 const SET_INTERVAL_PATTERN = /setInterval\s*\(/gi;
+const HTML_TAG_PATTERN = /<\/?[a-z][^>]*>/gi;
 const INJECTION_PATTERNS = [
+  HTML_TAG_PATTERN,
   SCRIPT_PATTERN,
   JS_URI_PATTERN,
   EVENT_HANDLER_PATTERN,

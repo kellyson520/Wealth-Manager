@@ -15,6 +15,15 @@ describe('Chart config sanitizer', () => {
     expect(sanitizeChartConfig(payload).valid).toBe(false);
   });
 
+  test('rejects HTML markup in display strings', () => {
+    const payload = { tooltip: { formatter: '<img src=x alt=x>' } };
+
+    const result = sanitizeChartConfig(payload);
+
+    expect(result.valid).toBe(false);
+    expect(result.error).toContain('Suspicious pattern');
+  });
+
   test('rejects forbidden keys even when their value is not a string', () => {
     const payload = JSON.parse('{"series":[{"__proto__":{"polluted":true}}]}');
 
