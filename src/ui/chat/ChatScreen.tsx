@@ -29,6 +29,8 @@ export default function ChatScreen() {
   const [isProcessing, setIsProcessing] = useState(false);
   const flatListRef = useRef<FlatList>(null);
   const processingRef = useRef(false);
+  const [consumedActionIds, setConsumedActionIds] = useState<Set<string>>(() => new Set());
+  const consumedActionIdsRef = useRef(consumedActionIds);
   const messageIdSeqRef = useRef(0);
   const router = useRouter();
 
@@ -58,6 +60,15 @@ export default function ChatScreen() {
   const addMessage = useCallback((msg: ChatMessage) => {
     setMessages((prev) => [...prev, msg]);
     setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
+  }, []);
+
+  const consumeAction = useCallback((actionId: string) => {
+    if (consumedActionIdsRef.current.has(actionId)) return false;
+    const next = new Set(consumedActionIdsRef.current);
+    next.add(actionId);
+    consumedActionIdsRef.current = next;
+    setConsumedActionIds(next);
+    return true;
   }, []);
 
   const handleSend = useCallback(
@@ -100,14 +111,16 @@ export default function ChatScreen() {
 
   const handleCardConfirm = useCallback(
     (actionId: string) => {
+      if (!consumeAction(actionId)) return;
       logger.info('Chat', `Card confirmed: ${actionId}`);
       handleSend(`确认操作 ${actionId}`);
     },
-    [handleSend]
+    [consumeAction, handleSend]
   );
 
   const handleCardCancel = useCallback(
     (actionId: string) => {
+      if (!consumeAction(actionId)) return;
       logger.info('Chat', `Card cancelled: ${actionId}`);
       addMessage({
         id: nextLocalMessageId('sys'),
@@ -116,7 +129,12 @@ export default function ChatScreen() {
         timestamp: new Date().toISOString(),
       });
     },
-    [addMessage, nextLocalMessageId]
+    [addMessage, consumeAction, nextLocalMessageId]
+  );
+
+  const isActionConsumed = useCallback(
+    (actionId: string) => consumedActionIdsRef.current.has(actionId),
+    []
   );
 
   const renderItem = useCallback(
@@ -125,9 +143,10 @@ export default function ChatScreen() {
         message={item}
         onConfirm={handleCardConfirm}
         onCancel={handleCardCancel}
+        isActionConsumed={isActionConsumed}
       />
     ),
-    [handleCardConfirm, handleCardCancel]
+    [handleCardConfirm, handleCardCancel, isActionConsumed]
   );
 
   const keyExtractor = useCallback((item: ChatMessage) => item.id, []);

@@ -31,6 +31,7 @@ interface CardRendererProps {
     | RecordConfirmCardData;
   onConfirm?: (actionId: string) => void;
   onCancel?: (actionId: string) => void;
+  isActionConsumed?: (actionId: string) => boolean;
   onRetry?: () => void;
   onAction?: (actionId: string) => void;
   onEdit?: () => void;
@@ -71,6 +72,7 @@ export default function CardRenderer({
   data,
   onConfirm,
   onCancel,
+  isActionConsumed,
   onRetry,
   onAction,
   onEdit,
@@ -93,6 +95,7 @@ export default function CardRenderer({
           data={data as ConfirmCardData}
           onConfirm={onConfirm}
           onCancel={onCancel}
+          isConsumed={isActionConsumed?.(data.actionId) || false}
         />
       );
 

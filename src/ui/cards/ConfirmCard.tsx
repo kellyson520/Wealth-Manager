@@ -7,6 +7,7 @@ interface ConfirmCardProps {
   data: ConfirmCardData;
   onConfirm?: (actionId: string) => void;
   onCancel?: (actionId: string) => void;
+  isConsumed?: boolean;
 }
 
 const RISK_STYLES: Record<string, { border: string; badge: string; badgeBg: string; icon: string }> = {
@@ -15,11 +16,12 @@ const RISK_STYLES: Record<string, { border: string; badge: string; badgeBg: stri
   high: { border: colors.expense, badge: '高风险', badgeBg: colors.dangerSoft, icon: '!' },
 };
 
-export default function ConfirmCard({ data, onConfirm, onCancel }: ConfirmCardProps) {
+export default function ConfirmCard({ data, onConfirm, onCancel, isConsumed = false }: ConfirmCardProps) {
   const risk = RISK_STYLES[data.riskLevel] || RISK_STYLES.medium;
   const isSecurity = data.type === 'security_confirm_card';
 
   const [cooldownRemaining, setCooldownRemaining] = useState(data.cooldownSeconds || 0);
+  const isConfirmDisabled = isConsumed || cooldownRemaining > 0;
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
@@ -53,10 +55,13 @@ export default function ConfirmCard({ data, onConfirm, onCancel }: ConfirmCardPr
   }, [data.actionId, data.cooldownSeconds]);
 
   const handleConfirm = () => {
-    if (cooldownRemaining > 0) return;
+    if (isConfirmDisabled) return;
     onConfirm?.(data.actionId);
   };
-  const handleCancel = () => onCancel?.(data.actionId);
+  const handleCancel = () => {
+    if (isConsumed) return;
+    onCancel?.(data.actionId);
+  };
 
   return (
     <View style={[styles.card, { borderColor: risk.border }]}>
@@ -89,9 +94,10 @@ export default function ConfirmCard({ data, onConfirm, onCancel }: ConfirmCardPr
 
       <View style={styles.actions}>
         <TouchableOpacity
-          style={styles.cancelBtn}
+          style={[styles.cancelBtn, isConsumed && styles.confirmBtnDisabled]}
           onPress={handleCancel}
-          activeOpacity={0.7}
+          activeOpacity={isConsumed ? 1 : 0.7}
+          disabled={isConsumed}
         >
           <Text style={styles.cancelText}>{data.cancelLabel || '取消'}</Text>
         </TouchableOpacity>
@@ -106,11 +112,11 @@ export default function ConfirmCard({ data, onConfirm, onCancel }: ConfirmCardPr
                     ? colors.accentStrong
                     : colors.accentStrong,
             },
-            cooldownRemaining > 0 && styles.confirmBtnDisabled,
+            isConfirmDisabled && styles.confirmBtnDisabled,
           ]}
           onPress={handleConfirm}
-          activeOpacity={cooldownRemaining > 0 ? 1 : 0.65}
-          disabled={cooldownRemaining > 0}
+          activeOpacity={isConfirmDisabled ? 1 : 0.65}
+          disabled={isConfirmDisabled}
         >
           <Text style={styles.confirmText}>
             {cooldownRemaining > 0

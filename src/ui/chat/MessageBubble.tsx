@@ -8,6 +8,7 @@ interface MessageBubbleProps {
   message: ChatMessage;
   onConfirm?: (actionId: string) => void;
   onCancel?: (actionId: string) => void;
+  isActionConsumed?: (actionId: string) => boolean;
   onRetry?: () => void;
   onAction?: (actionId: string) => void;
   onEdit?: () => void;
@@ -18,6 +19,7 @@ export default function MessageBubble({
   message,
   onConfirm,
   onCancel,
+  isActionConsumed,
   onRetry,
   onAction,
   onEdit,
@@ -36,6 +38,7 @@ export default function MessageBubble({
             data={message.data!}
             onConfirm={onConfirm}
             onCancel={onCancel}
+            isActionConsumed={isActionConsumed}
             onRetry={onRetry}
             onAction={onAction}
             onEdit={onEdit}
@@ -59,6 +62,7 @@ export default function MessageBubble({
             data={message.data!}
             onConfirm={onConfirm}
             onCancel={onCancel}
+            isActionConsumed={isActionConsumed}
             onRetry={onRetry}
             onAction={onAction}
             onEdit={onEdit}
