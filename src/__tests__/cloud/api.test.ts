@@ -304,17 +304,26 @@ describe('Cloud LLM API - Safety Chain', () => {
     });
 
     test('rejects untrusted custom base URL host before sending API key', async () => {
-      const result = await callCloudLLM(
-        {
-          baseUrl: 'https://attacker-controlled.example/v1',
-          messages: [{ role: 'user', content: 'clean text' }],
-        },
-        'test-key'
-      );
+      const blockedUrls = [
+        'https://attacker-controlled.example/v1',
+        'https://93.184.216.34/v1',
+        'https://[2606:2800:220:1:248:1893:25c8:1946]/v1',
+        'https://[::ffff:5db8:d822]/v1',
+      ];
 
-      expect(result.success).toBe(false);
-      expect(result.error).toContain('允许列表');
-      expect(result.degraded).toBe(true);
+      for (const baseUrl of blockedUrls) {
+        const result = await callCloudLLM(
+          {
+            baseUrl,
+            messages: [{ role: 'user', content: 'clean text' }],
+          },
+          'test-key'
+        );
+
+        expect(result.success).toBe(false);
+        expect(result.error).toContain('允许列表');
+        expect(result.degraded).toBe(true);
+      }
       expect(global.fetch).not.toHaveBeenCalled();
     });
 

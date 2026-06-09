@@ -222,7 +222,7 @@ async function validateCloudBaseUrl(baseUrl: string): Promise<string> {
     throw new Error('云端 API 地址不能指向私网地址');
   }
 
-  if (!parseIPv4Octets(hostname) && !hostname.includes(':') && !isAllowedCloudHostname(hostname)) {
+  if (parseIPv4Octets(hostname) || hostname.includes(':') || !isAllowedCloudHostname(hostname)) {
     throw new Error('云端 API 地址域名不在允许列表');
   }
 
