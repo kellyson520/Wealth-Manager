@@ -62,10 +62,16 @@ export async function create_link(params: {
       return { success: false, error: '没有可分享的账单' };
     }
 
+    if (params.expiresInHours !== undefined) {
+      if (typeof params.expiresInHours !== 'number' || !Number.isFinite(params.expiresInHours) || params.expiresInHours <= 0) {
+        return { success: false, error: '链接有效小时数必须为正数', errorCode: 'INVALID_EXPIRES_IN_HOURS' };
+      }
+    }
+
     const id = uuidv4();
     const token = generateToken();
     const now = new Date().toISOString();
-    const expiresAt = params.expiresInHours
+    const expiresAt = params.expiresInHours !== undefined
       ? new Date(Date.now() + params.expiresInHours * 3600000).toISOString()
       : undefined;
 
