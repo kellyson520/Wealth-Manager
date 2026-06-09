@@ -107,7 +107,11 @@ ${echartsJS}
     } catch(e) {
       clearResizeHandler();
       reportError('ECharts error: ' + e.message);
-      container.innerHTML = '<div class="error-box">图表渲染失败</div>';
+      container.innerHTML = '';  // XSS-safe: use DOM API instead of innerHTML
+      var errBox = document.createElement('div');
+      errBox.className = 'error-box';
+      errBox.textContent = '图表渲染失败';
+      container.appendChild(errBox);
     }
   }
 
