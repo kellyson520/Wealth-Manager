@@ -45,6 +45,9 @@ export async function add_debt(params: {
     if (!params.counterparty) {
       return { success: false, error: '交易对方不能为空' };
     }
+    if (params.type !== '借出' && params.type !== '借入') {
+      return { success: false, error: '债务类型必须为借出或借入' };
+    }
     if (!params.principal || params.principal <= 0) {
       return { success: false, error: '本金必须大于0' };
     }
