@@ -127,9 +127,17 @@ export async function update_asset_value(params: {
 
     const now = new Date().toISOString();
 
+    const updates = ['amount = ?', 'updated_at = ?'];
+    const values: (string | number)[] = [params.amount, now];
+    if (params.note !== undefined) {
+      updates.push('note = ?');
+      values.push(params.note);
+    }
+    values.push(params.assetId);
+
     await db.runAsync(
-      'UPDATE assets SET amount = ?, note = ?, updated_at = ? WHERE id = ?',
-      [params.amount, params.note || '', now, params.assetId]
+      `UPDATE assets SET ${updates.join(', ')} WHERE id = ?`,
+      values
     );
 
     return { success: true, data: { id: params.assetId, amount: params.amount, updatedAt: now } };
