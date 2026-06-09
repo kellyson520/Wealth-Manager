@@ -65,7 +65,8 @@ async function getConfig(db: Awaited<ReturnType<typeof getDatabase>>): Promise<W
       }
     }
     return config;
-  } catch {
+  } catch (e) {
+    captureError('WebDAV.getConfig', e, 'Failed to read WebDAV config');
     return null;
   }
 }
@@ -238,7 +239,8 @@ export async function sync_upload(params?: {
       try {
         const rows = await db.getAllAsync(`SELECT * FROM ${table} LIMIT 5000`);
         backup[table] = rows;
-      } catch {
+      } catch (e) {
+        captureError('WebDAV.sync_upload', e, `Failed to backup table ${table}`);
         backup[table] = [];
       }
     }

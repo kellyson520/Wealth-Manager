@@ -198,7 +198,8 @@ async function createDefaultBookkeepingReminder(): Promise<boolean> {
       [uuidv4(), '每日记账提醒', 'reminder', '0 20 * * *', new Date().toISOString()]
     );
     return true;
-  } catch {
+  } catch (e) {
+    captureError('TaskScheduler.createDefaultBookkeepingReminder', e, 'Failed to create bookkeeping reminder');
     return false;
   }
 }
@@ -218,7 +219,8 @@ async function createDefaultInactivityCheck(): Promise<boolean> {
       [uuidv4(), '长时间未记录检查', 'reminder', '0 10 * * *', new Date().toISOString()]
     );
     return true;
-  } catch {
+  } catch (e) {
+    captureError('TaskScheduler.createDefaultInactivityCheck', e, 'Failed to create inactivity check');
     return false;
   }
 }

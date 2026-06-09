@@ -34,7 +34,7 @@ function getWebCrypto(): WebCryptoApi | null {
       return nodeCrypto.webcrypto;
     }
   } catch {
-    // Ignore missing Node crypto fallback in app runtimes.
+    captureError('HashChain.getWebCrypto', new Error('Node crypto unavailable'), 'WebCrypto fallback not available in this runtime');
   }
 
   return null;
@@ -52,12 +52,12 @@ async function ensureHashColumns(db: Awaited<ReturnType<typeof getDatabase>>): P
   try {
     await db.execAsync(`ALTER TABLE bills ADD COLUMN hash TEXT DEFAULT ''`);
   } catch {
-    // Column may already exist.
+    captureError('HashChain.ensureHashColumns', new Error('ALTER TABLE hash'), 'hash column may already exist');
   }
   try {
     await db.execAsync(`ALTER TABLE bills ADD COLUMN prev_hash TEXT DEFAULT ''`);
   } catch {
-    // Column may already exist.
+    captureError('HashChain.ensureHashColumns', new Error('ALTER TABLE prev_hash'), 'prev_hash column may already exist');
   }
 }
 
@@ -74,6 +74,7 @@ function normalizeTags(tags?: string): string[] {
     const parsed = JSON.parse(tags);
     return Array.isArray(parsed) ? parsed.map((tag) => String(tag)) : [];
   } catch {
+    captureError('HashChain.normalizeTags', new Error('JSON parse failed'), 'Failed to parse tags string');
     return [];
   }
 }

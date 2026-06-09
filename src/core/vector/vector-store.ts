@@ -150,7 +150,7 @@ export async function searchSimilar(params: {
             similarity,
           });
         }
-      } catch { /* skip malformed rows */ }
+      } catch (e) { captureError('VectorStore.searchSimilar', e as Error, 'Skipping malformed search result row'); }
     }
 
     results.sort((a, b) => b.similarity - a.similarity);

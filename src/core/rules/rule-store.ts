@@ -459,7 +459,7 @@ export async function recordRuleHit(id: string): Promise<void> {
       'UPDATE classification_rules SET hit_count = hit_count + 1, last_hit_at = ? WHERE id = ?',
       [now, id]
     );
-  } catch {
-    // Non-critical, ignore errors
+  } catch (e) {
+    captureError('RuleStore.recordHit', e as Error, 'Failed to update rule hit count');
   }
 }

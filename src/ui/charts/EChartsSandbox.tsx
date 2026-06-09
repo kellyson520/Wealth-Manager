@@ -4,6 +4,7 @@ import { WebView, WebViewMessageEvent } from 'react-native-webview';
 import { Asset } from 'expo-asset';
 import { sanitizeChartConfig, sanitizeJSONString, SanitizeResult } from './sanitizer';
 import { colors } from '../theme';
+import { captureError } from '../../core/logger/logger';
 
 interface EChartsSandboxProps {
   config: Record<string, unknown>;
@@ -63,7 +64,7 @@ ${echartsJS}
   function reportError(msg) {
     try {
       window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'error', message: msg }));
-    } catch(e) {}
+    } catch(e) { console.error('reportError failed:', e); }
   }
 
   function clearResizeHandler() {
@@ -184,7 +185,9 @@ export default function EChartsSandbox({ config, height = 200, onError }: EChart
       if (data.type === 'error' && data.message) {
         onError?.(data.message);
       }
-    } catch {}
+    } catch (e) {
+      captureError('EChartsSandbox.handleMessage', e as Error, 'Failed to parse WebView message');
+    }
   };
 
   if (loadError) {
@@ -240,7 +243,7 @@ export default function EChartsSandbox({ config, height = 200, onError }: EChart
                   if (typeof parsed === 'object' && parsed.type === 'error') {
                     originalPostMessage.call(window.ReactNativeWebView, msg);
                   }
-                } catch(e) {}
+                } catch(e) { console.error('postMessage filter error:', e); }
               };
             }
           })();
