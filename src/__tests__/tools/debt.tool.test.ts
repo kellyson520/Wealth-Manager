@@ -11,7 +11,7 @@ jest.mock('../../core/database/database', () => {
 });
 
 import { getDatabase } from '../../core/database/database';
-import { record_repayment } from '../../tools/debt/debt.tool';
+import { record_repayment, add_debt, add_credit_card } from '../../tools/debt/debt.tool';
 
 async function getMockDb() {
   return getDatabase() as any;
@@ -100,5 +100,51 @@ describe('record_repayment Tool', () => {
     expect(result.error).toBe('记录还款时发生异常');
     expect(mockDb.execAsync).toHaveBeenNthCalledWith(1, 'BEGIN IMMEDIATE TRANSACTION');
     expect(mockDb.execAsync).toHaveBeenNthCalledWith(2, 'ROLLBACK');
+  });
+});
+
+describe('add_debt validation', () => {
+  test('rejects Infinity principal', async () => {
+    const result = await add_debt({
+      title: 'test',
+      type: '借出',
+      principal: Infinity,
+      counterparty: 'alice',
+    });
+    expect(result.success).toBe(false);
+    expect(result.error).toBe('本金必须大于0');
+  });
+
+  test('rejects NaN principal', async () => {
+    const result = await add_debt({
+      title: 'test',
+      type: '借入',
+      principal: NaN,
+      counterparty: 'bob',
+    });
+    expect(result.success).toBe(false);
+    expect(result.error).toBe('本金必须大于0');
+  });
+});
+
+describe('add_credit_card validation', () => {
+  test('rejects Infinity creditLimit', async () => {
+    const result = await add_credit_card({
+      name: 'test',
+      bank: 'icbc',
+      creditLimit: Infinity,
+    });
+    expect(result.success).toBe(false);
+    expect(result.error).toBe('额度必须大于0');
+  });
+
+  test('rejects NaN creditLimit', async () => {
+    const result = await add_credit_card({
+      name: 'test',
+      bank: 'icbc',
+      creditLimit: NaN,
+    });
+    expect(result.success).toBe(false);
+    expect(result.error).toBe('额度必须大于0');
   });
 });

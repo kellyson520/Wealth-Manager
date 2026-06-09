@@ -48,7 +48,7 @@ export async function add_debt(params: {
     if (params.type !== '借出' && params.type !== '借入') {
       return { success: false, error: '债务类型必须为借出或借入' };
     }
-    if (!params.principal || params.principal <= 0) {
+    if (!Number.isFinite(params.principal) || params.principal <= 0) {
       return { success: false, error: '本金必须大于0' };
     }
 
@@ -253,7 +253,7 @@ export async function add_credit_card(params: {
     if (!params.name || !params.bank) {
       return { success: false, error: '信用卡名称和发卡行不能为空' };
     }
-    if (!params.creditLimit || params.creditLimit <= 0) {
+    if (!Number.isFinite(params.creditLimit) || params.creditLimit <= 0) {
       return { success: false, error: '额度必须大于0' };
     }
 
