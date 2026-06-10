@@ -133,7 +133,8 @@ export async function searchByEntity(params: {
 }): Promise<LongtermEntry[]> {
   try {
     const db = await getDatabase();
-    const entityPattern = `%"entity":"${params.entity}"%`;
+    const escapedEntity = params.entity.replace(/%/g, '\\%').replace(/_/g, '\\_');
+    const entityPattern = `%"entity":"${escapedEntity}"%`;
 
     const rows = await db.getAllAsync<{
       id: string; content: string; type: string; importance: number;
