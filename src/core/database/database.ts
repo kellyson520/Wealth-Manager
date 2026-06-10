@@ -4,10 +4,18 @@ import { initRulesTable } from '../rules';
 
 let db: SQLite.SQLiteDatabase | null = null;
 
+/**
+ * NOTE: expo-sqlite does NOT support SQLCipher.
+ * The `key` option in openDatabaseAsync is silently ignored.
+ * Sensitive data (passwords, tokens) MUST use application-layer encryption
+ * (see sync-crypto.ts) or expo-secure-store before writing to the database.
+ *
+ * For true database encryption, migrate to `react-native-quick-sqlite` with
+ * SQLCipher support, or use Drizzle + better-sqlite3 with encryption at rest.
+ */
 export async function getDatabase(): Promise<SQLite.SQLiteDatabase> {
   if (db) return db;
-  const key = getDatabaseKey();
-  db = await SQLite.openDatabaseAsync('wealth_manager.db', { key } as SQLite.SQLiteOpenOptions & { key: string });
+  db = await SQLite.openDatabaseAsync('wealth_manager.db');
   await configureDatabaseSecurity(db);
   await initTables(db);
   return db;
@@ -15,13 +23,6 @@ export async function getDatabase(): Promise<SQLite.SQLiteDatabase> {
 
 async function configureDatabaseSecurity(db: SQLite.SQLiteDatabase): Promise<void> {
   await db.execAsync('PRAGMA foreign_keys = ON');
-}
-
-function getDatabaseKey(): string {
-  const env = (globalThis as unknown as {
-    process?: { env?: Record<string, string | undefined> };
-  }).process?.env;
-  return env?.EXPO_PUBLIC_WEALTH_MANAGER_DB_KEY || 'development-only-wealth-manager-db-key';
 }
 
 function parseJsonOrDefault<T>(value: string | null | undefined, fallback: T): T {
