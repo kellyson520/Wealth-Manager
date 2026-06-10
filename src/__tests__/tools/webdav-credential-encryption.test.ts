@@ -70,7 +70,7 @@ describe('WebDAV credential encryption', () => {
         'wealth-manager-webdav-config-secret-v1:https://dav.example.com:alice',
         saved.passwordSalt
       )
-    ).resolves.toBeNull();
+    ).rejects.toThrow();
     await expect(
       decryptPayload(saved.passwordCiphertext, secureSecret, saved.passwordSalt)
     ).resolves.toBe('webdav-password');
@@ -87,8 +87,8 @@ describe('WebDAV credential encryption', () => {
         value: JSON.stringify({
           url: 'https://dav.example.com',
           username: 'alice',
-          passwordCiphertext: legacyEncrypted!.ciphertext,
-          passwordSalt: legacyEncrypted!.salt,
+          passwordCiphertext: legacyEncrypted.ciphertext,
+          passwordSalt: legacyEncrypted.salt,
           enabled: true,
         }),
       })
@@ -105,10 +105,10 @@ describe('WebDAV credential encryption', () => {
 
     const saved = JSON.parse(mockDb.runAsync.mock.calls[0][1][0]);
     expect(saved.password).toBeUndefined();
-    expect(saved.passwordCiphertext).not.toBe(legacyEncrypted!.ciphertext);
+    expect(saved.passwordCiphertext).not.toBe(legacyEncrypted.ciphertext);
     await expect(
       decryptPayload(saved.passwordCiphertext, legacyKey, saved.passwordSalt)
-    ).resolves.toBeNull();
+    ).rejects.toThrow();
     await expect(
       decryptPayload(saved.passwordCiphertext, 'modern-secure-store-secret-32-bytes', saved.passwordSalt)
     ).resolves.toBe('legacy-password');
@@ -118,15 +118,15 @@ describe('WebDAV credential encryption', () => {
 describe('WebDAV sync path validation', () => {
   async function mockStoredConfig() {
     const encrypted = await encryptPayload('webdav-password', 'secure-store-secret');
-    expect(encrypted).not.toBeNull();
+    
 
     const mockDb = await getMockDb();
     mockDb.getFirstAsync.mockResolvedValue({
       value: JSON.stringify({
         url: 'https://dav.example.com',
         username: 'alice',
-        passwordCiphertext: encrypted!.ciphertext,
-        passwordSalt: encrypted!.salt,
+        passwordCiphertext: encrypted.ciphertext,
+        passwordSalt: encrypted.salt,
         enabled: true,
       }),
     });
@@ -181,19 +181,19 @@ describe('WebDAV sync path validation', () => {
         { amount: 99, type: 'expense', category: '异常', date: '2026-06-08' },
       ],
     }), 'backup-passphrase');
-    expect(encrypted).not.toBeNull();
+    
 
     (globalThis as any).fetch = jest.fn().mockResolvedValue({
       ok: true,
       status: 200,
-      text: jest.fn().mockResolvedValue(encrypted!.ciphertext),
+      text: jest.fn().mockResolvedValue(encrypted.ciphertext),
     });
 
     const result = await sync_download({
       filename: 'sync_20260608_1200.json',
       decrypt: true,
       passphrase: 'backup-passphrase',
-      salt: encrypted!.salt,
+      salt: encrypted.salt,
     });
 
     const mockDb = await getMockDb();

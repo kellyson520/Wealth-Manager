@@ -50,23 +50,33 @@ async function getConfig(db: Awaited<ReturnType<typeof getDatabase>>): Promise<W
       return config;
     }
     if (!config.password && config.passwordCiphertext && config.passwordSalt) {
-      const password = await decryptPayload(
-        config.passwordCiphertext,
-        await getPasswordStorageKey(),
-        config.passwordSalt
-      );
-      if (password) {
-        config.password = password;
-      } else {
-        const legacyPassword = await decryptPayload(
+      let password: string | null = null;
+      try {
+        password = await decryptPayload(
           config.passwordCiphertext,
-          getLegacyPasswordStorageKey(config),
+          await getPasswordStorageKey(),
           config.passwordSalt
         );
-        if (legacyPassword) {
-          config.password = legacyPassword;
-          await saveConfig(db, config);
+      } catch {
+        // Decryption failed with modern key, try legacy
+      }
+      if (!password) {
+        try {
+          password = await decryptPayload(
+            config.passwordCiphertext,
+            getLegacyPasswordStorageKey(config),
+            config.passwordSalt
+          );
+          if (password) {
+            config.password = password;
+            await saveConfig(db, config);
+          }
+        } catch {
+          // Legacy decryption also failed
         }
+      }
+      if (password) {
+        config.password = password;
       }
     }
     return config;
@@ -83,14 +93,14 @@ async function saveConfig(
   const now = new Date().toISOString();
   const storedConfig: WebDAVConfig = { ...config };
   if (config.password) {
-    const encrypted = await encryptPayload(config.password, await getPasswordStorageKey());
-    if (!encrypted) {
-      throw new Error('credential encryption unavailable');
+    try {
+      const encrypted = await encryptPayload(config.password, await getPasswordStorageKey());
+      storedConfig.passwordCiphertext = encrypted.ciphertext;
+      storedConfig.passwordSalt = encrypted.salt;
+      delete storedConfig.password;
+    } catch (e) {
+      throw new Error(`credential encryption failed: ${e instanceof Error ? e.message : 'unknown error'}`);
     }
-
-    storedConfig.passwordCiphertext = encrypted.ciphertext;
-    storedConfig.passwordSalt = encrypted.salt;
-    delete storedConfig.password;
   }
   await db.runAsync(
     "INSERT OR REPLACE INTO sync_state (key, value, updated_at) VALUES ('webdav_config', ?, ?)",
@@ -265,13 +275,13 @@ export async function sync_upload(params?: {
     }
 
     if (params.encrypt && params.passphrase) {
-      const encrypted = await encryptPayload(content, params.passphrase);
-      if (encrypted) {
+      try {
+        const encrypted = await encryptPayload(content, params.passphrase);
         finalContent = encrypted.ciphertext;
         encryptionInfo = { encrypted: true, salt: encrypted.salt };
         logger.info('WebDAV', `Encrypted payload before upload (salt: ${encrypted.salt.slice(0, 8)}...)`);
-      } else {
-        return { success: false, error: '加密失败：当前运行环境不支持 WebCrypto AES-GCM' };
+      } catch (e) {
+        return { success: false, error: `加密失败：${e instanceof Error ? e.message : '当前运行环境不支持 WebCrypto AES-GCM'}` };
       }
     }
 
@@ -354,11 +364,11 @@ export async function sync_download(params?: {
     if (!params?.decrypt || !params?.passphrase || !params?.salt) {
       return { success: false, error: '同步下载必须提供解密 passphrase 和 salt' };
     }
-    const decrypted = await decryptPayload(rawData, params.passphrase, params.salt);
-    if (!decrypted) {
-      return { success: false, error: '解密失败：密码错误或数据已损坏' };
+    try {
+      rawData = await decryptPayload(rawData, params.passphrase, params.salt);
+    } catch (e) {
+      return { success: false, error: `解密失败：${e instanceof Error ? e.message : '密码错误或数据已损坏'}` };
     }
-    rawData = decrypted;
     logger.info('WebDAV', 'Decrypted downloaded payload');
 
     let backup: Record<string, unknown>;

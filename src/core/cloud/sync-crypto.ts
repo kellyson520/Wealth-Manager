@@ -96,60 +96,64 @@ async function deriveKey(
 export async function encryptPayload(
   plaintext: string,
   passphrase: string
-): Promise<{ ciphertext: string; salt: string } | null> {
-  try {
-    const webCrypto = getWebCrypto();
-    if (!webCrypto?.subtle) return null;
-
-    const salt = randomBytes(webCrypto, SALT_BYTES);
-    const iv = randomBytes(webCrypto, IV_BYTES);
-    const key = await deriveKey(webCrypto, passphrase, salt);
-    const encrypted = new Uint8Array(
-      await webCrypto.subtle.encrypt(
-        { name: 'AES-GCM', iv },
-        key,
-        encoder.encode(plaintext)
-      )
+): Promise<{ ciphertext: string; salt: string }> {
+  const webCrypto = getWebCrypto();
+  if (!webCrypto?.subtle) {
+    throw new Error(
+      'crypto.subtle unavailable — cannot encrypt. ' +
+      'Ensure a secure runtime (HTTPS context or Node.js with webcrypto).'
     );
-
-    const combined = new Uint8Array(iv.length + encrypted.length);
-    combined.set(iv);
-    combined.set(encrypted, iv.length);
-
-    return {
-      ciphertext: bytesToBase64(combined),
-      salt: bytesToBase64(salt),
-    };
-  } catch {
-    return null;
   }
+
+  const salt = randomBytes(webCrypto, SALT_BYTES);
+  const iv = randomBytes(webCrypto, IV_BYTES);
+  const key = await deriveKey(webCrypto, passphrase, salt);
+  const encrypted = new Uint8Array(
+    await webCrypto.subtle.encrypt(
+      { name: 'AES-GCM', iv },
+      key,
+      encoder.encode(plaintext)
+    )
+  );
+
+  const combined = new Uint8Array(iv.length + encrypted.length);
+  combined.set(iv);
+  combined.set(encrypted, iv.length);
+
+  return {
+    ciphertext: bytesToBase64(combined),
+    salt: bytesToBase64(salt),
+  };
 }
 
 export async function decryptPayload(
   encryptedBase64: string,
   passphrase: string,
   saltBase64: string
-): Promise<string | null> {
-  try {
-    const webCrypto = getWebCrypto();
-    if (!webCrypto?.subtle) return null;
-
-    const combined = base64ToBytes(encryptedBase64);
-    if (combined.length <= IV_BYTES) return null;
-
-    const iv = combined.slice(0, IV_BYTES);
-    const ciphertext = combined.slice(IV_BYTES);
-    const salt = base64ToBytes(saltBase64);
-    const key = await deriveKey(webCrypto, passphrase, salt);
-
-    const decrypted = await webCrypto.subtle.decrypt(
-      { name: 'AES-GCM', iv },
-      key,
-      ciphertext
+): Promise<string> {
+  const webCrypto = getWebCrypto();
+  if (!webCrypto?.subtle) {
+    throw new Error(
+      'crypto.subtle unavailable — cannot decrypt. ' +
+      'Ensure a secure runtime (HTTPS context or Node.js with webcrypto).'
     );
-
-    return decoder.decode(decrypted);
-  } catch {
-    return null;
   }
+
+  const combined = base64ToBytes(encryptedBase64);
+  if (combined.length <= IV_BYTES) {
+    throw new Error('Invalid ciphertext: too short');
+  }
+
+  const iv = combined.slice(0, IV_BYTES);
+  const ciphertext = combined.slice(IV_BYTES);
+  const salt = base64ToBytes(saltBase64);
+  const key = await deriveKey(webCrypto, passphrase, salt);
+
+  const decrypted = await webCrypto.subtle.decrypt(
+    { name: 'AES-GCM', iv },
+    key,
+    ciphertext
+  );
+
+  return decoder.decode(decrypted);
 }
