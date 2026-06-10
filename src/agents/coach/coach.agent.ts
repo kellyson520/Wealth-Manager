@@ -498,7 +498,7 @@ async function handleLevelStatus(_params: Record<string, unknown>): Promise<stri
   let reply = '';
 
   if (levelTool) {
-    const result = await levelTool.handler();
+    const result = await executeTool(levelTool, {}, { agentId: AGENT_ID });
     if (result.success && result.data) {
       const data = result.data as { level: number; title: string; experience: number; nextLevelExperience: number; progress: number };
       const filled = Math.min(10, Math.max(0, Math.round(data.progress * 10)));
@@ -509,7 +509,7 @@ async function handleLevelStatus(_params: Record<string, unknown>): Promise<stri
   }
 
   if (challengeTool) {
-    const result = await challengeTool.handler();
+    const result = await executeTool(challengeTool, {}, { agentId: AGENT_ID });
     if (result.success && result.data) {
       const challenges = result.data as { title: string; completed: boolean; reward: string }[];
       reply += '当前挑战:\n';
