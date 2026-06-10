@@ -409,14 +409,16 @@ export async function writeAuditLog(
     resultStatus?: 'success' | 'error' | 'rejected' | 'timeout';
     userConfirmed?: boolean;
     errorCode?: string;
+    permissionLevel?: number;
+    durationMs?: number;
   }
 ): Promise<void> {
   const id = uuidv4();
   const now = new Date().toISOString();
   const paramsHash = entry.params ? await hashParams(entry.params) : null;
   await db.runAsync(
-    `INSERT INTO audit_log (id, timestamp, agent, tool, action, params, params_hash, result_status, user_confirmed, error_code)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO audit_log (id, timestamp, agent, tool, action, params, params_hash, result_status, user_confirmed, error_code, permission_level, duration_ms)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       id,
       now,
@@ -428,6 +430,8 @@ export async function writeAuditLog(
       entry.resultStatus || 'success',
       entry.userConfirmed ? 1 : 0,
       entry.errorCode || null,
+      entry.permissionLevel ?? 0,
+      entry.durationMs ?? null,
     ]
   );
 }
