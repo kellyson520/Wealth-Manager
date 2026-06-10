@@ -1,6 +1,4 @@
-import { IntentResult, ToolResult, AgentId } from '../../shared/types';
-import { add_bill, search_bills } from '../../tools/bills/bills.tool';
-import { get_aggregation } from '../../tools/stats/stats.tool';
+import { IntentResult, AgentId } from '../../shared/types';
 import { executeTool } from '../../tools/_pipeline/tool-executor';
 import { preActionCheck } from '../guardian/guardian.agent';
 import {
@@ -72,12 +70,14 @@ async function handleAddExpense(params: Record<string, unknown>): Promise<string
   }
 
   const category = await guessCategory(merchant);
-  const result: ToolResult = await add_bill({
+  const addBillTool = getTool('add_bill');
+  if (!addBillTool) return '记账功能暂不可用。';
+  const result = await executeTool(addBillTool, {
     amount,
     type: 'expense',
     merchant: merchant || '消费',
     category,
-  });
+  }, { agentId: AGENT_ID });
 
   if (result.success) {
     await rememberThis(AGENT_ID, `分类映射:${merchant}→${category}`);
@@ -106,12 +106,14 @@ async function handleAddIncome(params: Record<string, unknown>): Promise<string>
     return safetyCheck.message || '安全预检未通过，操作已阻止。';
   }
 
-  const result: ToolResult = await add_bill({
+  const addBillTool = getTool('add_bill');
+  if (!addBillTool) return '记账功能暂不可用。';
+  const result = await executeTool(addBillTool, {
     amount,
     type: 'income',
     merchant,
     category: '工资',
-  });
+  }, { agentId: AGENT_ID });
 
   if (result.success) {
     await rememberMoment(AGENT_ID, `收入:${merchant} ¥${amount.toFixed(2)}`);
@@ -135,7 +137,9 @@ async function handleSearchBills(params: Record<string, unknown>): Promise<strin
       .split('T')[0];
   }
 
-  const result = await search_bills(searchParams);
+  const searchTool = getTool('search_bills');
+  if (!searchTool) return '查询账单功能暂不可用。';
+  const result = await executeTool(searchTool, searchParams, { agentId: AGENT_ID });
   if (!result.success || !Array.isArray(result.data)) {
     return '查询账单时出现问题，请重试。';
   }
@@ -159,7 +163,9 @@ async function handleSearchBills(params: Record<string, unknown>): Promise<strin
 
 async function handleGetSummary(params: Record<string, unknown>): Promise<string> {
   const period = (params.period as string) || 'today';
-  const result = await get_aggregation({ period: period as 'today' | 'week' | 'month' });
+  const aggTool = getTool('get_aggregation');
+  if (!aggTool) return '汇总功能暂不可用。';
+  const result = await executeTool(aggTool, { period: period as 'today' | 'week' | 'month' }, { agentId: AGENT_ID });
   if (!result.success || !result.data) {
     return '获取汇总时出现问题，请重试。';
   }
@@ -393,7 +399,9 @@ async function handleModifyBill(params: Record<string, unknown>): Promise<string
     searchParams.startDate = params.date;
     searchParams.endDate = params.date;
   }
-  const result = await search_bills(searchParams);
+  const modSearchTool = getTool('search_bills');
+  if (!modSearchTool) return '查询账单功能暂不可用。';
+  const result = await executeTool(modSearchTool, searchParams, { agentId: AGENT_ID });
   if (!result.success || !Array.isArray(result.data)) {
     return '定位账单失败，请提供账单商户、金额或日期。';
   }
