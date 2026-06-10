@@ -126,12 +126,17 @@ export async function create_backup(): Promise<ToolResult> {
     const backupId = uuidv4();
     const filename = `wealth_manager_backup_${now.replace(/[:.]/g, '-')}.json`;
 
-    const tables = ['bills', 'debts', 'repayments', 'assets', 'tags', 'bill_tags', 'budget_limits', 'savings_goals', 'achievements', 'classification_rules', 'recurring_tasks', 'reimbursement_tasks'];
+    const VALID_TABLES = new Set(['bills', 'debts', 'repayments', 'assets', 'tags', 'bill_tags', 'budget_limits', 'savings_goals', 'achievements', 'classification_rules', 'recurring_tasks', 'reimbursement_tasks']);
+    const tables = Array.from(VALID_TABLES);
     const backup: Record<string, unknown> = {
       _metadata: { backupId, createdAt: now, version: '0.1.0', sanitized: true },
     };
 
     for (const table of tables) {
+      if (!VALID_TABLES.has(table)) {
+        backup[table] = [];
+        continue;
+      }
       try {
         const rows = await db.getAllAsync<ExportRow>(`SELECT * FROM ${table} LIMIT 5000`);
         backup[table] = rows.map((row) => sanitizeRow(table, row));
@@ -171,11 +176,12 @@ function sanitizeRow(table: string, row: ExportRow): ExportRow {
 
 function escapeCSV(value: unknown): string {
   if (value === null || value === undefined) return '';
-  // Prevent CSV injection: prefix cells starting with formula characters
+  // Prevent CSV injection: prefix cells starting with formula characters with single quote
+  // This is more reliable than zero-width space which may be stripped by some parsers
   const dangerous = /^[=+\-@\t\r]/;
   let sanitized = String(value);
   if (dangerous.test(sanitized)) {
-    sanitized = '​' + sanitized; // zero-width space prefix
+    sanitized = "'" + sanitized; // single quote prefix — standard CSV injection prevention
   }
   if (sanitized.includes(',') || sanitized.includes('"') || sanitized.includes('\n')) {
     return `"${sanitized.replace(/"/g, '""')}"`;
