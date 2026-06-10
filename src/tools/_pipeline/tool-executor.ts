@@ -172,9 +172,25 @@ async function logToolExecution(params: {
     const now = new Date().toISOString();
     const paramsHash = await hashParams(params.params);
 
+    const prevRow = await db.getFirstAsync<{ hash: string }>(
+      `SELECT hash FROM audit_log ORDER BY timestamp DESC, id DESC LIMIT 1`
+    );
+    const prevHash = prevRow?.hash || '';
+
+    const entryHash = await computeAuditChainHash({
+      id,
+      timestamp: now,
+      agent: params.agent,
+      tool: params.tool,
+      action: params.action,
+      params_hash: paramsHash,
+      result_status: params.resultStatus,
+      prev_hash: prevHash,
+    });
+
     await db.runAsync(
-      `INSERT INTO audit_log (id, timestamp, agent, tool, action, params, params_hash, result_status, user_confirmed, error_code, permission_level, duration_ms)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO audit_log (id, timestamp, agent, tool, action, params, params_hash, result_status, user_confirmed, error_code, permission_level, duration_ms, hash, prev_hash)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         id,
         now,
@@ -188,6 +204,8 @@ async function logToolExecution(params: {
         params.errorCode || null,
         params.permissionLevel,
         params.executionTimeMs,
+        entryHash,
+        prevHash,
       ]
     );
   } catch {
@@ -203,18 +221,69 @@ function stableStringify(value: unknown): string {
   return `{${Object.keys(obj).sort().map((key) => `${JSON.stringify(key)}:${stableStringify(obj[key])}`).join(',')}}`;
 }
 
+function getAuditHashSecret(): string {
+  const env = (globalThis as unknown as {
+    process?: { env?: Record<string, string | undefined> };
+  }).process?.env;
+  return env?.WEALTH_MANAGER_HASHCHAIN_KEY || env?.EXPO_PUBLIC_WEALTH_MANAGER_HASHCHAIN_KEY || 'development-only-wealth-manager-hashchain-key';
+}
+
 async function hashParams(params: Record<string, unknown>): Promise<string> {
   const input = stableStringify(params);
-  try {
-    const bytes = new TextEncoder().encode(input);
-    const digest = await crypto.subtle.digest('SHA-256', bytes);
-    return Array.from(new Uint8Array(digest)).map((b) => b.toString(16).padStart(2, '0')).join('');
-  } catch {
-    let hash = 2166136261;
-    for (let i = 0; i < input.length; i++) {
-      hash ^= input.charCodeAt(i);
-      hash = Math.imul(hash, 16777619);
-    }
-    return (hash >>> 0).toString(16).padStart(8, '0');
+  const webCrypto = getWebCryptoForHashing();
+  const secret = getAuditHashSecret();
+  const key = await webCrypto.subtle.importKey(
+    'raw',
+    new TextEncoder().encode(secret),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign']
+  );
+  const signature = await webCrypto.subtle.sign('HMAC', key, new TextEncoder().encode(input));
+  return Array.from(new Uint8Array(signature)).map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+function getWebCryptoForHashing(): Crypto {
+  if (typeof globalThis.crypto?.subtle !== 'undefined') {
+    return globalThis.crypto;
   }
+  const nodeRequire = (globalThis as unknown as { require?: (moduleName: string) => unknown }).require;
+  const nodeCrypto = nodeRequire?.('crypto') as { webcrypto?: Crypto } | undefined;
+  if (nodeCrypto?.webcrypto?.subtle) {
+    return nodeCrypto.webcrypto;
+  }
+  throw new Error('WebCrypto unavailable');
+}
+
+async function computeAuditChainHash(entry: {
+  id: string;
+  timestamp: string;
+  agent: string;
+  tool: string;
+  action: string;
+  params_hash: string;
+  result_status: string;
+  prev_hash: string;
+}): Promise<string> {
+  const payload = stableStringify({
+    id: entry.id,
+    timestamp: entry.timestamp,
+    agent: entry.agent,
+    tool: entry.tool,
+    action: entry.action,
+    params_hash: entry.params_hash,
+    result_status: entry.result_status,
+    prev_hash: entry.prev_hash,
+  });
+  const webCrypto = getWebCryptoForHashing();
+  const secret = getAuditHashSecret();
+  const key = await webCrypto.subtle.importKey(
+    'raw',
+    new TextEncoder().encode(secret),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign']
+  );
+  const signature = await webCrypto.subtle.sign('HMAC', key, new TextEncoder().encode(payload));
+  return Array.from(new Uint8Array(signature)).map((b) => b.toString(16).padStart(2, '0')).join('');
 }

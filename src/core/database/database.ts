@@ -71,7 +71,9 @@ async function initTables(db: SQLite.SQLiteDatabase): Promise<void> {
 	      error_code TEXT,
 	      permission_level INTEGER DEFAULT 0,
 	      duration_ms INTEGER,
-	      ttl_days INTEGER DEFAULT 365
+	      ttl_days INTEGER DEFAULT 365,
+	      hash TEXT DEFAULT '',
+	      prev_hash TEXT DEFAULT ''
 	    );
 
     CREATE TABLE IF NOT EXISTS user_profile (
@@ -300,6 +302,8 @@ async function migrateAuditLog(db: SQLite.SQLiteDatabase): Promise<void> {
     `ALTER TABLE audit_log ADD COLUMN params_hash TEXT`,
     `ALTER TABLE audit_log ADD COLUMN permission_level INTEGER DEFAULT 0`,
     `ALTER TABLE audit_log ADD COLUMN duration_ms INTEGER`,
+    `ALTER TABLE audit_log ADD COLUMN hash TEXT DEFAULT ''`,
+    `ALTER TABLE audit_log ADD COLUMN prev_hash TEXT DEFAULT ''`,
   ];
 
   for (const statement of migrations) {
@@ -424,9 +428,26 @@ export async function writeAuditLog(
   const id = uuidv4();
   const now = new Date().toISOString();
   const paramsHash = entry.params ? await hashParams(entry.params) : null;
+
+  const prevRow = await db.getFirstAsync<{ hash: string }>(
+    `SELECT hash FROM audit_log ORDER BY timestamp DESC, id DESC LIMIT 1`
+  );
+  const prevHash = prevRow?.hash || '';
+
+  const entryHash = await computeAuditEntryHash({
+    id,
+    timestamp: now,
+    agent: entry.agent,
+    tool: entry.tool,
+    action: entry.action,
+    params_hash: paramsHash || '',
+    result_status: entry.resultStatus || 'success',
+    prev_hash: prevHash,
+  });
+
   await db.runAsync(
-    `INSERT INTO audit_log (id, timestamp, agent, tool, action, params, params_hash, result_status, user_confirmed, error_code, permission_level, duration_ms)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO audit_log (id, timestamp, agent, tool, action, params, params_hash, result_status, user_confirmed, error_code, permission_level, duration_ms, hash, prev_hash)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       id,
       now,
@@ -440,6 +461,8 @@ export async function writeAuditLog(
       entry.errorCode || null,
       entry.permissionLevel ?? 0,
       entry.durationMs ?? null,
+      entryHash,
+      prevHash,
     ]
   );
 }
@@ -453,26 +476,50 @@ function stableStringify(value: unknown): string {
 
 async function hashParams(params: Record<string, unknown>): Promise<string> {
   const input = stableStringify(params);
-  try {
-    const webCrypto = getWebCryptoForHashing();
-    const secret = getHashSecret();
-    const key = await webCrypto.subtle.importKey(
-      'raw',
-      new TextEncoder().encode(secret),
-      { name: 'HMAC', hash: 'SHA-256' },
-      false,
-      ['sign']
-    );
-    const signature = await webCrypto.subtle.sign('HMAC', key, new TextEncoder().encode(input));
-    return Array.from(new Uint8Array(signature)).map((b) => b.toString(16).padStart(2, '0')).join('');
-  } catch {
-    let hash = 2166136261;
-    for (let i = 0; i < input.length; i++) {
-      hash ^= input.charCodeAt(i);
-      hash = Math.imul(hash, 16777619);
-    }
-    return (hash >>> 0).toString(16).padStart(8, '0');
-  }
+  const webCrypto = getWebCryptoForHashing();
+  const secret = getHashSecret();
+  const key = await webCrypto.subtle.importKey(
+    'raw',
+    new TextEncoder().encode(secret),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign']
+  );
+  const signature = await webCrypto.subtle.sign('HMAC', key, new TextEncoder().encode(input));
+  return Array.from(new Uint8Array(signature)).map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+async function computeAuditEntryHash(entry: {
+  id: string;
+  timestamp: string;
+  agent: string;
+  tool: string;
+  action: string;
+  params_hash: string;
+  result_status: string;
+  prev_hash: string;
+}): Promise<string> {
+  const payload = stableStringify({
+    id: entry.id,
+    timestamp: entry.timestamp,
+    agent: entry.agent,
+    tool: entry.tool,
+    action: entry.action,
+    params_hash: entry.params_hash,
+    result_status: entry.result_status,
+    prev_hash: entry.prev_hash,
+  });
+  const webCrypto = getWebCryptoForHashing();
+  const secret = getHashSecret();
+  const key = await webCrypto.subtle.importKey(
+    'raw',
+    new TextEncoder().encode(secret),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign']
+  );
+  const signature = await webCrypto.subtle.sign('HMAC', key, new TextEncoder().encode(payload));
+  return Array.from(new Uint8Array(signature)).map((b) => b.toString(16).padStart(2, '0')).join('');
 }
 
 function getWebCryptoForHashing(): Crypto {
@@ -491,5 +538,5 @@ function getHashSecret(): string {
   const env = (globalThis as unknown as {
     process?: { env?: Record<string, string | undefined> };
   }).process?.env;
-  return env?.EXPO_PUBLIC_WEALTH_MANAGER_DB_KEY || 'development-only-wealth-manager-db-key';
+  return env?.WEALTH_MANAGER_HASHCHAIN_KEY || env?.EXPO_PUBLIC_WEALTH_MANAGER_HASHCHAIN_KEY || 'development-only-wealth-manager-hashchain-key';
 }
