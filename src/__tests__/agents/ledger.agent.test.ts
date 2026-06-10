@@ -7,6 +7,16 @@ jest.mock('../../agents/_shared', () => ({
   createAgentMessage: jest.fn(),
   getSecurityProfile: jest.fn().mockReturnValue({ maxPermissionLevel: 1 }),
   initToolRegistry: jest.fn(),
+  getTool: jest.fn((name: string) => {
+    const handlers: Record<string, jest.Mock> = {
+      add_bill: require('../../tools/bills/bills.tool').add_bill,
+      search_bills: require('../../tools/bills/bills.tool').search_bills,
+      get_aggregation: require('../../tools/stats/stats.tool').get_aggregation,
+      rules_guess: undefined,
+    };
+    const handler = handlers[name];
+    return handler ? { definition: { name }, handler } : undefined;
+  }),
 }));
 
 jest.mock('../../agents/guardian/guardian.agent', () => ({
@@ -21,6 +31,13 @@ jest.mock('../../tools/bills/bills.tool', () => ({
 
 jest.mock('../../tools/stats/stats.tool', () => ({
   get_aggregation: jest.fn(),
+}));
+
+jest.mock('../../tools/_pipeline/tool-executor', () => ({
+  executeTool: jest.fn(async (entry: { handler: Function }, params: Record<string, unknown>, _opts?: unknown) => {
+    const result = await entry.handler(params);
+    return { ...result, executionTimeMs: 0, auditLogId: 'test-audit' };
+  }),
 }));
 
 import { handleIntent } from '../../agents/ledger/ledger.agent';
