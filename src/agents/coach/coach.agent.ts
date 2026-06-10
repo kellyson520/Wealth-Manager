@@ -451,12 +451,12 @@ async function handleSetupReminder(params: Record<string, unknown>): Promise<str
   const tool = getTool('schedule_daily_reminder');
   if (!tool) return '提醒功能暂不可用。';
 
-  const result = await tool.handler({
+  const result = await executeTool(tool, {
     title: '📝 记账提醒',
     body: '今天还没记账哦！花几分钟记录一下今天的收支吧～',
     hour,
     minute,
-  });
+  }, { agentId: AGENT_ID });
 
   if (result.success) {
     const time = `${hour}:${String(minute).padStart(2, '0')}`;
@@ -469,7 +469,7 @@ async function handleSetupReminder(params: Record<string, unknown>): Promise<str
 async function handleListTags(_params: Record<string, unknown>): Promise<string> {
   const tool = getTool('list_tags');
   if (!tool) return '标签功能暂不可用。';
-  const result = await tool.handler({});
+  const result = await executeTool(tool, {}, { agentId: AGENT_ID });
   if (!result.success || !result.data) return '暂无标签。';
   const tags = result.data as { name: string; color: string; billCount: number }[];
   if (!Array.isArray(tags) || tags.length === 0) return '暂无标签，你可以说"添加标签 必须买"。';
