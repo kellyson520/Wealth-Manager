@@ -278,6 +278,14 @@ async function initTables(db: SQLite.SQLiteDatabase): Promise<void> {
   await db.execAsync(`CREATE INDEX IF NOT EXISTS idx_vector_source ON vector_store(source_type, source_id)`);
   await db.execAsync(`CREATE INDEX IF NOT EXISTS idx_nlu_learning_lookup ON nlu_learning_samples(normalized_text, enabled, hits)`);
   await db.execAsync(`CREATE INDEX IF NOT EXISTS idx_agent_memory_digest_agent ON agent_memory_digest(agent_id, updated_at)`);
+
+  // Core table indexes for query performance
+  await db.execAsync(`CREATE INDEX IF NOT EXISTS idx_audit_log_timestamp ON audit_log(timestamp)`);
+  await db.execAsync(`CREATE INDEX IF NOT EXISTS idx_audit_log_action ON audit_log(action)`);
+  await db.execAsync(`CREATE INDEX IF NOT EXISTS idx_bills_date ON bills(date)`);
+  await db.execAsync(`CREATE INDEX IF NOT EXISTS idx_bills_category ON bills(category)`);
+  await db.execAsync(`CREATE INDEX IF NOT EXISTS idx_debts_status ON debts(status)`);
+  await db.execAsync(`CREATE INDEX IF NOT EXISTS idx_debts_due_date ON debts(due_date)`);
   await migrateAuditLog(db);
 
   await initRulesTable();
