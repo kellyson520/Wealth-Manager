@@ -89,6 +89,11 @@ describe('Coach Agent - handleIntent', () => {
       return undefined;
     });
 
+    // executeTool must delegate to the real handler for level_status
+    mockExecuteTool.mockImplementation(async (entry: { handler: Function }, params: unknown) => {
+      return entry.handler(params);
+    });
+
     const reply = await handleIntent({
       intent: 'level_status',
       params: {},
