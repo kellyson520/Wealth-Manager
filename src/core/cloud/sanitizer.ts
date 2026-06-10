@@ -33,7 +33,7 @@ export function sanitizeTextForCloud(text: string): string {
 function maskIfSensitive(value: string): string {
   let masked = value;
   for (const pattern of SENSITIVE_PATTERNS) {
-    masked = masked.replace(new RegExp(pattern.source, `${pattern.flags}g`), '***');
+    masked = masked.replace(new RegExp(pattern.source, 'g'), '***');
   }
   return masked;
 }
