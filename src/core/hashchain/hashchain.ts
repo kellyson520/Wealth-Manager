@@ -164,29 +164,47 @@ export async function rebuildHashChain(): Promise<{ success: boolean; verified: 
   const db = await getDatabase();
   await ensureHashColumns(db);
 
-  try {
-    const bills = await db.getAllAsync<BillRow>(
-      'SELECT * FROM bills ORDER BY created_at ASC, id ASC'
-    );
+  const BATCH_SIZE = 1000;
 
+  try {
     let prevHash = '';
     let verified = 0;
     let broken = 0;
     let fixed = 0;
+    let lastCreatedAt = '';
+    let lastId = '';
 
-    for (const bill of bills) {
-      const expectedHash = await computeBillHash(bill, prevHash);
-      if (bill.hash && bill.hash === expectedHash) {
-        verified++;
-      } else {
-        broken++;
-        await db.runAsync(
-          'UPDATE bills SET hash = ?, prev_hash = ? WHERE id = ?',
-          [expectedHash, prevHash, bill.id]
-        );
-        fixed++;
+    for (;;) {
+      const bills: BillRow[] = lastCreatedAt === ''
+        ? await db.getAllAsync<BillRow>(
+            'SELECT * FROM bills ORDER BY created_at ASC, id ASC LIMIT ?',
+            [BATCH_SIZE]
+          )
+        : await db.getAllAsync<BillRow>(
+            'SELECT * FROM bills WHERE (created_at > ?) OR (created_at = ? AND id > ?) ORDER BY created_at ASC, id ASC LIMIT ?',
+            [lastCreatedAt, lastCreatedAt, lastId, BATCH_SIZE]
+          );
+
+      if (bills.length === 0) break;
+
+      for (const bill of bills) {
+        const expectedHash = await computeBillHash(bill, prevHash);
+        if (bill.hash && bill.hash === expectedHash) {
+          verified++;
+        } else {
+          broken++;
+          await db.runAsync(
+            'UPDATE bills SET hash = ?, prev_hash = ? WHERE id = ?',
+            [expectedHash, prevHash, bill.id]
+          );
+          fixed++;
+        }
+        prevHash = expectedHash;
       }
-      prevHash = expectedHash;
+
+      const lastBill = bills[bills.length - 1];
+      lastCreatedAt = lastBill.created_at;
+      lastId = lastBill.id;
     }
 
     return { success: true, verified, broken, fixed };
