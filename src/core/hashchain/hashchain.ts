@@ -19,7 +19,6 @@ interface BillRow {
 
 const encoder = new TextEncoder();
 const HASH_CHAIN_KEY_ENV = 'WEALTH_MANAGER_HASHCHAIN_KEY';
-const DEV_HASH_CHAIN_KEY = 'development-only-wealth-manager-hashchain-key';
 
 type WebCryptoApi = Crypto;
 
@@ -45,7 +44,11 @@ function getHashChainSecret(): string {
     process?: { env?: Record<string, string | undefined> };
   }).process?.env;
 
-  return env?.[HASH_CHAIN_KEY_ENV] || env?.EXPO_PUBLIC_WEALTH_MANAGER_HASHCHAIN_KEY || DEV_HASH_CHAIN_KEY;
+  const secret = env?.[HASH_CHAIN_KEY_ENV] || env?.EXPO_PUBLIC_WEALTH_MANAGER_HASHCHAIN_KEY;
+  if (!secret) {
+    throw new Error(`Missing required env var ${HASH_CHAIN_KEY_ENV}. Set it before using hashchain functions.`);
+  }
+  return secret;
 }
 
 async function ensureHashColumns(db: Awaited<ReturnType<typeof getDatabase>>): Promise<void> {
