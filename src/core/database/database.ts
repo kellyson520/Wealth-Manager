@@ -3,6 +3,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { initRulesTable } from '../rules';
 
 let db: SQLite.SQLiteDatabase | null = null;
+let dbPromise: Promise<SQLite.SQLiteDatabase> | null = null;
 
 /**
  * NOTE: expo-sqlite does NOT support SQLCipher.
@@ -15,10 +16,22 @@ let db: SQLite.SQLiteDatabase | null = null;
  */
 export async function getDatabase(): Promise<SQLite.SQLiteDatabase> {
   if (db) return db;
-  db = await SQLite.openDatabaseAsync('wealth_manager.db');
-  await configureDatabaseSecurity(db);
-  await initTables(db);
-  return db;
+  if (!dbPromise) {
+    dbPromise = (async () => {
+      const instance = await SQLite.openDatabaseAsync('wealth_manager.db');
+      await configureDatabaseSecurity(instance);
+      await initTables(instance);
+      db = instance;
+      return instance;
+    })().catch((err) => {
+      // Reset on failure so a subsequent call can retry instead of
+      // re-using a rejected promise forever.
+      dbPromise = null;
+      db = null;
+      throw err;
+    });
+  }
+  return dbPromise;
 }
 
 async function configureDatabaseSecurity(db: SQLite.SQLiteDatabase): Promise<void> {
@@ -354,6 +367,7 @@ export async function closeDatabase(): Promise<void> {
   if (db) {
     await db.closeAsync();
     db = null;
+    dbPromise = null;
   }
 }
 
