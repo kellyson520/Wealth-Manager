@@ -1,5 +1,6 @@
 import { getDatabase } from '../database/database';
 import { captureError } from '../logger/logger';
+import { stableStringify } from '../../shared/utils';
 
 interface BillRow {
   id: string;
@@ -62,13 +63,6 @@ async function ensureHashColumns(db: Awaited<ReturnType<typeof getDatabase>>): P
   } catch {
     captureError('HashChain.ensureHashColumns', new Error('ALTER TABLE prev_hash'), 'prev_hash column may already exist');
   }
-}
-
-function stableStringify(value: unknown): string {
-  if (value === null || typeof value !== 'object') return JSON.stringify(value);
-  if (Array.isArray(value)) return `[${value.map(stableStringify).join(',')}]`;
-  const obj = value as Record<string, unknown>;
-  return `{${Object.keys(obj).sort().map((key) => `${JSON.stringify(key)}:${stableStringify(obj[key])}`).join(',')}}`;
 }
 
 function normalizeTags(tags?: string): string[] {

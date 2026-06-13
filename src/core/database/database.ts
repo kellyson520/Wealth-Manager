@@ -1,6 +1,7 @@
 import * as SQLite from 'expo-sqlite';
 import { v4 as uuidv4 } from 'uuid';
 import { initRulesTable } from '../rules';
+import { stableStringify } from '../../shared/utils';
 
 let db: SQLite.SQLiteDatabase | null = null;
 let dbPromise: Promise<SQLite.SQLiteDatabase> | null = null;
@@ -480,13 +481,6 @@ export async function writeAuditLog(
       prevHash,
     ]
   );
-}
-
-function stableStringify(value: unknown): string {
-  if (value === null || typeof value !== 'object') return JSON.stringify(value);
-  if (Array.isArray(value)) return `[${value.map(stableStringify).join(',')}]`;
-  const obj = value as Record<string, unknown>;
-  return `{${Object.keys(obj).sort().map((key) => `${JSON.stringify(key)}:${stableStringify(obj[key])}`).join(',')}}`;
 }
 
 async function hashParams(params: Record<string, unknown>): Promise<string> {

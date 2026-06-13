@@ -3,6 +3,7 @@ import { v4 as uuidv4 } from 'uuid';
 import type { ToolEntry } from '../../agents/_shared/tool-registry';
 import { getSecurityProfile } from '../../agents/_shared/security-profile';
 import type { AgentId } from '../../shared/types';
+import { stableStringify } from '../../shared/utils';
 
 export interface ToolExecutionResult {
   success: boolean;
@@ -212,13 +213,6 @@ async function logToolExecution(params: {
     // Non-critical, audit logging failure should not break tool execution
   }
   return id;
-}
-
-function stableStringify(value: unknown): string {
-  if (value === null || typeof value !== 'object') return JSON.stringify(value);
-  if (Array.isArray(value)) return `[${value.map(stableStringify).join(',')}]`;
-  const obj = value as Record<string, unknown>;
-  return `{${Object.keys(obj).sort().map((key) => `${JSON.stringify(key)}:${stableStringify(obj[key])}`).join(',')}}`;
 }
 
 let _cachedAuditHashSecret: string | null = null;
