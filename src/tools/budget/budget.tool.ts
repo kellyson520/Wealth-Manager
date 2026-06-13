@@ -175,13 +175,14 @@ export async function update_savings_progress(params: {
 
     const updated: SavingsGoal[] = [];
 
+    const expenseResult = await db.getFirstAsync<{ total: number }>(
+      "SELECT COALESCE(SUM(amount), 0) as total FROM bills WHERE type = 'expense'"
+    );
+    const totalExpense = expenseResult?.total || 0;
+    const savingsRate = 0.2;
+    const estimatedSavings = Math.max(0, (totalIncome - totalExpense) * savingsRate);
+
     for (const goal of goals) {
-      const expenseResult = await db.getFirstAsync<{ total: number }>(
-        "SELECT COALESCE(SUM(amount), 0) as total FROM bills WHERE type = 'expense'"
-      );
-      const totalExpense = expenseResult?.total || 0;
-      const savingsRate = 0.2;
-      const estimatedSavings = Math.max(0, (totalIncome - totalExpense) * savingsRate);
       const targetAmount = getGoalTargetAmount(goal);
       const newAmount = Math.min(estimatedSavings, targetAmount);
 
