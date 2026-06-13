@@ -221,11 +221,27 @@ function stableStringify(value: unknown): string {
   return `{${Object.keys(obj).sort().map((key) => `${JSON.stringify(key)}:${stableStringify(obj[key])}`).join(',')}}`;
 }
 
+let _cachedAuditHashSecret: string | null = null;
+
 function getAuditHashSecret(): string {
+  if (_cachedAuditHashSecret) return _cachedAuditHashSecret;
+
   const env = (globalThis as unknown as {
     process?: { env?: Record<string, string | undefined> };
   }).process?.env;
-  return env?.WEALTH_MANAGER_HASHCHAIN_KEY || env?.EXPO_PUBLIC_WEALTH_MANAGER_HASHCHAIN_KEY || 'development-only-wealth-manager-hashchain-key';
+
+  const secret = env?.WEALTH_MANAGER_HASHCHAIN_KEY || env?.EXPO_PUBLIC_WEALTH_MANAGER_HASHCHAIN_KEY;
+  if (secret) {
+    _cachedAuditHashSecret = secret;
+    return secret;
+  }
+
+  // Generate a random 32-byte key when no env var is configured
+  const bytes = new Uint8Array(32);
+  globalThis.crypto.getRandomValues(bytes);
+  const generated = Array.from(bytes).map((b) => b.toString(16).padStart(2, '0')).join('');
+  _cachedAuditHashSecret = generated;
+  return generated;
 }
 
 async function hashParams(params: Record<string, unknown>): Promise<string> {
