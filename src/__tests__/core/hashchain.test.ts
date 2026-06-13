@@ -96,7 +96,8 @@ describe('hashchain security', () => {
 
   test('rebuildHashChain repairs broken hashes with HMAC values', async () => {
     const mockDb = await getMockDb();
-    mockDb.getAllAsync.mockResolvedValue([
+    mockDb.getAllAsync
+      .mockResolvedValueOnce([
       {
         id: 'bill-1',
         amount: 10,
@@ -112,7 +113,8 @@ describe('hashchain security', () => {
         hash: 'broken',
         prev_hash: '',
       },
-    ]);
+    ])
+      .mockResolvedValueOnce([]);
 
     const result = await rebuildHashChain();
 
