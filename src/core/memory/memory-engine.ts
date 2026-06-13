@@ -140,13 +140,18 @@ export async function recallMemory(params: MemoryQueryParams): Promise<MemoryEnt
 
     const now = new Date().toISOString();
 
-    return rows.map((row) => {
-      db.runAsync(
-        'UPDATE memory_engine SET access_count = access_count + 1, last_accessed_at = ? WHERE id = ?',
-        [now, row.id]
-      ).catch(() => {});
+    // Batch update access tracking for all recalled rows in a single statement
+    // instead of fire-and-forget per-row UPDATEs that may silently fail.
+    if (rows.length > 0) {
+      const ids = rows.map((r) => r.id);
+      const placeholders = ids.map(() => '?').join(', ');
+      await db.runAsync(
+        `UPDATE memory_engine SET access_count = access_count + 1, last_accessed_at = ? WHERE id IN (${placeholders})`,
+        [now, ...ids]
+      );
+    }
 
-      return {
+    return rows.map((row) => ({
         id: row.id,
         layer: row.layer as MemoryLayer,
         type: row.type as MemoryType,
@@ -159,8 +164,7 @@ export async function recallMemory(params: MemoryQueryParams): Promise<MemoryEnt
         createdAt: row.created_at,
         expiresAt: row.expires_at || undefined,
         tags: safeParse(row.tags),
-      };
-    });
+    }));
   } catch (e) {
     captureError('MemoryEngine.recallMemory', e, 'Failed to recall memory');
     return [];
