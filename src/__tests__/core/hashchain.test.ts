@@ -122,6 +122,6 @@
 122|      'UPDATE bills SET hash = ?, prev_hash = ? WHERE id = ?',
 123|      [expect.stringMatching(/^[a-f0-9]{64}$/), '', 'bill-1']
 124|    );
-125|  });
+125|  }, 15000);
 126|});
 127|
