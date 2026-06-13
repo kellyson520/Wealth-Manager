@@ -7,6 +7,38 @@ import {
 } from '../safety/guard';
 import { createCircuitBreaker, canCall, recordSuccess, recordFailure, resetCircuitBreaker } from '../safety/circuit-breaker';
 
+/** AI provider default configuration */
+const AI_PROVIDER_DEFAULTS = {
+  /** Default LLM model name */
+  MODEL: 'gpt-4o',
+  /** Default base URL for OpenAI-compatible API */
+  BASE_URL: 'https://api.openai.com/v1',
+  /** Default generation temperature */
+  TEMPERATURE: 0.7,
+  /** Default max output tokens */
+  MAX_TOKENS: 500,
+} as const;
+
+/** Rate limit configuration for cloud LLM calls */
+const RATE_LIMIT_CONFIG = {
+  MAX_CALLS_PER_MINUTE: 10,
+  MAX_CALLS_PER_HOUR: 100,
+  WINDOW_MS: 60_000,
+} as const;
+
+/** Default token budget configuration */
+const TOKEN_BUDGET_DEFAULTS = {
+  MONTHLY_LIMIT: 50_000,
+  USED: 0,
+  WARNING_THRESHOLD: 0.8,
+} as const;
+
+/** Allowed cloud API hostnames (whitelist) */
+const ALLOWED_CLOUD_HOSTNAMES: readonly string[] = [
+  'api.openai.com',
+  'token-plan-cn.xiaomimimo.com',
+];
+
 export interface CloudRequest {
   messages: { role: string; content: string }[];
   model?: string;
@@ -35,10 +67,10 @@ export interface CloudResponse {
 }
 
 const defaultBudget = {
-  monthlyLimit: 50000,
-  used: 0,
+  monthlyLimit: TOKEN_BUDGET_DEFAULTS.MONTHLY_LIMIT,
+  used: TOKEN_BUDGET_DEFAULTS.USED,
   resetPeriod: `${new Date().getFullYear()}-${new Date().getMonth()}`,
-  warningThreshold: 0.8,
+  warningThreshold: TOKEN_BUDGET_DEFAULTS.WARNING_THRESHOLD,
 };
 
 let tokenBudget: TokenBudget = { ...defaultBudget };
@@ -108,11 +140,11 @@ export async function callCloudLLM(
 
   try {
     const body: Record<string, unknown> = {
-      model: request.model || 'gpt-4o',
+      model: request.model || AI_PROVIDER_DEFAULTS.MODEL,
       messages: sanitizedMessages,
-      temperature: request.temperature ?? 0.7,
+      temperature: request.temperature ?? AI_PROVIDER_DEFAULTS.TEMPERATURE,
     };
-    body[request.tokenParam || 'max_tokens'] = request.maxTokens || 500;
+    body[request.tokenParam || 'max_tokens'] = request.maxTokens || AI_PROVIDER_DEFAULTS.MAX_TOKENS;
     if (request.thinking) {
       body.thinking = request.thinking;
     }
@@ -157,7 +189,7 @@ export async function callCloudLLM(
 
     const cloudResponse: CloudResponse = {
       content: data.choices?.[0]?.message?.content || '',
-      model: data.model || request.model || 'gpt-4o',
+      model: data.model || request.model || AI_PROVIDER_DEFAULTS.MODEL,
       usage: {
         promptTokens: data.usage?.prompt_tokens || 0,
         completionTokens: data.usage?.completion_tokens || 0,
