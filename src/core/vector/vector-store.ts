@@ -122,6 +122,10 @@ export async function searchSimilar(params: {
     const values: string[] = [];
     if (params.sourceType) { where += ' AND source_type = ?'; values.push(params.sourceType); }
 
+    // TODO(perf): Loading 500 rows into memory to compute cosine similarity is
+    // expensive and won't scale. Replace with a SQLite vector/search extension
+    // (e.g. sqlite-vec) or an approximate-nearest-neighbor index once the data
+    // set grows beyond a few thousand entries.
     const rows = await db.getAllAsync<{
       id: string; embedding: string; metadata: string;
       source_type: string; source_id: string; created_at: string;
