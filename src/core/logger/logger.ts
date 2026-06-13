@@ -32,7 +32,14 @@ class Logger {
     };
     this.buffer.push(entry);
     this.trim();
-    this.listeners.forEach((fn) => fn());
+    this.listeners.forEach((fn) => {
+      try {
+        fn();
+      } catch (e) {
+        // 单个listener异常不应阻断其他listener
+        console.error('[Logger] listener error:', e);
+      }
+    });
   }
 
   debug(tag: string, message: string, data?: unknown): void {
@@ -62,7 +69,13 @@ class Logger {
 
   clear(): void {
     this.buffer = [];
-    this.listeners.forEach((fn) => fn());
+    this.listeners.forEach((fn) => {
+      try {
+        fn();
+      } catch (e) {
+        console.error('[Logger] listener error:', e);
+      }
+    });
   }
 
   exportString(): string {
