@@ -7,11 +7,11 @@ import {
   TokenBudget,
 } from '../../safety/guard';
 import { createCircuitBreaker, canCall, recordSuccess, recordFailure } from '../../safety/circuit-breaker';
+import { AI_PROVIDER_DEFAULTS } from '../../cloud/api';
 import { sanitizeTextForCloud } from '../../cloud/sanitizer';
 
 const DEFAULT_DIM = 384;
 const CLOUD_EMBED_MODEL = 'text-embedding-3-small';
-const OPENAI_BASE_URL = 'https://api.openai.com/v1';
 
 let cachedApiKey: string | undefined;
 const embedBudget: TokenBudget = { monthlyLimit: 200000, used: 0, resetPeriod: `${new Date().getFullYear()}-${new Date().getMonth()}`, warningThreshold: 0.8 };
@@ -66,7 +66,7 @@ export async function generateEmbedding(
   try {
     const safeText = sanitizeTextForCloud(text);
 
-    const response = await fetch(`${OPENAI_BASE_URL}/embeddings`, {
+    const response = await fetch(`${AI_PROVIDER_DEFAULTS.BASE_URL}/embeddings`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

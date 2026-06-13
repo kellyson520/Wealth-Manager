@@ -8,7 +8,7 @@ import {
 import { createCircuitBreaker, canCall, recordSuccess, recordFailure, resetCircuitBreaker } from '../safety/circuit-breaker';
 
 /** AI provider default configuration */
-const AI_PROVIDER_DEFAULTS = {
+export const AI_PROVIDER_DEFAULTS = {
   /** Default LLM model name */
   MODEL: 'gpt-4o',
   /** Default base URL for OpenAI-compatible API */
@@ -221,7 +221,7 @@ function sanitizeContent(content: string): string {
 }
 
 async function resolveChatCompletionsUrl(baseUrl?: string): Promise<string> {
-  const normalized = (await validateCloudBaseUrl(baseUrl || 'https://api.openai.com/v1')).replace(/\/$/, '');
+  const normalized = (await validateCloudBaseUrl(baseUrl || AI_PROVIDER_DEFAULTS.BASE_URL)).replace(/\/$/, '');
   return normalized.endsWith('/chat/completions')
     ? normalized
     : `${normalized}/chat/completions`;
@@ -266,7 +266,7 @@ async function validateCloudBaseUrl(baseUrl: string): Promise<string> {
 }
 
 function isAllowedCloudHostname(hostname: string): boolean {
-  return hostname === 'api.openai.com' || hostname === 'token-plan-cn.xiaomimimo.com';
+  return ALLOWED_CLOUD_HOSTNAMES.includes(hostname);
 }
 
 function parseIPv4Octets(hostname: string): number[] | undefined {
@@ -392,12 +392,12 @@ export async function* callCloudLLMStream(
 
   try {
     const body: Record<string, unknown> = {
-      model: request.model || 'gpt-4o',
+      model: request.model || AI_PROVIDER_DEFAULTS.MODEL,
       messages: sanitizedMessages,
-      temperature: request.temperature ?? 0.7,
+      temperature: request.temperature ?? AI_PROVIDER_DEFAULTS.TEMPERATURE,
       stream: true,
     };
-    body[request.tokenParam || 'max_tokens'] = request.maxTokens || 500;
+    body[request.tokenParam || 'max_tokens'] = request.maxTokens || AI_PROVIDER_DEFAULTS.MAX_TOKENS;
     if (request.thinking) {
       body.thinking = request.thinking;
     }
