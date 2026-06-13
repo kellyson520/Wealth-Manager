@@ -22,11 +22,18 @@ export async function ocr_import(params: {
       if (!parsed) continue;
 
       const id = uuidv4();
-      await db.runAsync(
-        `INSERT INTO bills (id, amount, type, category, tags, merchant, raw_description, date, note, source, created_at)
-         VALUES (?, ?, ?, ?, '[]', ?, ?, ?, ?, 'ocr', ?)`,
-        [id, parsed.amount, parsed.type, parsed.category, parsed.merchant, line, parsed.date, parsed.note || '', now]
-      );
+      await db.execAsync('BEGIN');
+      try {
+        await db.runAsync(
+          `INSERT INTO bills (id, amount, type, category, tags, merchant, raw_description, date, note, source, created_at)
+           VALUES (?, ?, ?, ?, '[]', ?, ?, ?, ?, 'ocr', ?)`,
+          [id, parsed.amount, parsed.type, parsed.category, parsed.merchant, line, parsed.date, parsed.note || '', now]
+        );
+        await db.execAsync('COMMIT');
+      } catch (txErr) {
+        await db.execAsync('ROLLBACK');
+        throw txErr;
+      }
 
       imported.push({ id, merchant: parsed.merchant, amount: parsed.amount, category: parsed.category });
     }
